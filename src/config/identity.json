@@ -1,0 +1,8 @@
+{
+  "name": "Quire",
+  "slug": "quire",
+  "scheme": "quire",
+  "version": "0.0.0",
+  "androidPackage": "app.quire.reader",
+  "iosBundleIdentifier": "app.quire.reader"
+}

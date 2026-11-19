@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head><meta name="dtb:uid" content="urn:uuid:quire-noteref-fixture"/></head>
+  <docTitle><text>Quire Noteref Fixture</text></docTitle>
+  <navMap>
+    <navPoint id="c1"><navLabel><text>Chapter 1</text></navLabel><content src="chapter-1.xhtml"/></navPoint>
+    <navPoint id="c2"><navLabel><text>Chapter 2</text></navLabel><content src="chapter-2.xhtml"/></navPoint>
+    <navPoint id="c3"><navLabel><text>Chapter 3</text></navLabel><content src="chapter-3.xhtml"/></navPoint>
+  </navMap>
+</ncx>

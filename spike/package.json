@@ -1,0 +1,7 @@
+{
+  "name": "quire-spike",
+  "private": true,
+  "dependencies": {
+    "epubjs": "0.3.93"
+  }
+}

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en">
+<head><title>Endnotes</title><link rel="stylesheet" href="styles.css"/></head>
+<body>
+
+<section epub:type="endnotes">
+  <h1>Endnotes</h1>
+  <ol>
+    <li id="en1" epub:type="endnote">
+      <p>Endnote in another file, with <em>italics</em>.</p>
+      <a epub:type="backlink" href="chapter-1.xhtml#ref-en1">↩</a>
+    </li>
+    <li id="en-rich" epub:type="endnote">
+      <p>A link inside the note: <a href="https://example.com/quire-note">example</a>.</p>
+      <p><img src="note.png" alt="Red swatch"/></p>
+      <a epub:type="backlink" href="chapter-1.xhtml#ref-rich">↩</a>
+    </li>
+    <li id="en-nested" epub:type="endnote">
+      <p>This note points at another <a epub:type="noteref" href="#en-rich">note</a>.</p>
+    </li>
+    <li id="en-plain">
+      <p>Plain endnote reached by a superscript link with no epub type.</p>
+      <a href="chapter-1.xhtml#ref-plain">↩</a>
+    </li>
+  </ol>
+  <a id="en-empty"></a>
+  <p id="en-empty-body">This paragraph follows an empty anchor.</p>
+</section>
+</body></html>

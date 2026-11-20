@@ -23,6 +23,14 @@ test("IDPF and Adobe font obfuscation are not DRM", () => {
   assert.equal(classifyEncryption(xml), "font-obfuscation");
 });
 
+test("the font fixture is obfuscation and does not count as DRM", () => {
+  const xml = readFileSync(
+    new URL("../../test-books/src/font-obfuscation/META-INF/encryption.xml", import.meta.url),
+    "utf8",
+  );
+  assert.equal(classifyEncryption(xml), "font-obfuscation");
+});
+
 test("a content cipher is DRM, including when mixed with font obfuscation", () => {
   const xml = readFileSync(drmFixture, "utf8");
   assert.equal(classifyEncryption(xml), "drm");

@@ -2,7 +2,7 @@
 
 A local-first EPUB reader for Android and iOS. The name and package id are working values in `src/config/identity.json`.
 
-Milestone 0 compared foliate-js and epub.js in a desktop browser. The recommendation is in `DECISIONS.md`. The app does not vendor a renderer yet.
+Milestone 0 compared foliate-js and epub.js in a desktop browser. The adopted engine is foliate-js at commit `78914aef`, vendored under `vendor/foliate-js` and reached only through the WebView bridge. See `DECISIONS.md`.
 
 - `npm test` runs the domain tests.
 - `npm run fixtures` rebuilds the hand-built EPUBs.

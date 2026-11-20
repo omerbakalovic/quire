@@ -5,6 +5,8 @@ export const en = {
     bridgeWaiting: "Waiting for the reader page.",
     bridgeOk: "The reader page answered.",
     bridgeFailed: "The reader page did not answer.",
+    suiteRunning: "Running",
+    suiteDone: "On-device checks finished.",
   },
 } as const;
 

@@ -4,33 +4,15 @@
     <meta charset="utf-8" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'"
+      content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'self' blob:; frame-src blob:"
     />
     <title>Quire reader</title>
+    <style>
+      html, body, #stage { margin: 0; height: 100%; background: #111; }
+    </style>
   </head>
   <body>
-    <p id="status">Reader page</p>
-    <script>
-      (function () {
-        function onMessage(event) {
-          var data = event.data;
-          if (typeof data !== "string") return;
-          var message;
-          try {
-            message = JSON.parse(data);
-          } catch (error) {
-            return;
-          }
-          if (!message || message.type !== "ping" || typeof message.id !== "string") return;
-          var reply = JSON.stringify({ type: "pong", id: message.id });
-          window.__quireReply = reply;
-          if (window.ReactNativeWebView && window.ReactNativeWebView.postMessage) {
-            window.ReactNativeWebView.postMessage(reply);
-          }
-        }
-        document.addEventListener("message", onMessage);
-        window.addEventListener("message", onMessage);
-      })();
-    </script>
+    <div id="stage"></div>
+    <script src="/reader.js"></script>
   </body>
 </html>

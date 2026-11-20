@@ -10,8 +10,25 @@ test("accepts a pong with an id", () => {
   });
 });
 
-test("rejects anything that is not a pong", () => {
+test("rejects anything that is not a reader message", () => {
   assert.equal(parseReaderMessage('{"type":"ping","id":"x"}'), null);
   assert.equal(parseReaderMessage('{"type":"pong"}'), null);
   assert.equal(parseReaderMessage("not json"), null);
+  assert.equal(parseReaderMessage('{"type":"result","id":"x","report":{}}'), null);
+});
+
+test("accepts an encryption excerpt and a check result", () => {
+  assert.deepEqual(parseReaderMessage('{"type":"encryption","id":"drm","xml":null}'), {
+    type: "encryption",
+    id: "drm",
+    xml: null,
+  });
+  assert.deepEqual(
+    parseReaderMessage('{"type":"result","id":"scripted","report":{"engineOpened":true,"scriptRan":false}}'),
+    {
+      type: "result",
+      id: "scripted",
+      report: { engineOpened: true, scriptRan: false },
+    },
+  );
 });

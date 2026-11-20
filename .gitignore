@@ -51,3 +51,6 @@ spike/node_modules/
 spike/results/
 __pycache__/
 *.pyc
+
+# Generated reader bundle. `npm run reader` rebuilds it from vendor/foliate-js.
+assets/reader/reader.js

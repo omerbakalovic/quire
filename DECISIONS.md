@@ -8,7 +8,19 @@ Flutter and a pair of native apps were set aside. The hard work is pagination, C
 
 Navigation is Expo Router. Zustand is not added yet. There is no session state shared across screens. SQLite is not added yet. The first tables arrive with saved position.
 
-The browser checklist is done. The recommendation below is foliate-js. It is not adopted, and nothing is vendored into the app until that pick is confirmed.
+The browser checklist is done. The adopted engine is recorded under Engine pick.
+
+## Engine pick
+
+Adopted: foliate-js, pinned at `78914aef4466eb960965702401634c2cb348e9b1` (1 May 2026). The scaffold this pick sits on is commit `adbbac3882f7fda396c69ce56bbe35090057bbee`. Only that commit is vendored. The React Native screens do not import the engine. They talk to the WebView through the typed bridge.
+
+Reasons, from the desktop checklist below:
+
+- It classifies noterefs and can extract the note, with aggressive detection off by default. epub.js has no note API, so a note popup there would be new code.
+- It opened every real book in the set. The 81 MB illustrated Monte Cristo opened in 35 ms. epub.js opened that file in 384 ms, and one Frankenstein turn stalled for 8 seconds.
+- The failures it does have stay outside the engine. Empty anchors come back wrong, and its default frame runs scripts. The app supplies a Content Security Policy and refuses DRM in `classifyEncryption` before `open`.
+
+The desktop timings only compare the engines. They are Firefox 149, headless, at 400×640. They are not the phone numbers. foliate's turn samples include a hardcoded `wait(100)` in `paginator.js` `#turnPage`. That wait is not a setting. It is skipped only when the `animated` attribute is set and the turn stays in the same section. The same attribute runs a 300 ms ease-out when the scroll is smooth, which page turns are. The phone run records the wall-clock `next()`, which includes the 100 ms, and the time until the relocate event, which is the turn without that wait.
 
 ## App identity
 
@@ -33,7 +45,7 @@ Checked against Expo's SDK reference for 58.0.0 and `npm view expo@58.0.26 engin
 
 A local dev build is the better route. The phone is already authorized, and a partial SDK is already on disk. EAS can produce the first development build without those SDK packages, and it needs an Expo account plus a cloud rebuild for every later native change. Daily work after the first build is a USB install and Metro, which the local SDK serves.
 
-JDK 17, Android platforms 36 and 37, a current cmdline-tools package, and a matching build-tools package are not installed. They are the large pieces, and they wait for approval.
+JDK 17, platforms 36 and 37.0, build-tools 37.0.0, CMake 3.30.5, and NDK 27.1.12297006 are installed for this user. `expo-modules-core` compiles a native library with CMake, so the NDK and CMake are part of the build. The only SDK license used is `android-sdk-license`, which was already accepted on this machine. No other license was accepted. System Java 21 was not changed.
 
 ## Dependencies
 
@@ -47,7 +59,7 @@ Removed from the template because the demo screens were the only users, and Expo
 
 `react-native-webview` 14.0.1 is the host for the reader page. MIT, maintained as the community WebView. `expo install` selected this version for SDK 58.
 
-foliate-js and epub.js are not app dependencies. The spike pins foliate-js at `78914aef4466eb960965702401634c2cb348e9b1` (1 May 2026) and the published `epubjs@0.3.93` package. epub.js is FreeBSD-licensed. foliate-js is MIT, has no release, and its author says the API can break. That is why a pin is required if it is chosen.
+epub.js stays out of the app. The spike used the published `epubjs@0.3.93` package, which is FreeBSD-licensed. foliate-js is MIT, has no release, and its author says the API can break. The app vendors the pinned commit under `vendor/foliate-js` and does not track upstream. `esbuild` 0.28.2 (MIT, devDependency, maintained by Evan Wallace) bundles that pin into one classic script. The Android WebView loads the reader page as a script file, and the engine's source is a graph of ES modules with dynamic `import()`. PDF, MOBI, comic, and FB2 are not in the bundle.
 
 ## Reading position and scroll
 
@@ -69,7 +81,13 @@ Milestone 0 does not run on iOS. There is no Xcode on this machine. These WebKit
 
 ## Security of book content
 
-The reader page ships with a Content Security Policy that allows only its own inline bridge script. Book script blocking is not in the app yet. The checklist records whether each engine runs a script embedded in a fixture. Detection of DRM is separate from rendering: `classifyEncryption` treats IDPF and Adobe font obfuscation as allowed, and any other algorithm as DRM. The DRM fixture's chapter bytes are still plaintext, so an engine that ignores `encryption.xml` will still show the text. The app has to refuse the file before opening it.
+The reader page's own policy allows its bundled script and blob frames. Book HTML gets a second policy, `script-src 'none'`, inserted before any script in the chapter. foliate serves chapters as `application/xhtml+xml`, and a meta policy is ignored in an XML document, so the bridge rewrites those responses to `text/html` before the iframe loads them. Script tags are left in the file. The scripted fixture is the proof: the chapter text shows, and `data-script-ran` stays unset. External script resources are also refused on the loader's `load` event.
+
+A `<link rel="stylesheet">` pointing at a blob URL does not load under that book policy. The bridge reads the blob from the parent page and inlines the CSS, which `style-src 'unsafe-inline'` already allows. Publisher rules stay in force. A table wider than the page is wrapped in `.quire-table-scroll` (`overflow-x: auto`, `max-width: none` on the table) and the check uses per-chapter scrolled flow, which is the v1 reading mode.
+
+`classifyEncryption` runs in the React Native side before `view.open`. IDPF and Adobe font obfuscation are allowed. Any other algorithm is DRM. The DRM fixture's chapter bytes are still plaintext, so an engine that ignores `encryption.xml` will still show the text. The page only extracts `META-INF/encryption.xml` with zip.js and waits for the decision.
+
+The phone proof serves the reader page and the books from `127.0.0.1:8765`, forwarded with `adb reverse`. The 81 MB file is not packed into the APK. `plugins/withLocalCleartext.js` allows cleartext only for `127.0.0.1` and `localhost`, which is also a secure context, so Web Crypto SHA-1 can run for font obfuscation. `allowUniversalAccessFromFileURLs` stays off.
 
 ## Test books
 
@@ -98,7 +116,7 @@ Recommendation, not yet adopted: foliate-js. It already classifies noterefs, inc
 | Empty anchor, semantic noteref | Treated as a note. Extracted text is empty | No extractor |
 | Empty anchor, heuristic | Treated only when detection is on. The text includes the following paragraph and the rest of the endnotes file | No extractor |
 | User style beats publisher `!important` | Georgia, `rgb(0, 0, 128)` | Same |
-| Image and SVG | Chapter image is 1×1. Chapter 2 SVG renders. The 1200 px table stays 1200 px wide | Same |
+| Image and SVG | Chapter image is 1×1. Chapter 2 SVG renders. The table kept its declared width | Same |
 | Scripted fixture | The embedded script ran. `data-script-ran` became `yes` | The embedded script did not run |
 | Malformed book | Title missing. The readable chapter is shown | Title empty. A resource-rewrite error is logged for the missing cover. The readable chapter is shown |
 | DRM fixture | Plaintext chapter is shown. The app must refuse first | Same |
@@ -116,4 +134,4 @@ Real books, still desktop Firefox:
 
 foliate's turn samples sit on a 100 ms wait inside its paginator when animation is off. Gutenberg books have no bodymatter landmark, so foliate's text-start open stays on the cover. Standard Ebooks Frankenstein does have one, and foliate opened on the letter. The first semantic noteref in that file is spine index 15, past the 12-section scan, so the scan shows nothing for either engine. The fixture is the note evidence.
 
-Neither engine is in the app. The phone WebView has not run the bridge, and it has not re-measured the large book.
+The phone WebView re-measures the large book after this pick. Those numbers are recorded in `PROGRESS.md` next to this table. Desktop samples stay comparison-only, and the foliate turn column includes the 100 ms paginator wait.

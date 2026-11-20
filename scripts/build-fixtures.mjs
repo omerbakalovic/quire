@@ -151,7 +151,7 @@ const ncx = `<?xml version="1.0" encoding="utf-8"?>
 `;
 
 const css = `body { font-family: "Courier New", monospace !important; color: rgb(200, 0, 0); }
-table { width: 1200px; border-collapse: collapse; }
+table { width: 4000px; border-collapse: collapse; }
 td, th { border: 1px solid black; padding: 4px; }
 `;
 
@@ -289,6 +289,41 @@ writeTree("scripted", {
 <p>SCRIPTED-BOOK-TEXT</p>
 </body></html>
 `,
+});
+
+writeTree("font-obfuscation", {
+  mimetype: "application/epub+zip",
+  "META-INF/container.xml": container,
+  "META-INF/encryption.xml": `<?xml version="1.0" encoding="UTF-8"?>
+<encryption xmlns="urn:oasis:names:tc:opendocument:xmlns:container" xmlns:enc="http://www.w3.org/2001/04/xmlenc#">
+  <enc:EncryptedData>
+    <enc:EncryptionMethod Algorithm="http://www.idpf.org/2008/embedding"/>
+    <enc:CipherData>
+      <enc:CipherReference URI="OEBPS/fonts/dummy.ttf"/>
+    </enc:CipherData>
+  </enc:EncryptedData>
+</encryption>
+`,
+  "OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">urn:uuid:quire-font-obfuscation</dc:identifier>
+    <dc:title>Quire Font Obfuscation Fixture</dc:title>
+    <dc:language>en</dc:language>
+    <meta property="dcterms:modified">2026-11-19T00:00:00Z</meta>
+  </metadata>
+  <manifest>
+    <item id="c1" href="chapter-1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="font" href="fonts/dummy.ttf" media-type="font/ttf"/>
+  </manifest>
+  <spine><itemref idref="c1"/></spine>
+</package>
+`,
+  "OEBPS/chapter-1.xhtml": readable(
+    "Font obfuscation",
+    "FONT-OBFUSCATION-TEXT The font file is the only encrypted resource. This chapter is plaintext.",
+  ),
+  "OEBPS/fonts/dummy.ttf": "quire-font-placeholder",
 });
 
 console.log("Built fixtures in test-books/fixtures");

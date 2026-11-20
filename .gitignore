@@ -42,8 +42,15 @@ example
 /ios
 /android
 
+# Local Expo module compile output. Source under modules/ stays.
+modules/**/build/
+
 # Downloaded public-domain books. Hand-built fixtures stay in git.
 test-books/downloaded/
+
+# Personal EPUBs for the phone matrix. The folder stays; the books do not.
+test-books/mine/*
+!test-books/mine/.gitkeep
 
 # Engine checkouts and the desktop spike's install. Pins live in the spike script.
 spike/vendor/

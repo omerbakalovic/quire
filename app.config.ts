@@ -44,6 +44,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   },
   plugins: [
     "./plugins/withLocalCleartext",
+    "./plugins/withReaderAssets",
     "expo-router",
     [
       "expo-splash-screen",

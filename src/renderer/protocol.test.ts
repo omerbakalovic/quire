@@ -24,6 +24,10 @@ test("accepts an encryption excerpt and a check result", () => {
     xml: null,
   });
   assert.deepEqual(
+    parseReaderMessage('{"type":"first","id":"font","report":{"engineOpened":true}}'),
+    { type: "first", id: "font", report: { engineOpened: true } },
+  );
+  assert.deepEqual(
     parseReaderMessage('{"type":"result","id":"scripted","report":{"engineOpened":true,"scriptRan":false}}'),
     {
       type: "result",

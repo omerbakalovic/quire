@@ -18,5 +18,26 @@ test("step 5 verdicts follow the phone checks", () => {
   assert.equal(verdict("chapter", opened({ imageWidth: 1, imageCount: 1 })).pass, true);
   assert.equal(verdict("table", opened({ table: { scrolls: true, scrollWidth: 1200, clientWidth: 360 } })).pass, true);
   assert.equal(verdict("table", opened({ table: { scrolls: false, scrollWidth: 1200, clientWidth: 360 } })).pass, false);
-  assert.equal(verdict("large", opened({ openMs: 40, turns: [{ wallMs: 1 }, { wallMs: 2 }, { wallMs: 3 }, { wallMs: 4 }, { wallMs: 5 }] })).pass, true);
+  assert.equal(
+    verdict("large-range", opened({
+      readMode: "range",
+      openMs: 40,
+      rangeRequests: 6,
+      fullResponses: 0,
+      turns: [{ wallMs: 1 }, { wallMs: 2 }, { wallMs: 3 }, { wallMs: 4 }, { wallMs: 5 }],
+    })).pass,
+    true,
+  );
+  assert.equal(
+    verdict("frankenstein-blob", opened({ readMode: "blob", openMs: 10, rangeRequests: 0 })).pass,
+    true,
+  );
+  assert.equal(
+    verdict("frankenstein-range", opened({ readMode: "range", openMs: 10, rangeRequests: 4, fullResponses: 0 })).pass,
+    true,
+  );
+  assert.equal(
+    verdict("large-blob", opened({ readMode: "blob", openMs: 10, rangeRequests: 4 })).pass,
+    false,
+  );
 });

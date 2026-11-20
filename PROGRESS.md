@@ -54,4 +54,71 @@ A second full run, after the table was widened to 4000 px, passed the same five 
 
 ## Next
 
-- Step 5 is accepted on the phone. Milestone 1 has not started.
+M1a is proven on the Xiaomi 15T and recorded below. Do not start M1b until that work is asked for. M1b is import, flow modes, taps, the paginator patch, the book matrix, the lifecycle test, and the IDPF sample downloads. Empty-anchor notes and the 67 `doc is null` errors stay Milestone 3.
+
+## Milestone 1 split
+
+M1a is the loopback module, the `bookUrl` seam, a range-versus-blob comparison on the phone, and CSP plus DRM on that open path. M1b is import, flow modes, taps, the paginator patch, the book matrix, and the lifecycle test. IDPF sample downloads are M1b. Empty-anchor notes and the 67 `doc is null` errors stay Milestone 3.
+
+`test-books/mine/` exists for 1 to 3 personal EPUBs. The books are gitignored. `.gitkeep` is tracked. M1a does not read that folder. M1b waits for the files instead of dropping the row.
+
+## Where the code is
+
+The M1a phone numbers below are from the in-app loopback, not from `scripts/serve-books.mjs`. Do not `adb reverse` port 8765 for this work. Metro for a debug launch is `npx expo start --host localhost --port 8081` with `adb reverse tcp:8081`. The reader page itself is bundled into the APK by `npm run reader` and copied again out of assets when the loopback server starts.
+
+| Path | Role |
+|---|---|
+| `modules/quire-loopback/` | Kotlin Expo module. `package.json` sets `expo.autolinking.nativeModulesDir` to `./modules`. Gradle project `:quire-loopback`. |
+| `HttpRange.kt`, `Routes.kt`, `LoopbackServer.kt` | Range parser, token routes, socket server. Main sources compiled. |
+| `QuireLoopbackModule.kt` | JS API: `start`, `registerIfPresent`, `bookUrl`, `readerUrl`, launch check, ready/go/first/turns files, `appendNote`. |
+| `src/renderer/book-url.ts` | The only app import of that module. Callers use `bookUrl(id)`. |
+| `src/reader-page/open-book.js` | Range reader (`size` + `readUint8Array`) or a full blob. Builds an EPUB object and passes it to `view.open`. Vendored foliate is not patched. |
+| `src/reader-page/entry.js` | One check per launch. Posts `first`, waits for `continue`, then turns only for `large` + `range`. Report POST is relative `report`. |
+| `src/app/index.tsx` | Starts the server, registers one pushed file, waits for `quire-go`, then `quire-turns`. |
+| `src/renderer/device-checks.ts` | `frankenstein-range`, `frankenstein-blob`, `large-range`, `large-blob`, `scripted`, `drm`, `font`. |
+| `src/domain/entry-names.ts` | M1b skip rule, tested, no import UI. |
+| `plugins/withReaderAssets.js` | Copies `assets/reader/index.html` to `quire-reader/reader.html` and `reader.js` into the APK. `index.html` now loads `reader.js` with a relative URL. |
+| `android/app/build.gradle` | Same copy task, already applied. `android/` is gitignored, so a fresh prebuild depends on the plugin. |
+
+The server binds `127.0.0.1` only. Token is 16 bytes from `SecureRandom`, hex. Routes are `/{token}/reader.html`, `/{token}/reader.js`, `/{token}/books/{id}`, and `POST /{token}/report`. Book ids match `^[A-Za-z0-9_-]{1,80}$`. The request path is never joined onto a disk path. No CORS headers. Range cases are in `HttpRange.kt`. Static files are the two known names, copied from assets into `filesDir` because a compressed asset cannot be seeked.
+
+Checks are selected by the activity extra `quireCheck` or by `files/quire-check`, read before `start()` deletes that file. The host then uses `files/quire-ready`, `quire-go`, `quire-first`, `quire-turns`, and `quire-report.jsonl` under the app files dir (`adb shell run-as app.quire.reader`). One check per force-stopped launch. Memory compares PSS growth of `pg1184-images.epub` with Frankenstein, each from a cold start, for both read modes. There is no 100 MB and no 250 MB pass line. A block cache is added only if one chapter open or one turn issues more than about 20 range requests, and both counts are recorded.
+
+Push `se-frankenstein.epub` and `pg1184-images.epub` into the app external files dir or `filesDir`. Do not base64 the 81 MB file through JavaScript. Fixtures for scripted, drm, and font go the same way. `registerIfPresent` looks up a plain file name in external files, then `filesDir`.
+
+## What passed before the phone run
+
+- `npm test`: 21 tests passed (`src/domain/*.test.ts`, `src/renderer/*.test.ts`). `tsc --noEmit` passed.
+- `:quire-loopback:testDebugUnitTest`: 14 tests, 0 failures. `LoopbackServerTest` speaks HTTP with `java.net.Socket`. Android's unit-test classpath does not have `java.net.http`.
+
+## M1a on the Xiaomi 15T, 2026-11-20
+
+The debug APK with the loopback module installed (`adb` printed `Installed on 1 device`). Books were copied into the app files dir with `run-as`. One force-stopped launch per check. The host wrote `quire-go` after `quire-ready`, then `quire-turns` after `quire-first`. All seven verdicts passed.
+
+PSS is `TOTAL PSS` in KB. Growth is the first page minus ready. Hermes `js_heapSize` was 12,582,912 bytes at ready, at the first page, and at the result, in every check. No block cache: the open counts were 14 and 17, and the busiest turn was 18.
+
+| Check | fetch | open | range reads | full responses | PSS ready | PSS first | PSS growth | Verdict |
+|---|---|---|---|---|---|---|---|---|
+| frankenstein-range | 59 ms | 389 ms | 14 | 0 | 374,005 | 400,935 | 26,930 | pass, Letter I |
+| frankenstein-blob | 47 ms | 120 ms | 0 | 0 | 373,682 | 397,295 | 23,613 | pass, Letter I |
+| large-range, 81 MB | 62 ms | 345 ms | 17 | 0 | 373,075 | 400,723 | 27,648 | pass, cover, 124 sections, image 671 px |
+| large-blob, 81 MB | 246 ms | 116 ms | 0 | 0 | 373,509 | 398,530 | 25,021 | pass, cover, 124 sections, image 671 px |
+| scripted | 43 ms | 143 ms | 8 | 0 | 372,802 | 385,461 | 12,659 | pass, script did not run |
+| drm | 113 ms | — | 4 | 0 | 371,415 | 378,026 | 6,611 | pass, refused before open |
+| font | 68 ms | 179 ms | 12 | 0 | 369,711 | 382,968 | 13,257 | pass, obfuscation opened, subtle crypto true |
+
+Large-book turns, range mode, same section. `wallMs` includes the hardcoded 100 ms wait.
+
+| Turn | wallMs | relocateMs | range reads |
+|---|---|---|---|
+| 1 | 606 | 3 | 18 |
+| 2 | 102 | 2 | 0 |
+| 3 | 103 | 1 | 0 |
+| 4 | 103 | 2 | 0 |
+| 5 | 116 | 16 | 0 |
+
+The choice is range. The numbers and the iOS server limit are in `DECISIONS.md`.
+
+## Still untested
+
+iOS. Import, taps, flow switching, the 100 ms paginator patch, the book matrix, the lifecycle test, and `test-books/mine/`. The step 5 phone numbers higher up are the computer server on port 8765. They are not these M1a numbers.

@@ -87,7 +87,7 @@ A `<link rel="stylesheet">` pointing at a blob URL does not load under that book
 
 `classifyEncryption` runs in the React Native side before `view.open`. IDPF and Adobe font obfuscation are allowed. Any other algorithm is DRM. The DRM fixture's chapter bytes are still plaintext, so an engine that ignores `encryption.xml` will still show the text. The page only extracts `META-INF/encryption.xml` with zip.js and waits for the decision.
 
-The phone proof serves the reader page and the books from `127.0.0.1:8765`, forwarded with `adb reverse`. The 81 MB file is not packed into the APK. `plugins/withLocalCleartext.js` allows cleartext only for `127.0.0.1` and `localhost`, which is also a secure context, so Web Crypto SHA-1 can run for font obfuscation. `allowUniversalAccessFromFileURLs` stays off.
+The step 5 phone proof served the reader page and the books from `127.0.0.1:8765`, forwarded with `adb reverse`. M1a serves that same origin from the in-app loopback and does not reverse port 8765. The 81 MB file is not packed into the APK. `plugins/withLocalCleartext.js` allows cleartext only for `127.0.0.1` and `localhost`, which is also a secure context, so Web Crypto SHA-1 can run for font obfuscation. `allowUniversalAccessFromFileURLs` stays off.
 
 ## Test books
 
@@ -135,3 +135,54 @@ Real books, still desktop Firefox:
 foliate's turn samples sit on a 100 ms wait inside its paginator when animation is off. Gutenberg books have no bodymatter landmark, so foliate's text-start open stays on the cover. Standard Ebooks Frankenstein does have one, and foliate opened on the letter. The first semantic noteref in that file is spine index 15, past the 12-section scan, so the scan shows nothing for either engine. The fixture is the note evidence.
 
 The phone WebView re-measures the large book after this pick. Those numbers are recorded in `PROGRESS.md` next to this table. Desktop samples stay comparison-only, and the foliate turn column includes the 100 ms paginator wait.
+
+## Loopback book URL
+
+The installed app serves the reader page and the books from `modules/quire-loopback`, our own Kotlin Expo module. No NanoHTTPD, Ktor, or `react-native-static-server`. React Native cannot listen on a socket, and the surface is one loopback GET with ranges.
+
+Book bytes are not copied into a byte array and are not sent across the React Native bridge. JavaScript registers a file name and later receives a URL. The WebView fetches it. `bookUrl(id)` in `src/renderer/book-url.ts` is the only function that names a book. A later Android `WebViewAssetLoader`, or an iOS `WKURLSchemeHandler`, replaces the module behind that function.
+
+`file://` and a custom scheme are not secure contexts, so font deobfuscation would lose `crypto.subtle`. `react-native-webview` 14.0.1 does not expose `shouldInterceptRequest`. The origin stays `http://127.0.0.1` on an ephemeral port. Cleartext stays limited to `127.0.0.1` and `localhost`.
+
+iOS is still untested. A further limit, separate from the seven WebKit risks above: a loopback server dies when iOS suspends the app, and background time is short. An iOS build must not copy this server. The `bookUrl` seam is the replacement point.
+
+`view.open(url)` still downloads the whole body (`vendor/foliate-js/view.js`). That path is not patched. The reader page builds a zip.js reader and passes an already-built EPUB object to `view.open`. Vendored zip.js has no `HttpRangeReader`. The reader supplies `size`, `readUint8Array`, and the `readable` stream `getData` assigns an entry offset onto. Without `readable`, `getData` throws `TypeError: Cannot convert undefined or null to object`. The bytes from `readUint8Array` own their buffer, because zip.js wraps `e.buffer` in a `DataView`.
+
+## Choice: range reads
+
+`ZipReader` accepted that reader on the Xiaomi 15T. Every ranged response was 206 (`fullResponses` 0). The shipping open path is range. The blob path stays in the check harness so both number sets can be repeated. The 100 ms paginator wait is still unpatched. The patch is M1b, as a separate file against the pinned commit, applied at bundle time. `paginator.js` stays the pinned bytes.
+
+PSS is `TOTAL PSS` in KB, from ready (the reader page is loaded and the book is not open) to the first page. Each launch was force-stopped. Hermes `js_heapSize` was 12,582,912 bytes at ready, at the first page, and at the result, in every check.
+
+| Open | fetch | open | range reads | full responses | PSS ready | PSS first | PSS growth |
+|---|---|---|---|---|---|---|---|
+| Frankenstein range | 59 ms | 389 ms | 14 | 0 | 374,005 | 400,935 | 26,930 |
+| Frankenstein blob | 47 ms | 120 ms | 0 | 0 | 373,682 | 397,295 | 23,613 |
+| Monte Cristo range, 81 MB | 62 ms | 345 ms | 17 | 0 | 373,075 | 400,723 | 27,648 |
+| Monte Cristo blob, 81 MB | 246 ms | 116 ms | 0 | 0 | 373,509 | 398,530 | 25,021 |
+
+The range open of the 81 MB book did not GET the file. The blob open did, in 246 ms. PSS growth stayed in the same band, so the file was not resident as an extra 81 MB. Hermes did not grow in either mode.
+
+Five turns on the large book, range mode, same section. `wallMs` includes foliate's hardcoded 100 ms wait. The first turn issued 18 range reads. The next four issued none.
+
+| Turn | wallMs | relocateMs | range reads |
+|---|---|---|---|
+| 1 | 606 | 3 | 18 |
+| 2 | 102 | 2 | 0 |
+| 3 | 103 | 1 | 0 |
+| 4 | 103 | 2 | 0 |
+| 5 | 116 | 16 | 0 |
+
+A block cache is not added. The open counts were 14 and 17, and the busiest turn was 18.
+
+On the same origin, still through range reads: the scripted book showed `SCRIPTED-BOOK-TEXT` with `scriptRan` false and `script-src 'none'`. DRM was refused before open (`kind` `drm`). The font-obfuscation book opened with `secureContext` and `crypto.subtle` true, and the chapter text contained `FONT-OBFUSCATION-TEXT`.
+
+## Known limits
+
+Size caps, when import arrives in M1b, use the sizes a zip declares. A hostile zip can forge those numbers. The WebView read path has no byte cap of its own.
+
+Parsing metadata in the WebView will not scale to the Milestone 5 directory import. That import needs a hidden-WebView queue or a native parser.
+
+## Entry names, for M1b import
+
+`src/domain/entry-names.ts` skips an entry only when the stored name has a `..` segment, is absolute, or contains a backslash. It does not percent-decode first. Non-ASCII and percent-encoded names stay, so they can still resolve against manifest hrefs. One skipped entry does not reject the book. Nothing in M1a extracts the archive. `kusamakura-japanese-vertical-writing.epub` is the M1b matrix row for that case. Its URL and checksum are not pinned yet. When M1b downloads the IDPF samples, verify each file's license on the EPUB 3 samples README (CC-BY-SA 3.0 unless that file's table says otherwise) and pin the hash after the download. Do not commit the files.

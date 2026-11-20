@@ -4,8 +4,9 @@ import * as paginator from "../../vendor/foliate-js/paginator.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
 import "../../vendor/foliate-js/view.js";
 
-import { chapterFacts, liveDoc, TABLE_CSS, tableFacts, timeTurns, waitFor, wrapWideTables } from "./measure.js";
-import { attachBookSecurity, cspOf, installBookCspParser } from "./security.js";
+import { chapterFacts, liveDoc, timeTurns } from "./measure.js";
+import { openPrepared } from "./open-book.js";
+import { cspOf, installBookCspParser } from "./security.js";
 
 const bundled = {
   "./epub.js": epub,
@@ -33,6 +34,7 @@ globalThis.__quireImport = (spec) => {
 installBookCspParser();
 
 const pending = new Map();
+const pendingContinue = new Map();
 
 function reply(message) {
   const raw = JSON.stringify(message);
@@ -54,73 +56,22 @@ function askDecision(id, xml) {
   });
 }
 
-async function readEncryptionXml(blob) {
-  zip.configure({ useWebWorkers: false });
-  const reader = new zip.ZipReader(new zip.BlobReader(blob));
-  try {
-    const entries = await reader.getEntries();
-    const entry = entries.find((item) => item.filename === "META-INF/encryption.xml");
-    if (!entry) return null;
-    return await entry.getData(new zip.TextWriter());
-  } finally {
-    await reader.close();
-  }
-}
-
-function clearStage() {
-  const stage = document.getElementById("stage");
-  const existing = stage.querySelector("foliate-view");
-  if (existing) {
-    try {
-      existing.close();
-    } catch (error) {
-      console.error(error);
-    }
-    existing.remove();
-  }
-  return stage;
-}
-
-async function openPrepared(url, id) {
-  const fetchStarted = performance.now();
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`fetch ${response.status}`);
-  const blob = await response.blob();
-  const fetchMs = Math.round(performance.now() - fetchStarted);
-  const xml = await readEncryptionXml(blob);
-  const decision = await askDecision(id, xml);
-  const report = {
-    engineOpened: false,
-    kind: decision.kind,
-    fetchMs,
-    bytes: blob.size,
-    secureContext: window.isSecureContext,
-    hasSubtle: Boolean(globalThis.crypto?.subtle),
-  };
-  if (!decision.open) return { report, view: null };
-
-  const stage = clearStage();
-  const view = document.createElement("foliate-view");
-  view.style.cssText = "display:block;width:100%;height:100%";
-  stage.append(view);
-  view.addEventListener("load", (event) => wrapWideTables(event.detail?.doc, view));
-  const file = new File([blob], "book.epub", { type: "application/epub+zip" });
-  const openStarted = performance.now();
-  await view.open(file);
-  attachBookSecurity(view.book);
-  view.renderer.setStyles(TABLE_CSS);
-  await view.init({ showTextStart: true });
-  await waitFor(() => view.lastLocation?.cfi, 90000);
-  report.engineOpened = true;
-  report.openMs = Math.round(performance.now() - openStarted);
-  report.cfi = view.lastLocation?.cfi ?? null;
-  report.sections = view.book?.sections?.length ?? null;
-  return { report, view };
+function waitContinue(id) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      pendingContinue.delete(id);
+      reject(new Error("continue timeout"));
+    }, 180000);
+    pendingContinue.set(id, () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 async function finish(id, report) {
   try {
-    await fetch("/report", {
+    await fetch("report", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ id, report }),
@@ -131,23 +82,29 @@ async function finish(id, report) {
   reply({ type: "result", id, report });
 }
 
+async function turnSamples(view, counter, count) {
+  const samples = [];
+  for (let index = 0; index < count; index += 1) {
+    const mark = counter.n;
+    const [sample] = await timeTurns(view, 1);
+    sample.rangeRequests = counter.n - mark;
+    samples.push(sample);
+  }
+  return samples;
+}
+
 async function runCheck(message) {
-  clearStage();
-  const { report, view } = await openPrepared(message.url, message.id);
-  if (view && message.mode !== "table") {
+  const readMode = message.read === "blob" ? "blob" : "range";
+  const { report, view, counter } = await openPrepared(message.url, message.id, readMode, askDecision);
+  if (view) {
     Object.assign(report, await chapterFacts(view));
     report.csp = cspOf(liveDoc(view));
   }
-  if (view && message.mode === "table") {
-    view.renderer.setAttribute("flow", "scrolled");
-    report.table = await tableFacts(view);
-    report.csp = cspOf(liveDoc(view));
-    report.flow = view.renderer.getAttribute("flow");
-  }
-  if (view && message.mode === "large") {
-    report.turns = await timeTurns(view, 5);
-    report.waitNote =
-      "wallMs is next() and includes the hardcoded 100ms paginator wait. relocateMs is the time until the page has moved, before that wait. The wait is not a setting.";
+  reply({ type: "first", id: message.id, report });
+  await waitContinue(message.id);
+  if (view && message.mode === "large" && readMode === "range") {
+    report.turns = await turnSamples(view, counter, 5);
+    report.turnRangeRequests = report.turns.map((turn) => turn.rangeRequests);
   }
   await finish(message.id, report);
 }
@@ -170,6 +127,13 @@ function onMessage(event) {
     if (!waiter) return;
     pending.delete(message.id);
     waiter(message);
+    return;
+  }
+  if (message.type === "continue") {
+    const waiter = pendingContinue.get(message.id);
+    if (!waiter) return;
+    pendingContinue.delete(message.id);
+    waiter();
     return;
   }
   if (message.type === "run") {

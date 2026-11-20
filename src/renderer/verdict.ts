@@ -37,15 +37,36 @@ export function verdict(id: string, report: CheckReport): { pass: boolean; reaso
       (table.scrollWidth ?? 0) > (table.clientWidth ?? 0);
     return { pass, reason: pass ? "table scrolls" : "table check failed" };
   }
-  if (id === "large") {
+  if (id === "large-range") {
     const turns = report.turns as TurnSample[] | undefined;
     const pass =
       report.engineOpened === true &&
+      report.readMode === "range" &&
       typeof report.openMs === "number" &&
+      Number(report.rangeRequests) > 0 &&
+      report.fullResponses !== undefined &&
+      Number(report.fullResponses) === 0 &&
       Array.isArray(turns) &&
       turns.length === 5 &&
       turns.every((turn) => typeof turn.wallMs === "number");
     return { pass, reason: pass ? "large book measured" : "large book check failed" };
+  }
+  if (id === "frankenstein-range") {
+    const pass =
+      report.engineOpened === true &&
+      report.readMode === "range" &&
+      typeof report.openMs === "number" &&
+      Number(report.rangeRequests) > 0 &&
+      Number(report.fullResponses) === 0;
+    return { pass, reason: pass ? "range open measured" : "range open failed" };
+  }
+  if (id === "frankenstein-blob" || id === "large-blob") {
+    const pass =
+      report.engineOpened === true &&
+      report.readMode === "blob" &&
+      typeof report.openMs === "number" &&
+      Number(report.rangeRequests) === 0;
+    return { pass, reason: pass ? "blob open measured" : "blob open failed" };
   }
   return { pass: false, reason: "unknown check" };
 }

@@ -33,6 +33,20 @@ const BOOKS = [
   },
 ];
 
+// IDPF/W3C EPUB 3 samples for the M1b matrix. CC-BY-SA 3.0 unless the samples
+// README table says otherwise for a file. A null hash is not pinned yet: the
+// file is kept and its hash printed so it can be pinned in this list.
+const IDPF = "https://github.com/IDPF/epub3-samples/releases/latest/download";
+const SAMPLES = [
+  "moby-dick.epub",
+  "wasteland.epub",
+  "georgia-cfi.epub",
+  "regime-anticancer-arabic.epub",
+  "kusamakura-japanese-vertical-writing.epub",
+  "sous-le-vent.epub",
+].map((file) => ({ file, url: `${IDPF}/${file}`, sha256: null }));
+BOOKS.push(...SAMPLES);
+
 async function sha256(path) {
   const digest = createHash("sha256");
   digest.update(await readFile(path));
@@ -65,6 +79,10 @@ async function main() {
     const destination = join(outDir, book.file);
     if (await exists(destination)) {
       const have = await sha256(destination);
+      if (book.sha256 === null) {
+        console.log(`unpinned ${book.file} sha256 ${have}`);
+        continue;
+      }
       if (have === book.sha256) {
         console.log(`ok ${book.file}`);
         continue;
@@ -81,7 +99,9 @@ async function main() {
       continue;
     }
     const have = await sha256(destination);
-    if (have !== book.sha256) {
+    if (book.sha256 === null) {
+      console.log(`unpinned ${book.file} sha256 ${have}`);
+    } else if (have !== book.sha256) {
       console.error(`FAIL ${book.file}: sha256 ${have}`);
       failed = true;
     } else {

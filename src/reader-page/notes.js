@@ -14,7 +14,7 @@ const NOTE_ROLES = ["doc-footnote", "doc-endnote", "doc-note"];
 const NOTE_LIST_TYPES = ["endnotes", "footnotes", "rearnotes", "notes"];
 const NOTE_LIST_ROLES = ["doc-endnotes", "doc-footnotes"];
 const BLOCKS = "aside, li, p, div, dd, blockquote, section, td";
-const BACK_TEXT = /^\s*(?:[↩↪↑⤴⬑⏎]︎?|back|return|\^)\s*$/i;
+const BACK_TEXT = /^\s*(?:[↩↪↑⤴⬑⏎◄◀]︎?|back|return|\^)\s*$/i;
 const LABEL = /^\s*[[(]?\s*(?:\d{1,4}|[ivxlcdm]{1,6}|[a-z]|[*†‡§¶#‖]{1,3})\s*[\])]?\s*$/i;
 
 function tokens(el, name) {
@@ -160,7 +160,20 @@ export function noterefKind(a, { aggressive = false } = {}) {
   const inSup = Boolean(a.closest("sup") || a.querySelector("sup"));
   if (LABEL.test(text) || inSup) return "maybe";
   if (aggressive && text.trim().length <= 6) return "maybe";
+  // A plain link with its own id into the book: a note only if the target links back to it.
+  // That is how hyperlink editions (Power Moby-Dick's "link" edition) mark their notes.
+  if (a.id && isBookFragment(a.getAttribute("href"))) return "linked";
   return "no";
+}
+
+function isBookFragment(href) {
+  return href.includes("#") && !/^[a-z][a-z0-9+.-]*:/i.test(href);
+}
+
+function linksBack(blocks, id) {
+  return blocks.some((block) =>
+    Array.from(block.querySelectorAll?.("a[href]") ?? []).some((a) => (a.getAttribute("href") ?? "").endsWith(`#${id}`)),
+  );
 }
 
 /** Whether a "maybe" target is really a note. Semantic noterefs skip this. */
@@ -168,6 +181,7 @@ export function confirmNote(kind, target, blocks, originId, { aggressive = false
   if (!target || !blocks?.length) return false;
   if (kind === "semantic") return !isChapterTarget(target) || isNoteElement(target);
   if (isChapterTarget(target)) return false;
+  if (kind === "linked") return Boolean(originId) && linksBack(blocks, originId);
   if (noteLike(blocks, originId)) return true;
   return aggressive;
 }
@@ -276,7 +290,8 @@ export const NOTEREF_CSS = [
 ].join("\n");
 
 export function markNoterefs(doc, options) {
-  for (const a of noterefsIn(doc, options)) {
+  // Plain id'd links are not marked: most of them are ordinary cross-references.
+  for (const a of noterefsIn(doc, options).filter((link) => noterefKind(link, options) !== "linked")) {
     a.classList.add("quire-noteref");
     if ((a.textContent ?? "").trim().length <= 4) a.classList.add("quire-noteref-small");
   }

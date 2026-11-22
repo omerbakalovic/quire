@@ -14,6 +14,7 @@ export type ReaderToHost =
       openMs: number | null;
       rangeRequests: number | null;
       restored: boolean;
+      fixedLayout: boolean;
     }
   | {
       type: "relocate";
@@ -24,6 +25,7 @@ export type ReaderToHost =
       sectionIndex: number | null;
       sectionCount: number | null;
       sinceTapMs: number | null;
+      canGoBack: boolean;
     }
   | { type: "tap"; id: string; zone: "center" }
   | { type: "refused"; id: string; kind: string }
@@ -94,6 +96,7 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       openMs: optNumber(message.openMs),
       rangeRequests: optNumber(message.rangeRequests),
       restored: message.restored === true,
+      fixedLayout: message.fixedLayout === true,
     };
   }
   if (message.type === "relocate") {
@@ -108,6 +111,7 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       sectionIndex: optNumber(message.sectionIndex),
       sectionCount: optNumber(message.sectionCount),
       sinceTapMs: optNumber(message.sinceTapMs),
+      canGoBack: message.canGoBack === true,
     };
   }
   if (message.type === "tap") return message.zone === "center" ? { type: "tap", id, zone: "center" } : null;

@@ -477,10 +477,18 @@ async function setFlow(flow) {
   return state();
 }
 
-async function swipeUp(st) {
-  const [x, top] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.25);
-  const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.75);
-  await shell(`input swipe ${x} ${bottom} ${x} ${top} 350`);
+// Scroll forward by a swipe along the scroll axis. Vertical writing (right to left lines)
+// scrolls sideways in Scroll mode, and the next text is to the left.
+async function swipeForward(st) {
+  if (st.vertical) {
+    const [left, y] = toPx(st, st.viewport.width * 0.2, st.viewport.height * 0.5);
+    const [right] = toPx(st, st.viewport.width * 0.8, st.viewport.height * 0.5);
+    await shell(`input swipe ${left} ${y} ${right} ${y} 350`);
+  } else {
+    const [x, top] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.25);
+    const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.75);
+    await shell(`input swipe ${x} ${bottom} ${x} ${top} 350`);
+  }
   await sleep(700);
 }
 
@@ -564,8 +572,8 @@ async function runBook(entry, index) {
     check(scope, "Pages → Scroll keeps the place", samePlace(before, scrolled), `section ${before.section}→${scrolled.section}, ${before.fraction?.toFixed(3)}→${scrolled.fraction?.toFixed(3)}`);
     // In a chapter shorter than a screen and a half, two swipes scroll past its end onto blank paper.
     const short = scrolled.shortSection;
-    await swipeUp(scrolled);
-    if (!short) await swipeUp(scrolled);
+    await swipeForward(scrolled);
+    if (!short) await swipeForward(scrolled);
     const swiped = await state();
     row.shots.push(await shot(dir, "04-scrolled.png"));
     const swipeMoved = swiped.cfi !== scrolled.cfi;

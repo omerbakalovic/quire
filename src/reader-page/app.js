@@ -16,6 +16,27 @@ let tapAt = null;
 // book the left zone is the next page. "screen": right is always forward.
 let settings = { tapZones: "reading" };
 
+let insets = { top: 0, bottom: 0, left: 0, right: 0 };
+
+/**
+ * The system bars' insets, from the host. The note sheet and the Back to text
+ * chip stay above the navigation bar, and the text keeps clear of both bars.
+ */
+export function applyInsets(message) {
+  const value = (n) => (typeof n === "number" && Number.isFinite(n) && n >= 0 ? Math.min(n, 200) : 0);
+  insets = { top: value(message?.top), bottom: value(message?.bottom), left: value(message?.left), right: value(message?.right) };
+  const root = document.documentElement.style;
+  for (const side of ["top", "bottom", "left", "right"]) root.setProperty(`--quire-inset-${side}`, `${insets[side]}px`);
+  applyMargin(current?.view);
+}
+
+// foliate's default header and footer band is 48 px; it grows when a system bar is taller.
+function applyMargin(view) {
+  if (!view || view.isFixedLayout) return;
+  const margin = Math.max(48, Math.round(Math.max(insets.top, insets.bottom) + 12));
+  view.renderer?.setAttribute?.("margin", `${margin}px`);
+}
+
 export function applySettings(message) {
   if (message.tapZones === "screen" || message.tapZones === "reading") settings = { ...settings, tapZones: message.tapZones };
 }
@@ -70,9 +91,11 @@ function attachTaps(view, doc, reply, id, popup) {
     if (event.defaultPrevented) return;
     if (linkFromEvent(event)) return;
     if (selectionIn(doc)) return;
+    // A fixed-layout page is a scaled iframe: its own pixels are not the screen's.
     const frame = doc.defaultView?.frameElement;
-    const left = frame ? frame.getBoundingClientRect().left : 0;
-    const zone = tapZone(left + event.clientX, window.innerWidth);
+    const rect = frame?.getBoundingClientRect();
+    const scale = frame?.offsetWidth ? rect.width / frame.offsetWidth : 1;
+    const zone = tapZone((rect?.left ?? 0) + event.clientX * scale, window.innerWidth);
     if (zone === "left" || zone === "right") {
       tapAt = performance.now();
       popup?.hideBack();
@@ -109,6 +132,7 @@ export async function openForReading(message, reply, askDecision) {
   const { id, url } = message;
   const flow = flowOf(message.flow);
   applySettings(message.settings ?? {});
+  applyInsets(message.insets ?? insets);
   if (current?.view) {
     try {
       current.view.close();
@@ -142,6 +166,8 @@ export async function openForReading(message, reply, askDecision) {
           sectionIndex: detail.section?.current ?? null,
           sectionCount: detail.section?.total ?? null,
           sinceTapMs,
+          // After following a link, Android back returns here instead of leaving the book.
+          canGoBack: Boolean(current?.view?.history?.canGoBack ?? event.target?.history?.canGoBack),
         });
       });
       view.addEventListener("external-link", (event) => {
@@ -156,6 +182,7 @@ export async function openForReading(message, reply, askDecision) {
     return;
   }
   current = { id, view: opened.view, popup };
+  applyMargin(opened.view);
   const book = opened.view.book;
   reply({
     type: "opened",
@@ -205,6 +232,15 @@ export async function turn(message) {
   return true;
 }
 
+/** Android back after following a link: back to where the link was. */
+export async function historyBack(message) {
+  if (!current || current.id !== message.id) return false;
+  current.popup?.hideBack();
+  if (!current.view.history?.canGoBack) return false;
+  current.view.history.back();
+  return true;
+}
+
 /** Android back closes an open note first. The host asks; the page answers with a note message. */
 export function closeNote(message) {
   if (!current || current.id !== message.id) return false;
@@ -225,7 +261,7 @@ export async function debug(message) {
     case "scan":
       return probe.scan(view);
     case "noterefs":
-      return { refs: probe.noterefs(view, {}), viewport: { width: window.innerWidth, height: window.innerHeight } };
+      return { refs: await probe.noterefs(view, {}), viewport: { width: window.innerWidth, height: window.innerHeight } };
     case "find-notes":
       return probe.findNotes(view, {}, typeof message.min === "number" ? message.min : 2);
     case "goto":

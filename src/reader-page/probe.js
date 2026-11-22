@@ -1,4 +1,4 @@
-import { noterefKind, noterefsIn } from "./notes.js";
+import { confirmNote, findTarget, noteBlock, noterefKind, noterefsIn } from "./notes.js";
 
 /**
  * Debug probes for the phone matrix (scripts/phone-matrix.mjs). The host asks
@@ -55,6 +55,28 @@ function visibleMedia(range) {
   return { images, broken };
 }
 
+function frameScale(frame, rect = frame.getBoundingClientRect()) {
+  return frame.offsetWidth ? rect.width / frame.offsetWidth : 1;
+}
+
+/**
+ * What is on screen. foliate reports no range for a fixed-layout page, which is
+ * shown whole, so there the range is each visible page's body.
+ */
+function screenRanges(view, range) {
+  if (range) return [range];
+  if (!view.isFixedLayout) return [];
+  const out = [];
+  for (const { doc } of view.renderer.getContents?.() ?? []) {
+    const frame = doc?.defaultView?.frameElement;
+    if (!doc?.body || !frame || frame.getBoundingClientRect().width === 0) continue;
+    const r = doc.createRange();
+    r.selectNodeContents(doc.body);
+    out.push(r);
+  }
+  return out;
+}
+
 /** Whether a tap at this point of the reader page would land on a link instead of turning. */
 function linkAt(view, x, y) {
   for (const { doc } of view.renderer.getContents?.() ?? []) {
@@ -62,9 +84,13 @@ function linkAt(view, x, y) {
     if (!frame) continue;
     const rect = frame.getBoundingClientRect();
     if (x < rect.left || x > rect.right || y < rect.top || y > rect.bottom) continue;
-    let el = doc.elementFromPoint(x - rect.left, y - rect.top);
+    // A fixed-layout page is scaled to the screen; its own coordinates are not the screen's.
+    const scale = frameScale(frame, rect);
+    const fx = (x - rect.left) / scale;
+    const fy = (y - rect.top) / scale;
+    let el = doc.elementFromPoint(fx, fy);
     while (el?.shadowRoot) {
-      const inner = el.shadowRoot.elementFromPoint(x - rect.left, y - rect.top);
+      const inner = el.shadowRoot.elementFromPoint(fx, fy);
       if (!inner || inner === el) break;
       el = inner;
     }
@@ -97,7 +123,7 @@ function popupState() {
     text: text.slice(0, 160),
     textLength: text.length,
     // A back-link that survived would show as an arrow or a "back" link in the note body.
-    backlink: /[↩↑⤴]/.test(text) || Array.from(body?.querySelectorAll("a") ?? []).some((a) => /^\s*(back|return)\b/i.test(a.textContent)),
+    backlink: /[↩↑⤴◄◀]/.test(text) || Array.from(body?.querySelectorAll("a") ?? []).some((a) => /^\s*(back|return)\b/i.test(a.textContent)),
     links: body?.querySelectorAll("a").length ?? 0,
     // Links that stay in the book (a note inside a note, or a cross-reference), not web links.
     bookLinks: Array.from(body?.querySelectorAll("a[data-href]") ?? []).filter((a) => !/^(?:https?|mailto):/i.test(a.getAttribute("data-href"))).length,
@@ -113,8 +139,10 @@ export function state(view, settings) {
   const range = location.range ?? null;
   const contents = view.renderer.getContents?.() ?? [];
   const doc = contents[0]?.doc ?? null;
-  const text = range ? range.toString().replace(/\s+/g, " ").trim() : "";
-  const fontPx = bodyFontPx(range);
+  const ranges = screenRanges(view, range);
+  const text = ranges.map((r) => r.toString()).join(" ").replace(/\s+/g, " ").trim();
+  const fontPx = bodyFontPx(ranges[0] ?? null);
+  const media = ranges.map(visibleMedia).reduce((a, b) => ({ images: a.images + b.images, broken: a.broken + b.broken }), { images: 0, broken: 0 });
   const direction = doc ? directionOf(doc) : { vertical: false, rtl: false };
   const bookRtl = view.book?.dir === "rtl";
   const forwardZone = settings.tapZones === "screen" ? "right" : bookRtl ? "left" : "right";
@@ -141,7 +169,7 @@ export function state(view, settings) {
     textLength: text.length,
     fontPx,
     fontDp: fontPx === null ? null : Math.round(fontPx * scale * 10) / 10,
-    ...visibleMedia(range),
+    ...media,
     page: view.renderer.scrolled ? null : (view.renderer.page ?? null),
     pages: view.renderer.scrolled ? null : (view.renderer.pages ?? null),
     atStart: Boolean(view.renderer.atStart),
@@ -210,8 +238,34 @@ export function scan(view) {
   return { pages: pageCount, blank, truncated, vertical, rtl };
 }
 
+/**
+ * A plain link with its own id is a note only when its target links back to it,
+ * which is what the popup decides on a tap. Target documents are parsed once per call.
+ */
+async function isLinkedNote(view, index, a, docs) {
+  const raw = a.getAttribute("href") ?? "";
+  const href = view.book?.sections?.[index]?.resolveHref?.(raw) ?? raw;
+  const resolved = view.book?.resolveHref?.(href);
+  if (!resolved || resolved.index == null || resolved.index < 0 || !href.includes("#")) return false;
+  if (!docs.has(resolved.index)) {
+    docs.set(resolved.index, Promise.resolve(view.book.sections[resolved.index]?.createDocument?.()).catch(() => null));
+  }
+  const target = findTarget(await docs.get(resolved.index), href.slice(href.indexOf("#") + 1));
+  return confirmNote("linked", target, noteBlock(target), a.id);
+}
+
+async function noteLinksIn(view, index, doc, options, docs) {
+  const out = [];
+  for (const a of noterefsIn(doc, options)) {
+    if (noterefKind(a, options) === "linked" && !(await isLinkedNote(view, index, a, docs))) continue;
+    out.push(a);
+  }
+  return out;
+}
+
 /** Note references on screen now, in reader-page CSS pixels, for the host to tap for real. */
-export function noterefs(view, options) {
+export async function noterefs(view, options) {
+  const docs = new Map();
   const out = [];
   const width = window.innerWidth;
   const height = window.innerHeight;
@@ -219,11 +273,12 @@ export function noterefs(view, options) {
     const frame = doc?.defaultView?.frameElement;
     if (!frame) continue;
     const frameRect = frame.getBoundingClientRect();
-    for (const a of noterefsIn(doc, options)) {
+    const scale = frameScale(frame, frameRect);
+    for (const a of await noteLinksIn(view, index, doc, options, docs)) {
       const rect = Array.from(a.getClientRects()).find((r) => r.width > 0 && r.height > 0);
       if (!rect) continue;
-      const x = frameRect.left + rect.left + rect.width / 2;
-      const y = frameRect.top + rect.top + rect.height / 2;
+      const x = frameRect.left + (rect.left + rect.width / 2) * scale;
+      const y = frameRect.top + (rect.top + rect.height / 2) * scale;
       if (x < 4 || x > width - 4 || y < 4 || y > height - 4) continue;
       out.push({
         index,
@@ -248,6 +303,7 @@ export async function findNotes(view, options, min = 2) {
   const from = Math.max(0, view.lastLocation?.section?.current ?? 0);
   // From the current section to the end, then from the start: the book may have been left past its notes.
   const order = [...sections.keys()].slice(from).concat([...sections.keys()].slice(0, from)).slice(0, 80);
+  const docs = new Map();
   for (const index of order) {
     const section = sections[index];
     if (section.linear === "no" || !section.createDocument) continue;
@@ -257,7 +313,11 @@ export async function findNotes(view, options, min = 2) {
     } catch {
       continue;
     }
-    const refs = noterefsIn(doc, options).filter((a) => noterefKind(a, options) === "semantic" || /\d|[*†‡§]/.test(a.textContent ?? ""));
+    docs.set(index, Promise.resolve(doc));
+    const refs = (await noteLinksIn(view, index, doc, options, docs)).filter((a) => {
+      const kind = noterefKind(a, options);
+      return kind === "semantic" || kind === "linked" || /\d|[*†‡§]/.test(a.textContent ?? "");
+    });
     if (refs.length < min) continue;
     const first = refs[0];
     const target = first.id ? `${section.id}#${first.id}` : section.id;

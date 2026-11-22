@@ -6,13 +6,18 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
 import { setReaderDebug } from "@/debug/matrix-command";
 import { classifyEncryption } from "@/domain/drm";
-import { findBook, type Flow } from "@/domain/library";
+import { findBook, type Flow, type PositionReport } from "@/domain/library";
+import { adjacentChapter, currentEntry, type NavEntry } from "@/domain/navigation";
 import { t } from "@/i18n";
 import { flushLibrary, getLibrary, loadLibrary, saveFlow, saveOpened, savePosition, useLibrary } from "@/library/store";
 import { appendNote, bookUrl, ensureLoopback, isServing, readerUrl, registerBook } from "@/renderer/book-url";
 import { decideOpen } from "@/renderer/open-decision";
 import { parseReaderMessage } from "@/renderer/protocol";
 import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webview-allow";
+import { BackPill } from "@/reader/BackPill";
+import { confirmExternalLink } from "@/reader/external-link";
+import { BottomBar } from "@/reader/BottomBar";
+import { TocPanel } from "@/reader/TocPanel";
 
 type ReaderWebView = WebView<object>;
 type Phase = "starting" | "opening" | "reading" | "missing" | "drm" | "failed";
@@ -45,10 +50,20 @@ export default function BookScreen() {
   const [chapter, setChapter] = useState<string | null>(null);
   const [fraction, setFraction] = useState<number | null>(book?.fraction ?? null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [toc, setToc] = useState<NavEntry[]>([]);
+  const [tocHref, setTocHref] = useState<string | null>(null);
+  const [tocOpen, setTocOpen] = useState(false);
+  const [backStack, setBackStack] = useState<{ depth: number; label: string | null }>({ depth: 0, label: null });
   const answered = useRef(false);
   const lastSaved = useRef(0);
-  const pending = useRef<{ cfi: string; fraction: number | null } | null>(null);
-  const latestCfi = useRef<string | null>(book?.cfi ?? null);
+  const pending = useRef<PositionReport | null>(null);
+  const latest = useRef<PositionReport | null>(
+    book?.cfi
+      ? { cfi: book.cfi, fraction: book.fraction, sectionIndex: book.sectionIndex, sectionFraction: book.sectionFraction }
+      : null,
+  );
+  const tocOpenRef = useRef(false);
+  const backDepth = useRef(0);
   const noteOpen = useRef(false);
   const tapZones = library.settings.tapZones;
   const screenRef = useRef<ComponentRef<typeof View>>(null);
@@ -64,7 +79,7 @@ export default function BookScreen() {
     if (!next || !id) return;
     pending.current = null;
     lastSaved.current = Date.now();
-    void savePosition(id, next.cfi, next.fraction);
+    void savePosition(id, next);
   }, [id]);
 
   // Start (or reuse) the loopback server, register this book, and load the reader page.
@@ -128,12 +143,20 @@ export default function BookScreen() {
       case "pong": {
         if (message.id !== PING_ID || answered.current) return;
         answered.current = true;
+        const saved = findBook(getLibrary(), id);
+        const position =
+          latest.current ??
+          (saved ? { cfi: saved.cfi, fraction: saved.fraction, sectionIndex: saved.sectionIndex, sectionFraction: saved.sectionFraction } : null);
+        // The page starts a new back stack with every open.
+        backDepth.current = 0;
+        setBackStack({ depth: 0, label: null });
         post({
           type: "open",
           id,
           url: bookUrl(id),
           flow: getLibrary().flow,
-          cfi: latestCfi.current ?? findBook(getLibrary(), id)?.cfi ?? null,
+          cfi: position?.cfi ?? null,
+          position,
           settings: getLibrary().settings,
         });
         return;
@@ -152,8 +175,10 @@ export default function BookScreen() {
           openMs: message.openMs,
           rangeRequests: message.rangeRequests,
           restored: message.restored,
+          restoredFrom: message.restoredFrom,
           flow: getLibrary().flow,
         });
+        setToc(message.toc);
         setPhase("reading");
         setNotice(null);
         return;
@@ -164,17 +189,30 @@ export default function BookScreen() {
           cfi: message.cfi,
           fraction: message.fraction,
           section: message.sectionIndex,
+          sectionFraction: message.sectionFraction,
           sinceTapMs: message.sinceTapMs,
         });
-        latestCfi.current = message.cfi;
+        const report: PositionReport = {
+          cfi: message.cfi,
+          fraction: message.fraction,
+          sectionIndex: message.sectionIndex,
+          sectionFraction: message.sectionFraction,
+        };
+        latest.current = report;
         setFraction(message.fraction);
         setChapter(message.tocLabel);
-        pending.current = { cfi: message.cfi, fraction: message.fraction };
+        setTocHref(message.tocHref);
+        pending.current = report;
         if (Date.now() - lastSaved.current > SAVE_EVERY_MS) flush();
         return;
       }
       case "tap":
         setControls((value) => !value);
+        return;
+      case "back-stack":
+        note({ phase: "back-stack", id, depth: message.depth });
+        backDepth.current = message.depth;
+        setBackStack({ depth: message.depth, label: message.label });
         return;
       case "note":
         noteOpen.current = message.open;
@@ -190,7 +228,8 @@ export default function BookScreen() {
         setPhase("failed");
         return;
       case "external-link":
-        setNotice(strings.externalLink);
+        note({ phase: "external-link", id, href: message.href });
+        confirmExternalLink(message.href, setNotice);
         return;
       case "debug": {
         const waiter = debugWaiters.current.get(message.reqId);
@@ -208,13 +247,25 @@ export default function BookScreen() {
     if (id && phase === "reading") post({ type: "settings", id, tapZones });
   }, [id, phase, tapZones, post]);
 
-  // Android back closes an open note before it leaves the book.
+  // Android back closes an open note, then the contents, then steps back through jumps, then leaves the book.
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!noteOpen.current || !id) return false;
-      post({ type: "close-note", id });
-      noteOpen.current = false;
-      return true;
+      if (!id) return false;
+      if (noteOpen.current) {
+        post({ type: "close-note", id });
+        noteOpen.current = false;
+        return true;
+      }
+      if (tocOpenRef.current) {
+        tocOpenRef.current = false;
+        setTocOpen(false);
+        return true;
+      }
+      if (backDepth.current > 0) {
+        post({ type: "back", id });
+        return true;
+      }
+      return false;
     });
     return () => subscription.remove();
   }, [id, post]);
@@ -227,10 +278,29 @@ export default function BookScreen() {
 
   function switchFlow(next: Flow) {
     if (next === flow || !id) return;
-    note({ phase: "flow", id, flow: next, cfi: latestCfi.current });
+    note({ phase: "flow", id, flow: next, cfi: latest.current?.cfi ?? null });
     setFlowState(next);
     void saveFlow(next);
     post({ type: "flow", id, flow: next });
+  }
+
+  const current = currentEntry(toc, tocHref, fraction);
+
+  function showToc(open: boolean) {
+    tocOpenRef.current = open;
+    setTocOpen(open);
+  }
+
+  function jumpTo(target: { href: string } | { fraction: number }) {
+    if (!id) return;
+    note({ phase: "jump", id, target, from: latest.current?.cfi ?? null });
+    post({ type: "goto", id, target });
+  }
+
+  function stepChapter(dir: "prev" | "next") {
+    const index = adjacentChapter(toc, current, dir, fraction);
+    const href = index >= 0 ? toc[index].href : null;
+    if (href) jumpTo({ href });
   }
 
   // Debug builds: the phone matrix (scripts/phone-matrix.mjs) drives and measures this screen.
@@ -279,7 +349,6 @@ export default function BookScreen() {
 
   const message =
     phase === "missing" ? strings.notFound : phase === "drm" ? strings.drm : phase === "failed" ? strings.failed : null;
-  const percent = fraction === null ? null : Math.round(fraction * 100);
 
   return (
     <View ref={screenRef} style={styles.screen} collapsable={false}>
@@ -334,46 +403,42 @@ export default function BookScreen() {
               ) : null}
             </View>
           </View>
-          <View style={[styles.bar, styles.bottom, { paddingBottom: insets.bottom + 8 }]}>
-            <View style={styles.segment}>
-              {(["paginated", "scrolled"] as const).map((option) => (
-                <Pressable
-                  key={option}
-                  onPress={() => switchFlow(option)}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: flow === option }}
-                  style={[styles.segmentItem, flow === option && styles.segmentOn]}
-                >
-                  <Text style={[styles.segmentText, flow === option && styles.segmentTextOn]}>
-                    {option === "paginated" ? strings.paginated : strings.scrolled}
-                  </Text>
-                </Pressable>
-              ))}
-            </View>
-            <Text style={styles.percent}>{percent === null ? "" : `${percent}%`}</Text>
-            <View style={styles.turns}>
-              <Pressable
-                onPress={() => post({ type: "turn", id, dir: "prev" })}
-                accessibilityRole="button"
-                accessibilityLabel={strings.prev}
-                style={styles.turnButton}
-              >
-                <Text style={styles.barButton}>‹</Text>
-              </Pressable>
-              <Pressable
-                onPress={() => post({ type: "turn", id, dir: "next" })}
-                accessibilityRole="button"
-                accessibilityLabel={strings.next}
-                style={styles.turnButton}
-              >
-                <Text style={styles.barButton}>›</Text>
-              </Pressable>
-            </View>
-          </View>
+          <BottomBar
+            bottomInset={insets.bottom}
+            fraction={fraction}
+            toc={toc}
+            flow={flow}
+            onFlow={switchFlow}
+            onContents={() => showToc(true)}
+            onChapter={stepChapter}
+            onSeek={(value) => jumpTo({ fraction: value })}
+          />
         </>
       ) : null}
+      {phase === "reading" && !tocOpen ? (
+        <BackPill
+          depth={backStack.depth}
+          label={backStack.label}
+          bottom={insets.bottom + (controls ? 132 : 24)}
+          onBack={() => post({ type: "back", id })}
+          onDismiss={() => post({ type: "back", id, clear: true })}
+        />
+      ) : null}
+      {tocOpen ? (
+        <TocPanel
+          toc={toc}
+          current={current}
+          topInset={insets.top}
+          bottomInset={insets.bottom}
+          onClose={() => showToc(false)}
+          onSelect={(entry) => {
+            showToc(false);
+            if (entry.href) jumpTo({ href: entry.href });
+          }}
+        />
+      ) : null}
       {notice ? (
-        <Pressable style={[styles.notice, { bottom: insets.bottom + 72 }]} onPress={() => setNotice(null)}>
+        <Pressable style={[styles.notice, { bottom: insets.bottom + (controls ? 132 : 72) }]} onPress={() => setNotice(null)}>
           <Text style={styles.noticeText}>{notice}</Text>
         </Pressable>
       ) : null}
@@ -406,19 +471,10 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   top: { top: 0, paddingBottom: 10 },
-  bottom: { bottom: 0, paddingTop: 8, justifyContent: "space-between" },
   titleBox: { flex: 1 },
   barTitle: { color: "#fff", fontSize: 16, fontWeight: "600" },
   barSub: { color: "#bbb", fontSize: 13 },
   barButton: { color: "#fff", fontSize: 18, paddingVertical: 6 },
-  segment: { flexDirection: "row", borderRadius: 8, borderWidth: 1, borderColor: "#555", overflow: "hidden" },
-  segmentItem: { paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, justifyContent: "center" },
-  segmentOn: { backgroundColor: "#eee" },
-  segmentText: { color: "#eee", fontSize: 14 },
-  segmentTextOn: { color: "#111", fontWeight: "600" },
-  percent: { color: "#ccc", fontSize: 14, minWidth: 44, textAlign: "center" },
-  turns: { flexDirection: "row", gap: 4 },
-  turnButton: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   notice: {
     position: "absolute",
     left: 16,

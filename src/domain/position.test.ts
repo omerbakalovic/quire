@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { bookFractionOf, cfiSectionIndex, cleanPosition, planRestore, sectionFractionOf } from "./position.ts";
+import { bookFractionOf, cleanPosition, planRestore, sectionFractionOf } from "./position.ts";
 
 // Four sections: 0 is a non-linear cover (size 0), then 50%, 25%, 25%.
 const FRACTIONS = [0, 0, 0.5, 0.75, 1];
@@ -26,14 +26,6 @@ test("book fraction inverts the section fraction and stays inside the section", 
   const end = bookFractionOf(1, 1, FRACTIONS);
   assert.ok(end !== null && end < 0.5, "the end of a section must not land on the next one");
   assert.equal(bookFractionOf(9, 0.5, FRACTIONS), null);
-});
-
-test("the spine index comes from the first CFI step", () => {
-  assert.equal(cfiSectionIndex("epubcfi(/6/2!/4/2)"), 0);
-  assert.equal(cfiSectionIndex("epubcfi(/6/8!/4/2/1:10)"), 3);
-  assert.equal(cfiSectionIndex("epubcfi(/6/7!/4)"), null);
-  assert.equal(cfiSectionIndex("epubcfi(/4/2)"), null);
-  assert.equal(cfiSectionIndex(null), null);
 });
 
 test("stored positions are cleaned, never thrown on", () => {

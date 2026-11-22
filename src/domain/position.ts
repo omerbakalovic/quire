@@ -65,16 +65,6 @@ export function bookFractionOf(index: number, sectionFraction: number | null, se
   return clamp01(start + inner * Math.max(0, end - start));
 }
 
-/** The spine index a CFI points at: `/6/N` is item N/2 - 1 of the spine. */
-export function cfiSectionIndex(cfi: string | null): number | null {
-  if (!cfi) return null;
-  const match = /^epubcfi\(\/6\/(\d+)/.exec(cfi);
-  if (!match) return null;
-  const step = Number(match[1]);
-  if (!Number.isInteger(step) || step < 2 || step % 2 !== 0) return null;
-  return step / 2 - 1;
-}
-
 /**
  * The order to try when restoring. The CFI wins when it resolves to a real
  * section that agrees with the saved section. Otherwise the saved section and

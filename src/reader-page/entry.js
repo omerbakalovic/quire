@@ -4,7 +4,7 @@ import * as paginator from "../../vendor/foliate-js/paginator.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
 import "../../vendor/foliate-js/view.js";
 
-import { applySettings, closeNote, debug, openForReading, setFlow, turn } from "./app.js";
+import { applySettings, back, closeNote, debug, goTo, openForReading, setFlow, turn } from "./app.js";
 import { chapterFacts, liveDoc, timeTurns } from "./measure.js";
 import { openPrepared } from "./open-book.js";
 import { cspOf, installBookCspParser } from "./security.js";
@@ -153,6 +153,14 @@ function onMessage(event) {
   }
   if (message.type === "close-note") {
     closeNote(message);
+    return;
+  }
+  if (message.type === "goto") {
+    goTo(message).catch((error) => console.error(error));
+    return;
+  }
+  if (message.type === "back") {
+    back(message).catch((error) => console.error(error));
     return;
   }
   if (message.type === "turn") {

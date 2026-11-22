@@ -1,5 +1,6 @@
 import * as epub from "../../vendor/foliate-js/epub.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
+import { restoreTarget } from "./jumps.js";
 
 import { TABLE_CSS, waitFor, wrapWideTables } from "./measure.js";
 import { attachBookSecurity } from "./security.js";
@@ -179,7 +180,7 @@ export async function openPrepared(url, id, readMode, askDecision) {
 // One light look until themes arrive in Milestone 4. Publisher colors still win where set.
 const READING_CSS = "html { color-scheme: light; background: #fdfdfb; color: #1a1a1a; }";
 
-export async function openBook(url, id, askDecision, { flow, lastLocation, onView }) {
+export async function openBook(url, id, askDecision, { flow, lastLocation, position, onView }) {
   zip.configure({ useWebWorkers: false });
   const counter = { n: 0, fullResponses: 0 };
   const bytes = await bookSize(url);
@@ -205,17 +206,19 @@ export async function openBook(url, id, askDecision, { flow, lastLocation, onVie
     view.renderer.setAttribute("flow", flow === "scrolled" ? "scrolled" : "paginated");
     view.renderer.setStyles?.(`${TABLE_CSS}\n${READING_CSS}`);
   }
-  // A saved CFI that no longer resolves falls back to the start of the text.
-  let restored = false;
+  // The saved CFI, else the saved section and offset, else the book fraction, else the start of the text.
+  let restore = { target: null, plan: { kind: "start" } };
   try {
-    restored = Boolean(lastLocation && view.resolveNavigation(lastLocation));
+    restore = restoreTarget(view, position ?? (lastLocation ? { cfi: lastLocation } : null));
   } catch (error) {
     console.error("saved location did not resolve", error);
   }
-  await view.init({ lastLocation: restored ? lastLocation : null, showTextStart: true });
+  const restored = restore.target !== null;
+  await view.init({ lastLocation: restore.target, showTextStart: true });
   await waitFor(() => view.lastLocation?.cfi, 90000);
   report.engineOpened = true;
   report.restored = restored;
+  report.restoredFrom = restore.plan.kind === "fraction" ? restore.plan.from : restore.plan.kind;
   report.fixedLayout = Boolean(view.isFixedLayout);
   report.openMs = Math.round(performance.now() - openStarted);
   report.rangeRequests = counter.n;

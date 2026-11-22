@@ -65,7 +65,11 @@ epub.js stays out of the app. The spike used the published `epubjs@0.3.93` packa
 
 v1 scroll mode is vertical scrolling inside the current chapter. Whole-book continuous scroll is P2. The checklist records what each engine does at a chapter boundary.
 
-Progress will later use cumulative text length plus a CFI and a spine index. Page numbers from a `page-list` stay a separate label. That storage is not built in this milestone.
+Milestone 2: the saved position is the CFI plus a fallback of spine index and the offset inside that section, plus the book fraction. Progress is foliate's fraction, which is cumulative over the uncompressed byte size of linear sections. That is a stand-in for cumulative text length: it does not change with font or layout, which is what the spec needs, but markup-heavy sections weigh a little more than their text. Counting text would mean loading every section on open; not worth it until a book shows a visible skew. Page numbers from a `page-list` stay a separate label.
+
+The back stack is Quire's own (`src/reader-page/back-stack.js`), not foliate's `History`. foliate pushes on every `goTo` and rewrites the current entry as pages turn, and its entries are private, so the host could not show where Back goes or how deep it is. Jumps push before they move, and only when the move succeeds and lands somewhere new. The note popup keeps foliate's history for its own chip; merging the two is left for the footnote work.
+
+The progress slider is a PanResponder over a measured track, not `@react-native-community/slider`, to avoid a native dependency for one control and to draw chapter ticks and the preview bubble ourselves.
 
 ## iOS is untested
 

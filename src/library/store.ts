@@ -13,6 +13,7 @@ import {
   upsertBook,
   type Flow,
   type Library,
+  type PositionReport,
   type Settings,
 } from "@/domain/library";
 import { deleteBook, importBook, readLibrary, writeLibrary } from "@/renderer/book-url";
@@ -97,8 +98,8 @@ export async function removeFromLibrary(id: string): Promise<void> {
   await deleteBook(id);
 }
 
-export function savePosition(id: string, cfi: string, fraction: number | null): Promise<void> {
-  return commit(recordPosition(library, id, cfi, fraction, Date.now()));
+export function savePosition(id: string, report: PositionReport): Promise<void> {
+  return commit(recordPosition(library, id, report, Date.now()));
 }
 
 export function saveOpened(id: string): Promise<void> {

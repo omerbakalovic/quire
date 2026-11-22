@@ -1,4 +1,5 @@
 import { NotePopup } from "./note-popup.js";
+import { linkFromEvent } from "./notes.js";
 import { openBook } from "./open-book.js";
 import { tapZone } from "./tap-zones.js";
 
@@ -31,7 +32,7 @@ function selectionIn(doc) {
 function attachTaps(view, doc, reply, id, popup) {
   doc.addEventListener("click", (event) => {
     if (event.defaultPrevented) return;
-    if (event.target?.closest?.("a[href]")) return;
+    if (linkFromEvent(event)) return;
     if (selectionIn(doc)) return;
     const frame = doc.defaultView?.frameElement;
     const left = frame ? frame.getBoundingClientRect().left : 0;

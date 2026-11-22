@@ -247,6 +247,18 @@ export function sanitizeInto(targetDoc, nodes, { originId, resolveLink }) {
 }
 
 /** Noterefs in a section document, in reading order. */
+/**
+ * The link a click landed on. Uses the composed path, so a link inside a wide
+ * table (moved into a shadow root by measure.js) is found too.
+ */
+export function linkFromEvent(event, selector = "a[href]") {
+  const path = event?.composedPath?.() ?? [];
+  for (const node of path) {
+    if (node?.nodeType === 1 && node.matches?.(selector)) return node;
+  }
+  return event?.target?.closest?.(selector) ?? null;
+}
+
 export function noterefsIn(doc, options) {
   if (!doc?.querySelectorAll) return [];
   return Array.from(doc.querySelectorAll("a[href]")).filter((a) => noterefKind(a, options) !== "no");

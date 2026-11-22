@@ -2,6 +2,7 @@ import {
   confirmNote,
   findTarget,
   hideInlineFootnotes,
+  linkFromEvent,
   markNoterefs,
   noteBlock,
   noterefKind,
@@ -157,7 +158,7 @@ export class NotePopup {
     doc.addEventListener(
       "click",
       (event) => {
-        const a = event.target?.closest?.("a[href]");
+        const a = linkFromEvent(event);
         if (!a) return;
         const kind = noterefKind(a, this.#options);
         if (kind === "no") return;

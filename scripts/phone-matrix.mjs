@@ -6,23 +6,34 @@
  * with `adb shell input`, and reads the answers and the reader's own
  * measurements from files/quire-report.jsonl.
  *
- *   npm run phone-matrix -- [--fresh] [--only frank,arabic] [--skip-books]
- *     [--skip-notes] [--skip-taps] [--skip-lifecycle] [--background-s 90]
- *     [--serial SERIAL] [--adb PATH] [--out DIR]
+ *   npm run phone-matrix -- [--quick] [--fresh] [--only frank,arabic]
+ *     [--skip-books] [--skip-notes] [--skip-taps] [--skip-lifecycle]
+ *     [--background-s 90] [--apk-reader] [--serial SERIAL] [--adb PATH] [--out DIR]
  *
  * Before it: the debug APK is installed, Metro runs (`npx expo start`), and the
- * books are downloaded (`npm run books`). `--fresh` clears the app's data and
- * imports every book again. Output goes to ../quire-matrix/run-<time>/ unless
- * --out says otherwise: screenshots per book, summary.md, index.html,
- * results.json and the app's report.jsonl. The exit code is 1 when a check fails.
+ * books are downloaded (`npm run books`).
+ *
+ * --quick checks a fix in a few minutes: five books that cover the usual
+ * breakage, notes in two of them, the tap setting, no lifecycle. Run the full
+ * matrix before closing a milestone.
+ * --fresh clears the app's data and imports every book again. Only needed when
+ * import code changed; a reinstall keeps the library.
+ * The reader page is rebuilt from this checkout and pushed to the debug build,
+ * so reader-page changes need no gradle build (app code comes from Metro).
+ * --apk-reader tests the reader page built into the APK instead.
+ *
+ * Output goes to ../quire-matrix/run-<time>/ unless --out says otherwise:
+ * screenshots per book, summary.md, index.html, results.json and the app's
+ * report.jsonl. The exit code is 1 when a check fails.
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
+import * as zlib from "node:zlib";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parseArgs } from "node:util";
+import { parseArgs, promisify } from "node:util";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const PKG = "app.quire.reader";
@@ -30,6 +41,11 @@ const ACTIVITY = `${PKG}/.MainActivity`;
 const REPORT = "files/quire-report.jsonl";
 const COMMANDS = "files/quire-cmd";
 const EXTERNAL = `/sdcard/Android/data/${PKG}/files`;
+const DEV_READER = "files/quire-dev";
+const deflate = promisify(zlib.deflate);
+
+// --quick: the books that catch most breakage, in a few minutes.
+const QUICK = ["frankenstein", "arabic", "sous-le-vent", "noteref", "pmd-link"];
 
 // Each book is here for a reason; the reason is printed in the summary.
 const CATALOG = [
@@ -70,7 +86,9 @@ const CATALOG = [
 
 const { values: opts } = parseArgs({
   options: {
+    quick: { type: "boolean", default: false },
     fresh: { type: "boolean", default: false },
+    "apk-reader": { type: "boolean", default: false },
     only: { type: "string" },
     "skip-books": { type: "boolean", default: false },
     "skip-notes": { type: "boolean", default: false },
@@ -131,12 +149,188 @@ function adb(args, { buffer = false, timeout = 60000 } = {}) {
   });
 }
 
-const shell = (command, options) => adb(["shell", command], options);
+/**
+ * One long-lived `adb shell` for many commands. Starting adb.exe costs 100 to
+ * 300 ms on Windows, and a run sends well over a thousand commands; through an
+ * open shell each one costs a few milliseconds. Each command is followed by a
+ * marker that carries its exit code, which is how its output is cut out.
+ */
+class OpenShell {
+  #proc = null;
+  #buf = Buffer.alloc(0);
+  #queue = Promise.resolve();
+  #n = 0;
+  #wake = null;
+  #closed = true;
+
+  constructor(name, command) {
+    this.name = name;
+    this.command = command;
+  }
+
+  #start() {
+    const args = [...(serial ? ["-s", serial] : []), "shell", "-T", ...this.command];
+    const proc = spawn(ADB, args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    this.#proc = proc;
+    this.#buf = Buffer.alloc(0);
+    this.#closed = false;
+    proc.stdout.on("data", (chunk) => {
+      this.#buf = this.#buf.length ? Buffer.concat([this.#buf, chunk]) : chunk;
+      this.#wake?.();
+    });
+    proc.stderr.on("data", () => {});
+    proc.stdin.on("error", () => {});
+    proc.on("error", () => {});
+    proc.on("exit", () => {
+      if (this.#proc === proc) this.#closed = true;
+      this.#wake?.();
+    });
+  }
+
+  run(command, { timeout = 60000, buffer = false } = {}) {
+    const job = this.#queue.then(() => this.#exec(command, timeout)).then((out) => (buffer ? out : out.toString("utf8")));
+    this.#queue = job.catch(() => {});
+    return job;
+  }
+
+  async #exec(command, timeout) {
+    if (this.#closed) this.#start();
+    const n = ++this.#n;
+    const marker = Buffer.from(`\n__QM_${n}_`);
+    // stdin is the command stream: nothing a command runs may read it.
+    this.#proc.stdin.write(`{ ${command}\n} </dev/null\nprintf '\\n__QM_${n}_%s__\\n' "$?"\n`);
+    const end = Date.now() + timeout;
+    for (;;) {
+      const at = this.#buf.indexOf(marker);
+      const close = at >= 0 ? this.#buf.indexOf("__\n", at + marker.length) : -1;
+      if (close >= 0) {
+        const code = Number(this.#buf.subarray(at + marker.length, close).toString());
+        const out = this.#buf.subarray(0, at);
+        this.#buf = this.#buf.subarray(close + 3);
+        if (code !== 0) throw new Error(`${this.name}: exit ${code} from ${command.slice(0, 160)}: ${out.toString("utf8").slice(0, 300)}`);
+        return out;
+      }
+      if (this.#closed) throw new Error(`${this.name}: adb shell closed during ${command.slice(0, 160)}`);
+      if (Date.now() > end) {
+        this.close();
+        throw new Error(`${this.name}: no answer within ${timeout} ms to ${command.slice(0, 160)}`);
+      }
+      await new Promise((done) => {
+        this.#wake = done;
+        setTimeout(done, Math.min(250, Math.max(1, end - Date.now())));
+      });
+      this.#wake = null;
+    }
+  }
+
+  close() {
+    const proc = this.#proc;
+    this.#proc = null;
+    this.#closed = true;
+    try {
+      proc?.stdin.end();
+      proc?.kill();
+    } catch {
+      // already gone
+    }
+  }
+}
+
+let plainShell = null;
+let appShell = null;
+
+/** Open the two shells, or keep using one adb process per command when they do not work here. */
+async function openShells() {
+  const plain = new OpenShell("shell", []);
+  const app = new OpenShell("run-as", ["run-as", PKG, "sh"]);
+  try {
+    const a = await plain.run("echo quire-ok", { timeout: 8000 });
+    const b = await app.run("echo quire-ok", { timeout: 8000 });
+    if (a.trim() !== "quire-ok" || b.trim() !== "quire-ok") throw new Error(`unexpected echo: ${a.trim()} / ${b.trim()}`);
+    plainShell = plain;
+    appShell = app;
+    say("adb: commands go through two open shells");
+  } catch (error) {
+    plain.close();
+    app.close();
+    say(`adb: open shells did not work (${error.message}); starting adb per command, which is slower`);
+  }
+}
+
+function closeShells() {
+  plainShell?.close();
+  appShell?.close();
+}
+
+let usbDrops = 0;
+let reconnecting = null;
+
+/**
+ * After an adb failure: is the phone still there? When it dropped off USB, wait
+ * for it (a loose cable is common), restore `adb reverse` for Metro and reopen
+ * the shells. Resolves true when the phone had gone and is back, false when it
+ * never left (the failure was something else). Ends the run if it stays away.
+ */
+function deviceBack(reason) {
+  reconnecting ??= (async () => {
+    const present = await adb(["get-state"], { timeout: 5000 })
+      .then((out) => out.trim() === "device")
+      .catch(() => false);
+    if (present) return false;
+    usbDrops++;
+    say(`the phone dropped off USB (${reason.slice(0, 120)}); waiting up to 5 minutes for it`);
+    plainShell?.close();
+    appShell?.close();
+    try {
+      await adb(["wait-for-device"], { timeout: 5 * 60000 });
+    } catch {
+      throw new Fatal("the phone dropped off USB and did not come back within 5 minutes");
+    }
+    await adb(["reverse", "tcp:8081", "tcp:8081"]).catch(() => {});
+    say("the phone is back; continuing");
+    return true;
+  })().finally(() => {
+    reconnecting = null;
+  });
+  return reconnecting;
+}
+
+/** Run an adb step; if it failed because the phone dropped off USB, wait for it and fail only this step. */
+async function onDevice(step) {
+  try {
+    return await step();
+  } catch (error) {
+    if (error instanceof Fatal) throw error;
+    if (await deviceBack(error.message)) {
+      const lost = new Error(`the phone dropped off USB here (${error.message.slice(0, 120)}); it came back and the run went on`);
+      lost.recovered = true;
+      throw lost;
+    }
+    throw error;
+  }
+}
+
+const shell = (command, options) => onDevice(() => (plainShell ? plainShell.run(command, options) : adb(["shell", command], options)));
 
 /** A command in the app's own files, as the app user. No single quotes inside. */
 function runAs(command, options) {
   if (command.includes("'")) throw new Error(`run-as command must not contain a single quote: ${command}`);
-  return shell(`run-as ${PKG} sh -c '${command}'`, options);
+  return onDevice(() => (appShell ? appShell.run(command, options) : adb(["shell", `run-as ${PKG} sh -c '${command}'`], options)));
+}
+
+// `cmd input` talks to the input service directly; `input` starts a Java VM
+// for every tap, which costs a few hundred ms. Chosen once at the start.
+let INPUT = "input";
+
+async function pickInput() {
+  try {
+    // KEYCODE_UNKNOWN does nothing, so this only asks whether `cmd input` exists here.
+    const out = await shell("cmd input keyevent 0 2>&1");
+    if (!/no shell command|can.t find service|unknown command|usage|exception|error/i.test(out)) INPUT = "cmd input";
+  } catch {
+    // keep `input`
+  }
+  say(`input: ${INPUT}`);
 }
 
 const b64 = (text) => Buffer.from(text, "utf8").toString("base64");
@@ -161,14 +355,32 @@ class Log {
   }
 
   async poll() {
-    let whole;
+    let chunk;
     try {
-      whole = await adb(["exec-out", `run-as ${PKG} cat ${REPORT}`], { buffer: true });
-    } catch {
+      if (appShell) {
+        // Only the bytes past what was read before. The first line is the file's size,
+        // which tells a log cleared by someone else from one that did not grow.
+        const out = await appShell.run(
+          `s=$(stat -c %s ${REPORT} 2>/dev/null || echo 0); echo $s; if [ $s -gt ${this.offset} ]; then tail -c +${this.offset + 1} ${REPORT}; fi`,
+          { buffer: true, timeout: 10000 },
+        );
+        const newline = out.indexOf(0x0a);
+        const size = Number(out.subarray(0, newline).toString());
+        if (size < this.offset) {
+          this.offset = 0;
+          return;
+        }
+        chunk = out.subarray(newline + 1);
+      } else {
+        const whole = await adb(["exec-out", `run-as ${PKG} cat ${REPORT}`], { buffer: true });
+        if (whole.length < this.offset) this.offset = 0;
+        chunk = whole.subarray(this.offset);
+      }
+    } catch (error) {
+      // A phone that dropped off USB is waited for; the wait for the answer goes on after.
+      await deviceBack(error.message);
       return;
     }
-    if (whole.length < this.offset) this.offset = 0;
-    const chunk = whole.subarray(this.offset);
     const end = chunk.lastIndexOf(0x0a);
     if (end < 0) return;
     const complete = chunk.subarray(0, end + 1);
@@ -198,7 +410,7 @@ class Log {
       for (; checked < this.lines.length; checked++) if (match(this.lines[checked])) return this.lines[checked];
       if (Date.now() > end) return null;
       await this.poll();
-      if (checked >= this.lines.length) await sleep(200);
+      if (checked >= this.lines.length) await sleep(appShell ? 40 : 200);
     }
   }
 }
@@ -206,8 +418,17 @@ class Log {
 const log = new Log();
 let seq = 0;
 
+/** The run cannot go on: the app is gone and does not come back. Every routine passes it up. */
+class Fatal extends Error {}
+
+const passFatal = (error) => {
+  if (error instanceof Fatal) throw error;
+};
+
+let recoveries = 0;
+
 /** One command through files/quire-cmd/, answered by one "matrix" line in the report. */
-async function send(cmd, fields = {}, { timeout = 30000 } = {}) {
+async function send(cmd, fields = {}, { timeout = 15000, recover = true } = {}) {
   const id = ++seq;
   const name = String(id).padStart(8, "0");
   const from = log.mark();
@@ -216,12 +437,56 @@ async function send(cmd, fields = {}, { timeout = 30000 } = {}) {
     `mkdir -p ${COMMANDS} && echo ${payload} | base64 -d > ${COMMANDS}/.next && mv ${COMMANDS}/.next ${COMMANDS}/${name}.json`,
   );
   const answer = await log.waitFor((line) => line.source === "matrix" && line.seq === id, { from, timeout });
-  if (!answer) throw new Error(`no answer to "${cmd}" within ${timeout} ms`);
+  if (!answer) {
+    const reason = `no answer to "${cmd}" within ${timeout} ms`;
+    if (!recover) throw new Error(reason);
+    const error = new Error(await bringBack(reason));
+    error.recovered = true;
+    throw error;
+  }
+  // An answer to a real step, not just the hello that bringing the app back sends, resets the count.
+  if (cmd !== "hello") recoveries = 0;
   if (!answer.ok) throw new Error(`${cmd}: ${answer.error}`);
   return answer.result;
 }
 
-async function reader(action, args = {}, timeout = 25000) {
+/**
+ * The app stopped answering. Usually it is no longer in front: a tap landed on a
+ * system bar, and React Native pauses JS timers in the background, so the command
+ * channel waits. Commands queued meanwhile are dropped, the app is brought back
+ * (or restarted), and the step that waited fails while the run goes on. Three in
+ * a row without an answer between them end the run, instead of letting every
+ * later step wait out its timeout.
+ */
+async function bringBack(reason) {
+  if (await deviceBack(reason)) return `${reason}: the phone had dropped off USB; it came back and the run went on`;
+  if (++recoveries > 3) throw new Fatal(`${reason}, and the app stopped answering three times in a row`);
+  const focus = (await shell("dumpsys window | grep -E mCurrentFocus | head -1").catch(() => "")).trim();
+  const inFront = focus.includes(PKG);
+  await runAs(`rm -f ${COMMANDS}/*.json`).catch(() => {});
+  if (!inFront) {
+    say(`${reason}; the app is not in front (${focus || "unknown focus"}), bringing it back`);
+    await shell(`am start -n ${ACTIVITY}`).catch(() => {});
+    try {
+      await hello(10000);
+      return `${reason}: the app had left the foreground (${focus || "unknown focus"}); brought it back`;
+    } catch {
+      // restart below
+    }
+  } else {
+    say(`${reason}; the app is in front but stuck, restarting it`);
+  }
+  await shell(`am force-stop ${PKG}`).catch(() => {});
+  await sleep(800);
+  try {
+    await launch();
+  } catch (error) {
+    throw new Fatal(`${reason}, and the app did not come back after a restart: ${error.message}`);
+  }
+  return `${reason}: restarted the app`;
+}
+
+async function reader(action, args = {}, timeout = 12000) {
   return send("reader", { action, args: { ...args, timeoutMs: timeout - 2000 } }, { timeout });
 }
 
@@ -238,8 +503,8 @@ async function readerReady(timeout = 20000) {
     try {
       return await reader("layout", {}, 4000);
     } catch (error) {
-      if (Date.now() > end) throw error;
-      await sleep(500);
+      if (error.recovered || error instanceof Fatal || Date.now() > end) throw error;
+      await sleep(300);
     }
   }
 }
@@ -248,10 +513,10 @@ async function hello(timeout = 40000) {
   const end = Date.now() + timeout;
   for (;;) {
     try {
-      return await send("hello", {}, { timeout: 6000 });
+      return await send("hello", {}, { timeout: 6000, recover: false });
     } catch (error) {
       if (Date.now() > end) throw error;
-      await sleep(1000);
+      await sleep(500);
     }
   }
 }
@@ -287,15 +552,76 @@ function zonePoint(st, zone) {
   return toPx(st, st.viewport.width * fraction, st.viewport.height * 0.5);
 }
 
-const tap = ([x, y]) => shell(`input tap ${x} ${y}`);
+const tap = ([x, y]) => shell(`${INPUT} tap ${x} ${y}`);
 
 let OUT = "";
 
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+
+function crc32(buffers) {
+  // Node 22.2 and later have it built in.
+  if (zlib.crc32) return buffers.reduce((value, buffer) => zlib.crc32(buffer, value), 0);
+  let c = 0xffffffff;
+  for (const buffer of buffers) for (const byte of buffer) c = CRC_TABLE[(c ^ byte) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+function pngChunk(type, data) {
+  const head = Buffer.alloc(8);
+  head.writeUInt32BE(data.length, 0);
+  head.write(type, 4, "ascii");
+  const crc = Buffer.alloc(4);
+  crc.writeUInt32BE(crc32([head.subarray(4), data]));
+  return Buffer.concat([head, data, crc]);
+}
+
+/** A PNG from `screencap`'s raw RGBA frame: a 12 or 16 byte header (width, height, format[, color space]), then pixels. */
+async function pngFromRaw(raw) {
+  const width = raw.readUInt32LE(0);
+  const height = raw.readUInt32LE(4);
+  const format = raw.readUInt32LE(8);
+  const header = raw.length - width * height * 4;
+  if (!width || !height || (format !== 1 && format !== 2) || (header !== 12 && header !== 16)) return null;
+  const rows = Buffer.alloc(height * (1 + width * 3));
+  for (let y = 0; y < height; y++) {
+    let out = y * (1 + width * 3) + 1;
+    let at = header + y * width * 4;
+    for (let x = 0; x < width; x++, at += 4) {
+      rows[out++] = raw[at];
+      rows[out++] = raw[at + 1];
+      rows[out++] = raw[at + 2];
+    }
+  }
+  const ihdr = Buffer.alloc(13);
+  ihdr.writeUInt32BE(width, 0);
+  ihdr.writeUInt32BE(height, 4);
+  ihdr[8] = 8; // bit depth
+  ihdr[9] = 2; // RGB
+  const signature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+  return Buffer.concat([signature, pngChunk("IHDR", ihdr), pngChunk("IDAT", await deflate(rows, { level: 3 })), pngChunk("IEND", Buffer.alloc(0))]);
+}
+
+const pendingShots = [];
+
+/**
+ * A screenshot. The phone sends its raw frame, which is quicker than having it
+ * encode a PNG, and the PNG is written here in the background while the run goes on.
+ */
 async function shot(dir, name) {
   try {
-    const png = await adb(["exec-out", "screencap", "-p"], { buffer: true, timeout: 20000 });
-    await writeFile(join(dir, name), png);
-    return relative(OUT, join(dir, name)).replaceAll("\\", "/");
+    const frame = await onDevice(() => adb(["exec-out", "screencap"], { buffer: true, timeout: 20000 }));
+    const path = join(dir, name);
+    const isPng = frame.subarray(0, 4).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47]));
+    pendingShots.push(
+      (isPng ? Promise.resolve(frame) : pngFromRaw(frame))
+        .then(async (png) => writeFile(path, png ?? (await adb(["exec-out", "screencap", "-p"], { buffer: true, timeout: 20000 }))))
+        .catch((error) => say(`screenshot ${name} could not be saved: ${error.message}`)),
+    );
+    return relative(OUT, path).replaceAll("\\", "/");
   } catch (error) {
     say(`screenshot ${name} failed: ${error.message}`);
     return null;
@@ -313,7 +639,8 @@ function check(scope, name, pass, detail = "") {
   return value;
 }
 
-const hasContent = (st) => (st?.textLength ?? 0) > 0 || (st?.images ?? 0) > 0;
+// An image that did not load shows nothing, so it does not count.
+const hasContent = (st) => (st?.textLength ?? 0) > 0 || (st?.images ?? 0) - (st?.broken ?? 0) > 0;
 
 function words(text, count = 6) {
   return (text ?? "").split(/\s+/).filter((word) => word.length > 2).slice(0, count);
@@ -328,15 +655,47 @@ function samePlace(a, b) {
   if (!a || !b) return false;
   if (a.cfi && a.cfi === b.cfi) return true;
   if (a.section !== b.section) return false;
+  // Front matter and covers have little or no text to compare; the same spot to within a page is the same place.
+  if (typeof a.fraction === "number" && typeof b.fraction === "number" && Math.abs(a.fraction - b.fraction) < 0.0005) return true;
   const phrase = (st) => words(st.text, 5).join(" ");
   const contains = (st, text) => text.length > 0 && (st.pageText ?? st.text ?? "").includes(text);
   const startOf = (st) => (st.pageText ?? st.text ?? "").split(/\s+/).slice(0, 5).join(" ");
   return contains(b, startOf(a)) || contains(a, startOf(b)) || (phrase(a).length > 0 && contains(b, phrase(a)));
 }
 
+const isRelocate = (line) => line.source === "reader" && line.phase === "relocate";
+
 /** The first relocate after `from` that lands somewhere other than `cfi`. foliate can report the same place twice. */
 async function waitRelocate(from, timeout = 3000, cfi = null) {
-  return log.waitFor((line) => line.source === "reader" && line.phase === "relocate" && (cfi === null || line.cfi !== cfi), { from, timeout });
+  return log.waitFor((line) => isRelocate(line) && (cfi === null || line.cfi !== cfi), { from, timeout });
+}
+
+/**
+ * Wait for the reader to move, then for it to stop: no further relocate for
+ * `quietMs`. This replaces fixed sleeps after turns, flow changes and scrolls,
+ * which were sized for the slowest case and paid every time.
+ */
+async function settle(from, { timeout = 3000, quietMs = 250, cfi = null } = {}) {
+  let last = await waitRelocate(from, timeout, cfi);
+  if (!last) return null;
+  let quietSince = Date.now();
+  let seen = log.mark();
+  while (Date.now() - quietSince < quietMs) {
+    await sleep(40);
+    await log.poll();
+    const more = log.since(seen).filter(isRelocate);
+    seen = log.mark();
+    if (more.length) {
+      last = more.at(-1);
+      quietSince = Date.now();
+    }
+  }
+  return last;
+}
+
+/** A note sheet message after `from`: opened (open true) or closed (open false). */
+function waitNote(from, open, timeout = 2500) {
+  return log.waitFor((line) => line.source === "reader" && line.phase === "note" && (open === undefined || Boolean(line.open) === open), { from, timeout });
 }
 
 /**
@@ -348,27 +707,37 @@ async function turnOnce(direction) {
   const st = await state();
   const backZone = st.forwardZone === "left" ? "right" : "left";
   const zone = direction === "forward" ? st.forwardZone : backZone;
-  const from = log.mark();
-  let method = "tap";
-  if (st.links?.[zone]) {
-    method = "button";
-    await reader("turn", { dir: direction === "forward" ? "next" : "prev" });
-  } else {
-    await tap(zonePoint(st, zone));
-  }
-  const moved = await waitRelocate(from, 4000, st.cfi);
-  await sleep(400);
-  const forward =
-    moved && (moved.section > st.section || (moved.section === st.section && (moved.fraction ?? 0) > (st.fraction ?? 0)));
-  return {
+  const result = (method, moved = null) => ({
     method,
     zone,
     moved: Boolean(moved && moved.cfi !== st.cfi),
-    forward: Boolean(forward),
+    forward: Boolean(moved && (moved.section > st.section || (moved.section === st.section && (moved.fraction ?? 0) > (st.fraction ?? 0)))),
     ms: moved?.sinceTapMs ?? null,
     before: st.fraction,
     after: moved?.fraction ?? st.fraction,
+  });
+  // At the first or last page of the book there is nowhere to go: no need to wait and see.
+  if (direction === "forward" ? st.atEnd : st.atStart) return { ...result("none"), edge: true };
+  const button = async () => {
+    const from = log.mark();
+    await reader("turn", { dir: direction === "forward" ? "next" : "prev" });
+    return result("button", await settle(from, { timeout: 3000, quietMs: 150, cfi: st.cfi }));
   };
+  // A tap where no link is, as a person would aim; the › control when links fill the zone.
+  const point = st.tapPoints?.[zone] ?? (st.links?.[zone] ? null : { x: st.viewport.width * (zone === "left" ? 0.15 : 0.85), y: st.viewport.height / 2 });
+  if (!point) return button();
+  const from = log.mark();
+  await tap(toPx(st, point.x, point.y));
+  const first = await log.waitFor((line) => (isRelocate(line) && line.cfi !== st.cfi) || (line.source === "reader" && line.phase === "note" && line.open), { from, timeout: 3000 });
+  if (first?.phase === "note") {
+    // The tap opened a note after all. Close it and turn with the control instead.
+    say(`a tap in the ${zone} zone opened a note; closing it and using the › control`);
+    await reader("popup-click", { name: "close" });
+    await waitNote(from, false, 1500);
+    return { ...(await button()), method: "button", note: true };
+  }
+  if (!first) return result("tap");
+  return result("tap", await settle(from, { timeout: 100, quietMs: 150, cfi: st.cfi }));
 }
 
 function localPath(entry) {
@@ -380,7 +749,8 @@ function bookId(path) {
 }
 
 function catalog() {
-  const wanted = opts.only ? opts.only.split(",").map((part) => part.trim().toLowerCase()).filter(Boolean) : null;
+  const only = opts.only ?? (opts.quick ? QUICK.join(",") : null);
+  const wanted = only ? only.split(",").map((part) => part.trim().toLowerCase()).filter(Boolean) : null;
   const entries = [];
   for (const entry of CATALOG) {
     const name = (entry.as ?? entry.file).toLowerCase();
@@ -405,11 +775,7 @@ function catalog() {
 }
 
 async function freshImport(entries, frankenstein) {
-  say("clearing the app's data and importing every book again");
-  await shell(`pm clear ${PKG}`);
-  log.reset();
-  await launch();
-  await log.clear();
+  say("importing every book again");
   await shell(`mkdir -p ${EXTERNAL}`).catch(() => {});
   const names = [];
   for (const entry of entries) {
@@ -437,6 +803,50 @@ async function freshImport(entries, frankenstein) {
   results.notCovered.push("The system file picker: it is the phone's own UI, so a person picks one book by hand.");
 }
 
+const readerJs = () => join(ROOT, "assets", "reader", "reader.js");
+let readerPushed = null;
+let readerChecked = false;
+
+function run(command, args) {
+  return new Promise((done, fail) => {
+    execFile(command, args, { cwd: ROOT, windowsHide: true }, (error, stdout, stderr) => (error ? fail(new Error(String(stderr || error.message).trim())) : done(stdout)));
+  });
+}
+
+/**
+ * Build the reader page from this checkout and put it where a debug build reads
+ * it instead of the APK's copy (files/quire-dev/). Reader-page changes then need
+ * no gradle build; app code already comes from Metro.
+ */
+async function pushReader() {
+  if (opts["apk-reader"]) {
+    await runAs(`rm -rf ${DEV_READER}`).catch(() => {});
+    say("reader page: the one built into the APK");
+    return;
+  }
+  await run(process.execPath, [join(ROOT, "scripts", "bundle-reader.mjs")]);
+  await runAs(`mkdir -p ${DEV_READER}`);
+  for (const [from, to] of [["index.html", "reader.html"], ["reader.js", "reader.js"]]) {
+    const tmp = `/data/local/tmp/quire-${to}`;
+    await onDevice(() => adb(["push", join(ROOT, "assets", "reader", from), tmp]));
+    await runAs(`cp ${tmp} ${DEV_READER}/${to}.part && mv ${DEV_READER}/${to}.part ${DEV_READER}/${to}`);
+    await shell(`rm -f ${tmp}`).catch(() => {});
+  }
+  readerPushed = createHash("sha256").update(readFileSync(readerJs())).digest("hex");
+  say(`reader page: pushed from this checkout (${readerPushed.slice(0, 12)})`);
+}
+
+/** Once a book is open the app has copied its reader page into place: is it the pushed one? */
+async function checkReader() {
+  if (readerChecked || !readerPushed) return;
+  readerChecked = true;
+  const served = (await runAs("sha256sum files/quire-static/reader.js").catch(() => "")).split(/\s+/)[0];
+  if (served === readerPushed) return;
+  const line = "The phone ran the reader page built into its APK, not this checkout's: the installed build predates pushed reader pages. Rebuild and install once.";
+  say(line);
+  results.notCovered.push(line);
+}
+
 async function openBook(entry) {
   const from = log.mark();
   await send("open", { id: entry.id });
@@ -446,7 +856,8 @@ async function openBook(entry) {
   );
   if (opened?.phase === "opened") {
     await readerReady();
-    await sleep(1200);
+    await settle(from, { timeout: 2000, quietMs: 300 });
+    await checkReader();
   }
   return opened;
 }
@@ -455,8 +866,7 @@ async function ensurePaginated(st) {
   if (st.fixedLayout || st.flow === "paginated") return st;
   const from = log.mark();
   await reader("flow", { flow: "paginated" });
-  await waitRelocate(from, 3000);
-  await sleep(800);
+  await settle(from, { timeout: 3000, quietMs: 300 });
   return state();
 }
 
@@ -464,32 +874,33 @@ async function ensurePaginated(st) {
 async function goToStart() {
   const from = log.mark();
   await reader("goto", { target: 0 });
-  await waitRelocate(from, 3000);
-  await sleep(800);
+  await settle(from, { timeout: 3000, quietMs: 300 });
   return state();
 }
 
 async function setFlow(flow) {
   const from = log.mark();
   await reader("flow", { flow });
-  await waitRelocate(from, 3000);
-  await sleep(900);
+  await settle(from, { timeout: 3000, quietMs: 300 });
   return state();
 }
 
 // Scroll forward by a swipe along the scroll axis. Vertical writing (right to left lines)
 // scrolls sideways in Scroll mode, and the next text is to the left.
 async function swipeForward(st) {
+  const from = log.mark();
   if (st.vertical) {
     const [left, y] = toPx(st, st.viewport.width * 0.2, st.viewport.height * 0.5);
     const [right] = toPx(st, st.viewport.width * 0.8, st.viewport.height * 0.5);
-    await shell(`input swipe ${left} ${y} ${right} ${y} 350`);
+    await shell(`${INPUT} swipe ${left} ${y} ${right} ${y} 350`);
   } else {
     const [x, top] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.25);
     const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.75);
-    await shell(`input swipe ${x} ${bottom} ${x} ${top} 350`);
+    await shell(`${INPUT} swipe ${x} ${bottom} ${x} ${top} 350`);
   }
-  await sleep(700);
+  // A fling keeps scrolling after the finger lifts, and foliate reports the place
+  // 250 ms after scrolling stops.
+  await settle(from, { timeout: 2500, quietMs: 400, cfi: st.cfi });
 }
 
 function pick(st) {
@@ -545,13 +956,14 @@ async function runBook(entry, index) {
   row.turns = turns.map((turn) => ({ ms: turn.ms, moved: turn.moved, method: turn.method }));
   row.back = { ms: back.ms, moved: back.moved, method: back.method };
   // A turn that does not move is fine at the end of the book, and a one-page book cannot move at all.
-  const atEnd = (turn) => (turn.before ?? 0) >= 0.97;
+  const atEnd = (turn) => turn.edge || (turn.before ?? 0) >= 0.97;
   const onePage = turns.every((turn) => !turn.moved) && !back.moved;
   const stuck = turns.filter((turn) => !turn.moved && !atEnd(turn));
   check(scope, "five forward turns move", onePage ? null : stuck.length === 0, onePage ? "the book is one page" : turns.map((turn) => (turn.moved ? turn.ms ?? turn.method : atEnd(turn) ? "end" : "stuck")).join(", "));
   check(scope, "forward turns go forward", turns.some((turn) => turn.moved) ? turns.filter((turn) => turn.moved).every((turn) => turn.forward) : null, turns.map((turn) => `${turn.before?.toFixed(3)}→${turn.after?.toFixed(3)}`).join(" "));
   check(scope, "a back turn moves back", onePage ? null : back.moved && !back.forward, `${back.before?.toFixed(3)}→${back.after?.toFixed(3)}`);
-  if (turns.some((turn) => turn.method === "button")) row.notes = "a link sat under the tap zone on some pages, so those turns used the › button";
+  if (turns.some((turn) => turn.note)) row.notes = "a tap in the side zone opened a note; that turn used the › control";
+  else if (turns.some((turn) => turn.method === "button")) row.notes = "links filled the tap zone on some pages, so those turns used the › control";
 
   st = await state();
   row.shots.push(await shot(dir, "02-turned.png"));
@@ -559,7 +971,18 @@ async function runBook(entry, index) {
   if (!st.fixedLayout) {
     const scan = (await reader("scan", {}, 30000)).page;
     row.blank = scan;
-    check(scope, "no blank pages in this chapter", scan.skipped ? null : scan.blank.length === 0, scan.skipped ? "" : `${scan.pages} pages${scan.blank.length ? `, blank: ${scan.blank.join(", ")}` : ""}`);
+    // For a blank page: what sits on it, and a screenshot of it, so it can be judged without a rerun.
+    const why = (scan.why ?? []).map((w) => `page ${w.page}: ${w.starts.length ? `starts ${w.starts.join("; ")}` : "nothing starts here"}${w.across ? `; inside ${w.across}` : ""}`).join(" | ");
+    if (!scan.skipped && scan.blank.length) {
+      const from = log.mark();
+      await reader("show-page", { page: scan.blank[0] });
+      await settle(from, { timeout: 2000, quietMs: 250 });
+      row.shots.push(await shot(dir, `02b-blank-page-${scan.blank[0]}.png`));
+      const back = log.mark();
+      await reader("goto", { target: st.cfi });
+      await settle(back, { timeout: 2000, quietMs: 250 });
+    }
+    check(scope, "no blank pages in this chapter", scan.skipped ? null : scan.blank.length === 0, scan.skipped ? "" : `${scan.pages} pages${scan.blank.length ? `, blank: ${scan.blank.join(", ")}. ${why}` : ""}`);
   }
 
   if (st.fixedLayout) {
@@ -585,14 +1008,32 @@ async function runBook(entry, index) {
     check(scope, "back in Pages, shows text or an image", hasContent(paged), paged.text?.slice(0, 50));
   }
   await send("library");
-  await sleep(600);
 }
 
 async function closeNote(how, st) {
+  const from = log.mark();
   if (how === "button") await reader("popup-click", { name: "close" });
-  else if (how === "back key") await shell("input keyevent 4");
+  else if (how === "back key") await shell(`${INPUT} keyevent 4`);
   else await tap(toPx(st, st.viewport.width / 2, st.viewport.height * 0.06));
-  await sleep(700);
+  await waitNote(from, false, 2000);
+  await sleep(150);
+}
+
+/** Tap a note reference and wait for its sheet (or for the page to move, when it was not a note). */
+async function tapNoteref(st, ref) {
+  const from = log.mark();
+  await tap(toPx(st, ref.x, ref.y));
+  await log.waitFor((line) => line.source === "reader" && (line.phase === "note" || line.phase === "relocate"), { from, timeout: 3000 });
+  await sleep(250);
+}
+
+/** Press a sheet button and wait for the sheet to change. */
+async function sheetClick(name) {
+  const from = log.mark();
+  const result = await reader("popup-click", { name });
+  if (result.page?.clicked) await waitNote(from, undefined, 1500);
+  await sleep(200);
+  return result;
 }
 
 async function runNotes(entry, index) {
@@ -602,12 +1043,13 @@ async function runNotes(entry, index) {
   const opened = await openBook(entry);
   if (!check(scope, "opens", opened?.phase === "opened", opened?.phase ?? "no opened line")) return;
   await ensurePaginated(await state());
+  const findFrom = log.mark();
   const found = (await reader("find-notes", { min: 2 }, 90000)).page;
   if (!check(scope, "finds a chapter with note references", found?.index !== null && found?.index !== undefined, found?.refs ? `${found.refs} in ${found.href}` : "none in 80 sections")) {
     await send("library");
     return;
   }
-  await sleep(1200);
+  await settle(findFrom, { timeout: 3000, quietMs: 300 });
   let refs = (await reader("noterefs")).page.refs ?? [];
   for (let i = 0; i < 3 && refs.length === 0; i++) {
     await turnOnce("forward");
@@ -625,9 +1067,7 @@ async function runNotes(entry, index) {
     // The previous note may have moved things a little; tap where the reference is now.
     const target = (await reader("noterefs")).page.refs?.find((r) => r.id === ref.id && r.href === ref.href) ?? ref;
     const from = log.mark();
-    await tap(toPx(before, target.x, target.y));
-    await log.waitFor((line) => line.source === "reader" && (line.phase === "note" || line.phase === "relocate"), { from, timeout: 4000 });
-    await sleep(600);
+    await tapNoteref(before, target);
     const open = await state();
     const popup = open.popup ?? {};
     const shotName = await shot(dir, `note-${i + 1}.png`);
@@ -645,8 +1085,11 @@ async function runNotes(entry, index) {
     results.notes.push(item);
     check(scope, `"${ref.text}" opens a note on the same page`, popup.open && item.samePage, popup.open ? popup.label : item.samePage ? "nothing opened" : "the page moved");
     if (!popup.open) {
-      if (!item.samePage) await reader("goto", { target: before.cfi });
-      await sleep(800);
+      if (!item.samePage) {
+        const back = log.mark();
+        await reader("goto", { target: before.cfi });
+        await settle(back, { timeout: 3000, quietMs: 250 });
+      }
       continue;
     }
     opened_.push({ ref, links: popup.bookLinks ?? 0, goTo: popup.buttons?.["Go to note"] === true });
@@ -665,23 +1108,19 @@ async function runNotes(entry, index) {
     const first = opened_[0].ref;
     const st = await state();
     const live = (await reader("noterefs")).page.refs.find((r) => r.id === first.id && r.href === first.href) ?? first;
-    await tap(toPx(st, live.x, live.y));
-    await sleep(800);
+    await tapNoteref(st, live);
     const a = (await state()).popup;
-    const next = (await reader("popup-click", { name: "next" })).page;
-    await sleep(700);
+    const next = (await sheetClick("next")).page;
     const b = (await state()).popup;
     if (next?.clicked) {
       check(scope, "Next shows the next note", b.open && b.label !== a.label, `${a.label} → ${b.label}`);
-      await reader("popup-click", { name: "previous" });
-      await sleep(700);
+      await sheetClick("previous");
       const c = (await state()).popup;
       check(scope, "Previous comes back", c.open && c.label === a.label, `${b.label} → ${c.label}`);
     } else {
       check(scope, "Next shows the next note", null, `only one note here (${a.label})`);
     }
-    await reader("popup-click", { name: "close" });
-    await sleep(500);
+    await sheetClick("close");
   }
 
   // A link inside a note: another note opens on top, with Back.
@@ -689,26 +1128,30 @@ async function runNotes(entry, index) {
   if (withLink) {
     const st = await state();
     const live = (await reader("noterefs")).page.refs.find((r) => r.id === withLink.ref.id) ?? withLink.ref;
-    await tap(toPx(st, live.x, live.y));
-    await sleep(800);
+    await tapNoteref(st, live);
+    const followFrom = log.mark();
     const followed = (await reader("popup-follow")).page;
-    await sleep(900);
+    await log.waitFor((line) => line.source === "reader" && (line.phase === "note" || line.phase === "relocate"), { from: followFrom, timeout: 2500 });
+    await sleep(300);
     const after = await state();
     await shot(dir, "note-inside-note.png");
     if (after.popup?.open && after.popup.stacked) {
       check(scope, "a note link inside a note opens it on top", true, followed?.href);
-      await reader("popup-click", { name: "back" });
-      await sleep(600);
+      await sheetClick("back");
       const popped = (await state()).popup;
       check(scope, "Back returns to the first note", popped.open && !popped.stacked, popped.label);
-      await reader("popup-click", { name: "close" });
+      await sheetClick("close");
     } else {
       // A web link or a link into the book is not a note: record what happened.
       results.notes.push({ book: entry.name, ref: withLink.ref.text, linkInNote: followed?.href, result: after.popup?.open ? "stayed" : "left the sheet" });
       check(scope, "a note link inside a note opens it on top", null, `the link was not a note (${followed?.href})`);
-      if (after.cfi !== st.cfi) await reader("goto", { target: st.cfi });
+      if (after.popup?.open) await sheetClick("close");
+      if (after.cfi !== st.cfi) {
+        const back = log.mark();
+        await reader("goto", { target: st.cfi });
+        await settle(back, { timeout: 3000, quietMs: 250 });
+      }
     }
-    await sleep(600);
   }
 
   // Go to note, then Back to text.
@@ -716,34 +1159,30 @@ async function runNotes(entry, index) {
   if (jumpable) {
     const st = await state();
     const live = (await reader("noterefs")).page.refs.find((r) => r.id === jumpable.ref.id) ?? jumpable.ref;
-    await tap(toPx(st, live.x, live.y));
-    await sleep(800);
+    await tapNoteref(st, live);
     const from = log.mark();
     await reader("popup-click", { name: "go to note" });
-    await waitRelocate(from, 4000, st.cfi);
-    await sleep(800);
+    await settle(from, { timeout: 4000, quietMs: 300, cfi: st.cfi });
     const jumped = await state();
     await shot(dir, "go-to-note.png");
     check(scope, "Go to note jumps there and offers Back to text", !jumped.popup?.open && jumped.cfi !== st.cfi && Boolean(jumped.popup?.backChip), jumped.tocLabel ?? "");
     if (jumped.popup?.backChip) {
       const back = log.mark();
       await tap(toPx(jumped, jumped.popup.backChip.x, jumped.popup.backChip.y));
-      await waitRelocate(back, 4000, jumped.cfi);
-      await sleep(800);
+      await settle(back, { timeout: 4000, quietMs: 300, cfi: jumped.cfi });
       const returned = await state();
       check(scope, "Back to text returns to the page", samePlace(st, returned), `${st.fraction?.toFixed(3)} → ${returned.fraction?.toFixed(3)}`);
     }
   }
   await send("library");
-  await sleep(600);
 }
 
 async function zoneGoesForward(zone) {
   const st = await state();
   const from = log.mark();
-  await tap(zonePoint(st, zone));
-  const moved = await waitRelocate(from, 4000, st.cfi);
-  await sleep(500);
+  const point = st.tapPoints?.[zone];
+  await tap(point ? toPx(st, point.x, point.y) : zonePoint(st, zone));
+  const moved = await settle(from, { timeout: 3000, quietMs: 200, cfi: st.cfi });
   if (!moved) return { forward: false, detail: "did not move" };
   const forward = moved.section > st.section || (moved.section === st.section && (moved.fraction ?? 0) > (st.fraction ?? 0));
   return { forward, detail: `${st.fraction?.toFixed(3)}→${moved.fraction?.toFixed(3)}` };
@@ -762,7 +1201,6 @@ async function runTapSetting(arabic, frankenstein) {
         const left = [await zoneGoesForward("left"), await zoneGoesForward("left")];
         check(scope, "following the book: the left side goes forward", left.every((r) => r.forward), left.map((r) => r.detail).join(", "));
         await send("settings", { tapZones: "screen" });
-        await sleep(800);
         st = await state();
         check(scope, "the setting reaches the open book", st.forwardZone === "right", st.forwardZone);
         const right = [await zoneGoesForward("right"), await zoneGoesForward("right")];
@@ -778,14 +1216,13 @@ async function runTapSetting(arabic, frankenstein) {
         const screen = await zoneGoesForward("right");
         check(scope, "left-to-right book, screen setting: right goes forward", screen.forward, screen.detail);
         await send("settings", { tapZones: "reading" });
-        await sleep(800);
         const reading = await zoneGoesForward("right");
         check(scope, "left-to-right book, book setting: right goes forward", reading.forward, reading.detail);
         await send("library");
       }
     }
   } finally {
-    await send("settings", { tapZones: "reading" }).catch(() => {});
+    await send("settings", { tapZones: "reading" }).catch(passFatal);
   }
 }
 
@@ -821,7 +1258,7 @@ async function runLifecycle(entry) {
   const seconds = Number(opts["background-s"]) || 90;
   say(`home, then ${seconds} s in the background`);
   let from = log.mark();
-  await shell("input keyevent 3");
+  await shell(`${INPUT} keyevent 3`);
   await sleep(seconds * 1000);
   await shell(`am start -n ${ACTIVITY}`);
   const foreground = await log.waitFor((line) => line.source === "reader" && line.phase === "foreground", { from, timeout: 20000 });
@@ -841,8 +1278,9 @@ async function runLifecycle(entry) {
   };
   try {
     await shell("settings put system accelerometer_rotation 0");
+    let from = log.mark();
     await shell("settings put system user_rotation 1");
-    await sleep(3500);
+    await settle(from, { timeout: 5000, quietMs: 600 });
     const d = await state();
     await shot(dir, "3-landscape.png");
     check(scope, "landscape shows text", hasContent(d), d.text?.slice(0, 40));
@@ -850,8 +1288,9 @@ async function runLifecycle(entry) {
     check(scope, "landscape keeps the place", samePlace(portrait, d) || (d.section === portrait.section && Math.abs((d.fraction ?? 0) - (portrait.fraction ?? 0)) <= 0.02), `${portrait.fraction?.toFixed(4)} → ${d.fraction?.toFixed(4)}`);
     const t = await turnOnce("forward");
     check(scope, "a tap turns in landscape", t.moved);
+    from = log.mark();
     await shell("settings put system user_rotation 0");
-    await sleep(3500);
+    await settle(from, { timeout: 5000, quietMs: 600 });
     const e = await state();
     await shot(dir, "4-portrait-again.png");
     check(scope, "back in portrait, shows text", hasContent(e), e.text?.slice(0, 40));
@@ -887,7 +1326,7 @@ function summary(meta) {
   const parts = [
     `# Phone matrix, ${meta.started}`,
     "",
-    `Device: ${meta.device}. Build: ${meta.commit}. ${results.checks.length} checks: ${passed.length} passed, ${failed.length} failed, ${na.length} did not apply.`,
+    `Device: ${meta.device}. Build: ${meta.commit}. Mode: ${meta.mode}, ${meta.seconds} s. ${results.checks.length} checks: ${passed.length} passed, ${failed.length} failed, ${na.length} did not apply.`,
     "",
   ];
   if (failed.length) {
@@ -988,74 +1427,102 @@ async function main() {
     if (devices.length !== 1) throw new Error(`found ${devices.length} devices; pass --serial`);
     serial = devices[0][0];
   }
+  await openShells();
   const device = `${(await shell("getprop ro.product.model")).trim()}, Android ${(await shell("getprop ro.build.version.release")).trim()} (${serial})`;
-  const meta = { started, device, commit: await gitCommit() };
+  const meta = { started, device, commit: await gitCommit(), mode: opts.quick ? "quick" : opts.only ? `only ${opts.only}` : "full" };
   say(device);
   if (!(await shell(`pm path ${PKG}`)).includes("package:")) throw new Error(`${PKG} is not installed`);
   await adb(["reverse", "tcp:8081", "tcp:8081"]);
+  await pickInput();
 
   const entries = catalog();
   const frankenstein = entries.find((entry) => entry.key === "frankenstein") ?? null;
+  const t0 = Date.now();
+  const lap = (name, since) => say(`${name}: ${Math.round((Date.now() - since) / 1000)} s`);
 
-  await runAs(`rm -rf ${COMMANDS}`).catch(() => {});
-  if (opts.fresh) {
-    await freshImport(entries, frankenstein);
-  } else {
+  try {
+    if (opts.fresh) {
+      say("clearing the app's data");
+      await shell(`pm clear ${PKG}`);
+    }
+    // A cold start, so the app runs Metro's current code and the reader page pushed below.
+    await shell(`am force-stop ${PKG}`);
+    await runAs(`rm -rf ${COMMANDS}`).catch(() => {});
+    await pushReader();
+    log.reset();
     await launch();
     await log.clear();
+    if (opts.fresh) await freshImport(entries, frankenstein);
+
+    if (!opts["skip-books"]) {
+      const since = Date.now();
+      for (const [index, entry] of entries.entries()) {
+        say(`— ${entry.name}: ${entry.why}`);
+        try {
+          await runBook(entry, index);
+        } catch (error) {
+          passFatal(error);
+          check(entry.name, "book routine finished", false, error.message);
+          await send("library").catch(passFatal);
+        }
+      }
+      lap("books", since);
+    }
+    if (!opts["skip-notes"]) {
+      const since = Date.now();
+      for (const [index, entry] of entries.filter((e) => e.notes).entries()) {
+        say(`— notes in ${entry.name}`);
+        try {
+          await runNotes(entry, index);
+        } catch (error) {
+          passFatal(error);
+          check(`${entry.name} notes`, "note routine finished", false, error.message);
+          await send("library").catch(passFatal);
+        }
+      }
+      lap("notes", since);
+    }
+    if (!opts["skip-taps"]) {
+      const arabic = entries.find((entry) => entry.key === "arabic");
+      if (arabic || frankenstein) {
+        say("— tap direction setting");
+        try {
+          await runTapSetting(arabic, frankenstein);
+        } catch (error) {
+          passFatal(error);
+          check("tap direction", "tap routine finished", false, error.message);
+        }
+      }
+    }
+    if (!opts["skip-lifecycle"] && !opts.quick && frankenstein) {
+      say("— restore and lifecycle, hands off the phone");
+      const since = Date.now();
+      try {
+        await runLifecycle(frankenstein);
+      } catch (error) {
+        passFatal(error);
+        check("restore and lifecycle", "lifecycle routine finished", false, error.message);
+      } finally {
+        await restoreRotation();
+      }
+      lap("lifecycle", since);
+    }
+  } catch (error) {
+    if (!(error instanceof Fatal)) throw error;
+    check("run", "the app kept answering", false, `${error.message}. The run ended early; the checks above are all it got to.`);
   }
 
-  if (!opts["skip-books"]) {
-    for (const [index, entry] of entries.entries()) {
-      say(`— ${entry.name}: ${entry.why}`);
-      try {
-        await runBook(entry, index);
-      } catch (error) {
-        check(entry.name, "book routine finished", false, error.message);
-        await send("library").catch(() => {});
-      }
-    }
-  }
-  if (!opts["skip-notes"]) {
-    for (const [index, entry] of entries.filter((e) => e.notes).entries()) {
-      say(`— notes in ${entry.name}`);
-      try {
-        await runNotes(entry, index);
-      } catch (error) {
-        check(`${entry.name} notes`, "note routine finished", false, error.message);
-        await send("library").catch(() => {});
-      }
-    }
-  }
-  if (!opts["skip-taps"]) {
-    const arabic = entries.find((entry) => entry.key === "arabic");
-    if (arabic || frankenstein) {
-      say("— tap direction setting");
-      try {
-        await runTapSetting(arabic, frankenstein);
-      } catch (error) {
-        check("tap direction", "tap routine finished", false, error.message);
-      }
-    }
-  }
-  if (!opts["skip-lifecycle"] && frankenstein) {
-    say("— restore and lifecycle, hands off the phone");
-    try {
-      await runLifecycle(frankenstein);
-    } catch (error) {
-      check("restore and lifecycle", "lifecycle routine finished", false, error.message);
-    } finally {
-      await restoreRotation();
-    }
-  }
-
+  meta.seconds = Math.round((Date.now() - t0) / 1000);
+  meta.usbDrops = usbDrops;
+  if (usbDrops) results.notCovered.push(`The phone dropped off USB ${usbDrops} time(s); the steps it interrupted failed and say so.`);
+  await Promise.all(pendingShots);
   const report = await adb(["exec-out", `run-as ${PKG} cat ${REPORT}`], { buffer: true }).catch(() => Buffer.alloc(0));
   await writeFile(join(OUT, "report.jsonl"), report);
   await writeFile(join(OUT, "results.json"), JSON.stringify({ meta, ...results }, null, 2));
   await writeFile(join(OUT, "summary.md"), summary(meta));
   await writeFile(join(OUT, "index.html"), html(meta));
   const failed = results.checks.filter((c) => c.pass === false).length;
-  say(`${results.checks.length} checks, ${failed} failed. ${join(OUT, "summary.md")}`);
+  say(`${results.checks.length} checks, ${failed} failed, in ${meta.seconds} s. ${join(OUT, "summary.md")}`);
   process.exitCode = failed ? 1 : 0;
 }
 
@@ -1063,8 +1530,10 @@ process.on("SIGINT", () => {
   void restoreRotation().finally(() => process.exit(130));
 });
 
-main().catch(async (error) => {
-  console.error(error.message);
-  await restoreRotation();
-  process.exitCode = 2;
-});
+main()
+  .catch(async (error) => {
+    console.error(error.message);
+    await restoreRotation();
+    process.exitCode = 2;
+  })
+  .finally(closeShells);

@@ -55,6 +55,35 @@ function visibleMedia(range) {
   return { images, broken };
 }
 
+/**
+ * Images on screen, by where they are drawn rather than by the reading range:
+ * a page that is only a scanned image (a title page, a frontispiece) can have a
+ * range with no image in it, especially while scrolling.
+ */
+function mediaOnScreen(view) {
+  let images = 0;
+  let broken = 0;
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  for (const { doc } of view.renderer.getContents?.() ?? []) {
+    const frame = doc?.defaultView?.frameElement;
+    if (!frame) continue;
+    const fr = frame.getBoundingClientRect();
+    const scale = frameScale(frame, fr);
+    for (const el of doc.querySelectorAll("img, svg, video, canvas")) {
+      if (el.localName === "svg" && el.parentElement?.closest("svg")) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 8 || r.height < 8) continue;
+      const left = fr.left + r.left * scale;
+      const top = fr.top + r.top * scale;
+      if (left + r.width * scale <= 0 || left >= width || top + r.height * scale <= 0 || top >= height) continue;
+      images++;
+      if (el.localName === "img" && el.complete && el.naturalWidth === 0) broken++;
+    }
+  }
+  return { images, broken };
+}
+
 function frameScale(frame, rect = frame.getBoundingClientRect()) {
   return frame.offsetWidth ? rect.width / frame.offsetWidth : 1;
 }
@@ -97,6 +126,19 @@ function linkAt(view, x, y) {
     if (el?.closest?.("a[href]")) return true;
   }
   return false;
+}
+
+/**
+ * A point in a side zone with no link under it or just above and below, so a tap
+ * there turns the page instead of following a link or opening a note. Null when
+ * links fill the zone's height, as on a contents page.
+ */
+function freePoint(view, x, height) {
+  for (const k of [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74]) {
+    const y = height * k;
+    if (!linkAt(view, x, y) && !linkAt(view, x, y - 24) && !linkAt(view, x, y + 24)) return { x: Math.round(x), y: Math.round(y) };
+  }
+  return null;
 }
 
 /** Where the "Back to text" chip is, when it shows, so the host can tap it for real. */
@@ -142,7 +184,9 @@ export function state(view, settings) {
   const ranges = screenRanges(view, range);
   const text = ranges.map((r) => r.toString()).join(" ").replace(/\s+/g, " ").trim();
   const fontPx = bodyFontPx(ranges[0] ?? null);
-  const media = ranges.map(visibleMedia).reduce((a, b) => ({ images: a.images + b.images, broken: a.broken + b.broken }), { images: 0, broken: 0 });
+  const inRange = ranges.map(visibleMedia).reduce((a, b) => ({ images: a.images + b.images, broken: a.broken + b.broken }), { images: 0, broken: 0 });
+  const drawn = mediaOnScreen(view);
+  const media = drawn.images >= inRange.images ? drawn : inRange;
   const direction = doc ? directionOf(doc) : { vertical: false, rtl: false };
   const bookRtl = view.book?.dir === "rtl";
   const forwardZone = settings.tapZones === "screen" ? "right" : bookRtl ? "left" : "right";
@@ -179,6 +223,10 @@ export function state(view, settings) {
     links: {
       left: linkAt(view, width * 0.15, height * 0.5),
       right: linkAt(view, width * 0.85, height * 0.5),
+    },
+    tapPoints: {
+      left: freePoint(view, width * 0.15, height),
+      right: freePoint(view, width * 0.85, height),
     },
     popup: popupState(),
   };
@@ -235,7 +283,55 @@ export function scan(view) {
   filled.forEach((value, page) => {
     if (!value) blank.push(page);
   });
-  return { pages: pageCount, blank, truncated, vertical, rtl };
+  const axis = (rect) => [vertical ? rect.top : rtl ? extent - rect.right : rect.left, vertical ? rect.bottom : rtl ? extent - rect.left : rect.right];
+  return { pages: pageCount, blank, why: blank.slice(0, 2).map((page) => blankCause(doc, axis, page, size)), truncated, vertical, rtl };
+}
+
+/** A short description of an element, for a report a person reads. */
+function describe(el) {
+  const r = el.getBoundingClientRect();
+  const style = el.ownerDocument.defaultView.getComputedStyle(el);
+  const cls = typeof el.className === "string" ? el.className.trim().split(/\s+/).slice(0, 2).join(".") : "";
+  let out = `${el.localName}${el.id ? `#${el.id}` : ""}${cls ? `.${cls}` : ""} ${Math.round(r.width)}×${Math.round(r.height)}`;
+  if (style.breakBefore && style.breakBefore !== "auto") out += ` break-before:${style.breakBefore}`;
+  if (style.breakAfter && style.breakAfter !== "auto") out += ` break-after:${style.breakAfter}`;
+  if (style.display === "none" || style.visibility === "hidden") out += " hidden";
+  if (el.localName === "img") out += ` ${el.complete && el.naturalWidth > 0 ? "loaded" : "not loaded"} ${(el.getAttribute("src") ?? "").split("/").pop().slice(0, 40)}`;
+  return out;
+}
+
+/**
+ * What is on a page that shows nothing: the elements that start on it (often an
+ * empty block with a page break, or an image that did not load), and the
+ * smallest element that runs across it.
+ */
+function blankCause(doc, axis, page, size) {
+  const lo = page * size;
+  const hi = lo + size;
+  const starts = [];
+  let across = null;
+  let acrossSize = Infinity;
+  let count = 0;
+  for (const el of doc.body?.querySelectorAll("*") ?? []) {
+    if (++count > 20000) break;
+    const [start, end] = axis(el.getBoundingClientRect());
+    if (start >= lo && start < hi) {
+      if (starts.length < 4) starts.push(describe(el));
+    } else if (start < lo && end > hi && end - start < acrossSize) {
+      across = el;
+      acrossSize = end - start;
+    }
+  }
+  return { page, starts, across: across ? describe(across) : null };
+}
+
+/** Show one page of the current section (0 is its first page), for a screenshot of it. */
+export async function showPage(view, page) {
+  const renderer = view.renderer;
+  const textPages = (renderer.pages ?? 2) - 2;
+  if (renderer.scrolled || textPages < 1) return { shown: false };
+  await renderer.scrollToAnchor(Math.min(1, Math.max(0, page / Math.max(1, textPages - 1))));
+  return { shown: true, page: renderer.page - 1, textPages };
 }
 
 /**

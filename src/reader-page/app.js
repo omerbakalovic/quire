@@ -267,6 +267,8 @@ export async function debug(message) {
     case "goto":
       await view.goTo(message.target);
       return { ok: true };
+    case "show-page":
+      return probe.showPage(view, Number(message.page) || 0);
     case "popup-click":
       return probe.popupClick(message.name);
     case "popup-follow":

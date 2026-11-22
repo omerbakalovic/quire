@@ -261,3 +261,18 @@ Notes were Milestone 3. They moved into M1b at the owner's request, modeled on P
 
 The script was first run against a simulated phone: the real reader page in Chromium behind a stand-in `adb`. That run found the tap and snap race above.
 
+### Making runs short
+
+The first scripted runs took 15 minutes. Most of it was overhead, not checks:
+
+- Every command started a new `adb.exe`, which costs 100 to 300 ms on Windows, and a run sends over a thousand. The script now keeps two `adb shell` sessions open (one plain, one `run-as`) and cuts each command's output out by a marker that carries the exit code. It falls back to one process per command if the open shells do not work. Taps use `cmd input`, which talks to the input service directly instead of starting a Java VM for each tap.
+- Fixed sleeps sized for the slowest case became waits on the app's own log lines: a relocate followed by a short quiet period, or a note sheet opening or closing. A turn at the first or last page of the book is not attempted.
+- Screenshots come off the phone as raw frames, and the PNG is made on the computer in the background; a phone takes about a second to encode one.
+- The app polls for commands every 100 ms instead of 250, and every command has a hard timeout in the app, so one stuck step cannot block the channel.
+- `--quick` runs five books (Frankenstein, Arabic, Sous le vent, the noteref fixture, Power Moby-Dick link edition) with their notes and the tap setting, and no lifecycle. That checks a fix in a few minutes; the full matrix is for closing a milestone. `--fresh` is only for import changes, since a reinstall keeps the library.
+- The reader page is bundled from the checkout and pushed to `files/quire-dev/` on every run. A debuggable build serves it instead of the APK's copy (`QuireLoopbackModule.materialize`), so reader-page changes need no gradle build; app code already comes from Metro. `--apk-reader` tests the APK's copy. Release builds ignore the folder.
+
+The script also copes with the two things that wasted run 3 and the first try at run 4. When the app stops answering, it checks what is in front: if the app left the foreground (a tap on the navigation bar's Home), it brings it back; otherwise it restarts it. Commands queued meanwhile are dropped, the step that waited fails, and the run goes on. When the phone drops off USB, it waits up to five minutes for it, restores `adb reverse` and goes on. Three stuck steps in a row, or a phone that stays away, end the run early with whatever it got to.
+
+For a blank page, the scan names what starts on it and what runs across it, and the script takes a screenshot of that page.
+

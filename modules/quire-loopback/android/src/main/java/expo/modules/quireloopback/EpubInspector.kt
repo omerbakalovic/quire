@@ -112,12 +112,19 @@ object EpubInspector {
     val calibre = metas.firstOrNull { it.getAttribute("name") == "calibre:series" }?.getAttribute("content")?.trim()
     val calibreIndex = metas.firstOrNull { it.getAttribute("name") == "calibre:series_index" }?.getAttribute("content")?.trim()
     if (!calibre.isNullOrEmpty()) return calibre to calibreIndex?.ifEmpty { null }
-    val collection = metas.firstOrNull { it.getAttribute("property") == "belongs-to-collection" } ?: return null to null
+    // EPUB 3 collections. Only collection-type "series" is a series; "set" is a
+    // publisher grouping (Standard Ebooks uses it). An untyped collection counts.
+    fun refinement(id: String, property: String): String? {
+      if (id.isEmpty()) return null
+      return metas.firstOrNull { it.getAttribute("refines") == "#$id" && it.getAttribute("property") == property }
+        ?.let { textOf(it) }
+    }
+    val collections = metas.filter { it.getAttribute("property") == "belongs-to-collection" }
+    val collection = collections.firstOrNull { refinement(it.getAttribute("id"), "collection-type") == "series" }
+      ?: collections.firstOrNull { refinement(it.getAttribute("id"), "collection-type") == null }
+      ?: return null to null
     val name = textOf(collection) ?: return null to null
-    val id = collection.getAttribute("id")
-    val position = if (id.isEmpty()) null else metas.firstOrNull {
-      it.getAttribute("refines") == "#$id" && it.getAttribute("property") == "group-position"
-    }?.let { textOf(it) }
+    val position = refinement(collection.getAttribute("id"), "group-position")
     return name to position
   }
 

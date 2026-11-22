@@ -94,6 +94,26 @@ class EpubInspectorTest {
   }
 
   @Test
+  fun aSetCollectionIsNotASeries() {
+    val opf = """<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+        <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+          <dc:title>Grouped</dc:title>
+          <meta property="belongs-to-collection" id="c1">Some Imprint</meta>
+          <meta refines="#c1" property="collection-type">set</meta>
+          <meta property="belongs-to-collection" id="c2">Real Saga</meta>
+          <meta refines="#c2" property="collection-type">series</meta>
+          <meta refines="#c2" property="group-position">4</meta>
+        </metadata>
+      </package>"""
+    val facts = EpubInspector.inspect(epub("META-INF/container.xml" to container, "OEBPS/content.opf" to opf))
+    assertEquals("Real Saga", facts.series)
+    assertEquals("4", facts.seriesIndex)
+    val setOnly = opf.replace(Regex("<meta property=\"belongs-to-collection\" id=\"c2\">.*?group-position\">4</meta>", RegexOption.DOT_MATCHES_ALL), "")
+    val none = EpubInspector.inspect(epub("META-INF/container.xml" to container, "OEBPS/content.opf" to setOnly))
+    assertNull(none.series)
+  }
+
+  @Test
   fun epub2CoverMetaAndCalibreSeries() {
     val opf = """<package xmlns="http://www.idpf.org/2007/opf" version="2.0">
         <metadata xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:opf="http://www.idpf.org/2007/opf">

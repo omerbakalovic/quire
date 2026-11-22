@@ -1,6 +1,7 @@
 package expo.modules.quireloopback
 
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
@@ -40,6 +41,10 @@ class QuireLoopbackModule : Module() {
 
     Function("takePendingImports") {
       takePendingImports()
+    }
+
+    Function("takeCommands") {
+      takeCommands()
     }
 
     Function("registerBook") { id: String ->
@@ -138,6 +143,24 @@ class QuireLoopbackModule : Module() {
       listOfNotNull(context.getExternalFilesDir(null)?.let { File(it, name) }, File(context.filesDir, name))
         .firstOrNull { it.isFile }
         ?.let { Uri.fromFile(it).toString() }
+    }
+  }
+
+  /**
+   * Debug seam for scripts/phone-matrix.mjs: the host writes one JSON command per
+   * file into files/quire-cmd/, under a temporary name and then renamed to
+   * NNNNNN.json, so a half-written file is never read. Each file is consumed
+   * once, in name order. Only a debuggable build reads them.
+   */
+  private fun takeCommands(): List<String> {
+    val context = context()
+    if (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE == 0) return emptyList()
+    val dir = File(context.filesDir, COMMAND_DIR)
+    val files = dir.listFiles { file -> file.isFile && file.name.endsWith(".json") } ?: return emptyList()
+    return files.sortedBy { it.name }.take(MAX_COMMANDS).mapNotNull { file ->
+      val text = if (file.length() <= MAX_COMMAND_BYTES) file.readText() else null
+      file.delete()
+      text
     }
   }
 
@@ -309,5 +332,8 @@ class QuireLoopbackModule : Module() {
     const val CHECK = "quire-check"
     const val COVER_WIDTH = 480
     const val IMPORT_LIST = "quire-import"
+    const val COMMAND_DIR = "quire-cmd"
+    const val MAX_COMMANDS = 20
+    const val MAX_COMMAND_BYTES = 65536L
   }
 }

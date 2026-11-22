@@ -27,6 +27,7 @@ type NativeLoopback = {
   importBook(source: string): Promise<NativeImport>;
   registerBook(id: string): boolean;
   takePendingImports(): string[];
+  takeCommands(): string[];
   deleteBook(id: string): Promise<boolean>;
   readLibrary(): Promise<string | null>;
   writeLibrary(json: string): Promise<void>;
@@ -64,6 +65,11 @@ export function importBook(source: string): Promise<NativeImport> {
 /** Debug seam: file:// URIs the host queued in files/quire-import. Consumed once. */
 export function takePendingImports(): string[] {
   return native.takePendingImports();
+}
+
+/** Debug seam: JSON commands the phone matrix queued in files/quire-cmd/. Consumed once. Debug builds only. */
+export function takeCommands(): string[] {
+  return native.takeCommands();
 }
 
 /** Makes an imported book reachable at bookUrl(id). */

@@ -29,7 +29,8 @@ export type ReaderToHost =
   | { type: "refused"; id: string; kind: string }
   | { type: "failed"; id: string; error: string }
   | { type: "external-link"; id: string; href: string }
-  | { type: "note"; id: string; open: boolean; href: string | null; error: string | null };
+  | { type: "note"; id: string; open: boolean; href: string | null; error: string | null }
+  | { type: "debug"; id: string; reqId: string; result: unknown };
 
 export type TocEntry = { label: string; href: string | null; depth: number };
 
@@ -116,5 +117,9 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
     return { type: "note", id, open: message.open === true, href: optString(message.href), error: optString(message.error) };
   }
   if (message.type === "external-link") return { type: "external-link", id, href: optString(message.href) ?? "" };
+  if (message.type === "debug") {
+    const reqId = optString(message.reqId);
+    return reqId ? { type: "debug", id, reqId, result: message.result ?? null } : null;
+  }
   return null;
 }

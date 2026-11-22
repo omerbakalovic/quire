@@ -4,7 +4,7 @@ import * as paginator from "../../vendor/foliate-js/paginator.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
 import "../../vendor/foliate-js/view.js";
 
-import { applySettings, closeNote, openForReading, setFlow, turn } from "./app.js";
+import { applySettings, closeNote, debug, openForReading, setFlow, turn } from "./app.js";
 import { chapterFacts, liveDoc, timeTurns } from "./measure.js";
 import { openPrepared } from "./open-book.js";
 import { cspOf, installBookCspParser } from "./security.js";
@@ -157,6 +157,13 @@ function onMessage(event) {
   }
   if (message.type === "turn") {
     turn(message).catch((error) => console.error(error));
+    return;
+  }
+  if (message.type === "debug") {
+    const reqId = String(message.reqId ?? "");
+    debug(message)
+      .then((result) => reply({ type: "debug", id: message.id, reqId, result }))
+      .catch((error) => reply({ type: "debug", id: message.id, reqId, result: { error: String(error?.message ?? error) } }));
     return;
   }
   if (message.type === "run") {

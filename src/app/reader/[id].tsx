@@ -1,9 +1,10 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
+import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
+import { ActivityIndicator, AppState, BackHandler, PixelRatio, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
+import { setReaderDebug } from "@/debug/matrix-command";
 import { classifyEncryption } from "@/domain/drm";
 import { findBook, type Flow } from "@/domain/library";
 import { t } from "@/i18n";
@@ -50,6 +51,9 @@ export default function BookScreen() {
   const latestCfi = useRef<string | null>(book?.cfi ?? null);
   const noteOpen = useRef(false);
   const tapZones = library.settings.tapZones;
+  const screenRef = useRef<ComponentRef<typeof View>>(null);
+  const debugWaiters = useRef(new Map<string, (result: unknown) => void>());
+  const debugSeq = useRef(0);
 
   const post = useCallback((message: object) => {
     webRef.current?.postMessage(JSON.stringify(message));
@@ -188,6 +192,12 @@ export default function BookScreen() {
       case "external-link":
         setNotice(strings.externalLink);
         return;
+      case "debug": {
+        const waiter = debugWaiters.current.get(message.reqId);
+        debugWaiters.current.delete(message.reqId);
+        waiter?.(message.result);
+        return;
+      }
       default:
         return;
     }
@@ -223,12 +233,56 @@ export default function BookScreen() {
     post({ type: "flow", id, flow: next });
   }
 
+  // Debug builds: the phone matrix (scripts/phone-matrix.mjs) drives and measures this screen.
+  async function handleDebug(action: string, args: Record<string, unknown>): Promise<unknown> {
+    const screen = await new Promise<{ x: number; y: number; width: number; height: number } | null>((resolve) => {
+      const node = screenRef.current;
+      if (!node) {
+        resolve(null);
+        return;
+      }
+      node.measureInWindow((x, y, width, height) => resolve({ x, y, width, height }));
+    });
+    const native = { screen, scale: PixelRatio.get(), controls, phase, flow, noteOpen: noteOpen.current };
+    switch (action) {
+      case "layout":
+        return { native };
+      case "flow": {
+        const next: Flow = args.flow === "scrolled" ? "scrolled" : "paginated";
+        switchFlow(next);
+        return { native: { ...native, flow: next } };
+      }
+      case "turn":
+        post({ type: "turn", id, dir: args.dir === "prev" ? "prev" : "next" });
+        return { native };
+      case "controls":
+        setControls(args.show === true);
+        return { native: { ...native, controls: args.show === true } };
+      default: {
+        const reqId = `debug-${++debugSeq.current}`;
+        const page = await new Promise<unknown>((resolve) => {
+          debugWaiters.current.set(reqId, resolve);
+          post({ ...args, type: "debug", id, reqId, action });
+        });
+        return { native, page };
+      }
+    }
+  }
+  const debugRef = useRef(handleDebug);
+  useEffect(() => {
+    debugRef.current = handleDebug;
+  });
+  useEffect(() => {
+    if (!__DEV__ || !id || phase !== "reading") return;
+    return setReaderDebug(id, (action, args) => debugRef.current(action, args));
+  }, [id, phase]);
+
   const message =
     phase === "missing" ? strings.notFound : phase === "drm" ? strings.drm : phase === "failed" ? strings.failed : null;
   const percent = fraction === null ? null : Math.round(fraction * 100);
 
   return (
-    <View style={styles.screen}>
+    <View ref={screenRef} style={styles.screen} collapsable={false}>
       <Stack.Screen options={{ headerShown: false }} />
       {pageUrl && !message ? (
         <WebView<object>

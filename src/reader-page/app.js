@@ -1,6 +1,7 @@
 import { NotePopup } from "./note-popup.js";
 import { linkFromEvent } from "./notes.js";
 import { openBook } from "./open-book.js";
+import * as probe from "./probe.js";
 import { tapZone } from "./tap-zones.js";
 
 /**
@@ -210,3 +211,35 @@ export function closeNote(message) {
   current.popup?.close();
   return true;
 }
+
+/**
+ * Debug probes for the phone matrix. The host only sends these from a debug
+ * build's command channel; they read the page and press its own controls.
+ */
+export async function debug(message) {
+  if (!current || current.id !== message.id) return { error: "no book open" };
+  const { view } = current;
+  switch (message.action) {
+    case "state":
+      return probe.state(view, settings);
+    case "scan":
+      return probe.scan(view);
+    case "noterefs":
+      return { refs: probe.noterefs(view, {}), viewport: { width: window.innerWidth, height: window.innerHeight } };
+    case "find-notes":
+      return probe.findNotes(view, {}, typeof message.min === "number" ? message.min : 2);
+    case "goto":
+      await view.goTo(message.target);
+      return { ok: true };
+    case "popup-click":
+      return probe.popupClick(message.name);
+    case "popup-follow":
+      return probe.popupFollow();
+    case "close-note":
+      current.popup?.close();
+      return { ok: true };
+    default:
+      return { error: `unknown action ${String(message.action)}` };
+  }
+}
+

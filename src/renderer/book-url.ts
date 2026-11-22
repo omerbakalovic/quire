@@ -7,6 +7,7 @@ export {
   isServing,
   readLibrary,
   registerBook,
+  takeCommands,
   takePendingImports,
   writeLibrary,
   hasGo,

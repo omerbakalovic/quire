@@ -9,9 +9,11 @@ import {
   serializeLibrary,
   setFlow,
   markOpened,
+  updateSettings,
   upsertBook,
   type Flow,
   type Library,
+  type Settings,
 } from "@/domain/library";
 import { deleteBook, importBook, readLibrary, writeLibrary } from "@/renderer/book-url";
 
@@ -105,6 +107,10 @@ export function saveOpened(id: string): Promise<void> {
 
 export function saveFlow(flow: Flow): Promise<void> {
   return commit(setFlow(library, flow));
+}
+
+export function saveSettings(patch: Partial<Settings>): Promise<void> {
+  return commit(updateSettings(library, patch));
 }
 
 /** Resolves once every write queued so far is on disk. */

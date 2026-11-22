@@ -35,18 +35,18 @@ const BOOKS = [
 ];
 
 // IDPF/W3C EPUB 3 samples for the M1b matrix. All six are CC-BY-SA 3.0: the
-// samples table lists no other license for them (checked 2026-11-22). A null hash is not pinned yet: the
-// file is kept and its hash printed so it can be pinned in this list.
+// samples table lists no other license for them (checked 2026-11-22).
 // Release 20230704. The repository was archived on 2026-11-09, so this tag is final.
+// Hashes pinned from the copies downloaded on the M1b test PC on 2026-11-22.
 const IDPF = "https://github.com/IDPF/epub3-samples/releases/download/20230704";
 const SAMPLES = [
-  "moby-dick.epub",
-  "wasteland.epub",
-  "georgia-cfi.epub",
-  "regime-anticancer-arabic.epub",
-  "kusamakura-japanese-vertical-writing.epub",
-  "sous-le-vent.epub",
-].map((file) => ({ file, url: `${IDPF}/${file}`, sha256: null }));
+  ["moby-dick.epub", "81bc079841a38e91a02a7776d04786a2fc311cfd300064e9fc533ce7c54cf7b4"],
+  ["wasteland.epub", "1653b9fbe225b89a008f980744d6b89940504a4533b9036821f9d99daf8f6c9c"],
+  ["georgia-cfi.epub", "85d17e1ee1d39d3e9f59ee959e92a808456c5c371036cba560634c01292c5e06"],
+  ["regime-anticancer-arabic.epub", "5d10bf6a73f461b7b23294b6e34b72f2a1184c9543a424b4a0f737ed33967e96"],
+  ["kusamakura-japanese-vertical-writing.epub", "6d4d4ed5eda3f612e3263c54fa0f74ccfa87260f43e81bb58ea658636e52eeb7"],
+  ["sous-le-vent.epub", "1ac68b0a334d19ac97338574d6ad0d7a30723315c668c6d74021540b6b3f816d"],
+].map(([file, sha256]) => ({ file, url: `${IDPF}/${file}`, sha256 }));
 BOOKS.push(...SAMPLES);
 
 async function sha256(path) {

@@ -28,7 +28,8 @@ export type ReaderToHost =
   | { type: "tap"; id: string; zone: "center" }
   | { type: "refused"; id: string; kind: string }
   | { type: "failed"; id: string; error: string }
-  | { type: "external-link"; id: string; href: string };
+  | { type: "external-link"; id: string; href: string }
+  | { type: "note"; id: string; open: boolean; href: string | null; error: string | null };
 
 export type TocEntry = { label: string; href: string | null; depth: number };
 
@@ -111,6 +112,9 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
   if (message.type === "tap") return message.zone === "center" ? { type: "tap", id, zone: "center" } : null;
   if (message.type === "refused") return { type: "refused", id, kind: optString(message.kind) ?? "unknown" };
   if (message.type === "failed") return { type: "failed", id, error: optString(message.error) ?? "unknown error" };
+  if (message.type === "note") {
+    return { type: "note", id, open: message.open === true, href: optString(message.href), error: optString(message.error) };
+  }
   if (message.type === "external-link") return { type: "external-link", id, href: optString(message.href) ?? "" };
   return null;
 }

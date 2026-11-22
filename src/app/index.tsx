@@ -139,9 +139,14 @@ export default function LibraryScreen() {
         options={{
           title: strings.title,
           headerRight: () => (
-            <Pressable onPress={pick} disabled={busy} accessibilityRole="button" hitSlop={12}>
-              <Text style={[styles.importButton, busy && styles.disabled]}>{busy ? strings.importing : strings.import}</Text>
-            </Pressable>
+            <View style={styles.headerButtons}>
+              <Pressable onPress={() => router.push("/settings")} accessibilityRole="button" hitSlop={12}>
+                <Text style={styles.importButton}>{strings.settings}</Text>
+              </Pressable>
+              <Pressable onPress={pick} disabled={busy} accessibilityRole="button" hitSlop={12}>
+                <Text style={[styles.importButton, busy && styles.disabled]}>{busy ? strings.importing : strings.import}</Text>
+              </Pressable>
+            </View>
           ),
         }}
       />
@@ -189,6 +194,7 @@ const styles = StyleSheet.create({
   title: { fontSize: 17, fontWeight: "600" },
   author: { fontSize: 14, opacity: 0.75 },
   progress: { fontSize: 13, opacity: 0.6 },
+  headerButtons: { flexDirection: "row", gap: 8 },
   importButton: { fontSize: 16, fontWeight: "600", color: "#208AEF", paddingHorizontal: 8 },
   disabled: { opacity: 0.5 },
   busy: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", backgroundColor: "#0003" },

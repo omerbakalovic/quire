@@ -1,3 +1,4 @@
+import { NotePopup } from "./note-popup.js";
 import { openBook } from "./open-book.js";
 import { tapZone } from "./tap-zones.js";
 
@@ -9,6 +10,13 @@ import { tapZone } from "./tap-zones.js";
 let current = null;
 // When the last tap turned a page, for the turn time reported with the next relocate.
 let tapAt = null;
+// "reading": the zones follow the book's page direction, so in a right-to-left
+// book the left zone is the next page. "screen": right is always forward.
+let settings = { tapZones: "reading" };
+
+export function applySettings(message) {
+  if (message.tapZones === "screen" || message.tapZones === "reading") settings = { ...settings, tapZones: message.tapZones };
+}
 
 function flowOf(value) {
   return value === "scrolled" ? "scrolled" : "paginated";
@@ -20,7 +28,7 @@ function selectionIn(doc) {
 }
 
 /** Tap zones. Links keep their own click, and an active selection is never a page turn. */
-function attachTaps(view, doc, reply, id) {
+function attachTaps(view, doc, reply, id, popup) {
   doc.addEventListener("click", (event) => {
     if (event.defaultPrevented) return;
     if (event.target?.closest?.("a[href]")) return;
@@ -28,9 +36,13 @@ function attachTaps(view, doc, reply, id) {
     const frame = doc.defaultView?.frameElement;
     const left = frame ? frame.getBoundingClientRect().left : 0;
     const zone = tapZone(left + event.clientX, window.innerWidth);
-    if (zone === "left" || zone === "right") tapAt = performance.now();
-    if (zone === "left") void view.goLeft();
-    else if (zone === "right") void view.goRight();
+    if (zone === "left" || zone === "right") {
+      tapAt = performance.now();
+      popup?.hideBack();
+    }
+    const screen = settings.tapZones === "screen";
+    if (zone === "left") void (screen ? view.prev() : view.goLeft());
+    else if (zone === "right") void (screen ? view.next() : view.goRight());
     else reply({ type: "tap", id, zone: "center" });
   });
 }
@@ -59,6 +71,7 @@ function metaText(value) {
 export async function openForReading(message, reply, askDecision) {
   const { id, url } = message;
   const flow = flowOf(message.flow);
+  applySettings(message.settings ?? {});
   if (current?.view) {
     try {
       current.view.close();
@@ -67,13 +80,17 @@ export async function openForReading(message, reply, askDecision) {
     }
   }
   current = null;
+  let popup = null;
   const opened = await openBook(url, id, askDecision, {
     flow,
     lastLocation: typeof message.cfi === "string" ? message.cfi : null,
     onView(view) {
+      popup = new NotePopup(view, reply, id);
       view.addEventListener("load", (event) => {
         const doc = event.detail?.doc;
-        if (doc) attachTaps(view, doc, reply, id);
+        if (!doc) return;
+        popup.attach(doc, event.detail.index);
+        attachTaps(view, doc, reply, id, popup);
       });
       view.addEventListener("relocate", (event) => {
         const detail = event.detail ?? {};
@@ -101,7 +118,7 @@ export async function openForReading(message, reply, askDecision) {
     reply({ type: "refused", id, kind: opened.report.kind });
     return;
   }
-  current = { id, view: opened.view };
+  current = { id, view: opened.view, popup };
   const book = opened.view.book;
   reply({
     type: "opened",
@@ -113,12 +130,34 @@ export async function openForReading(message, reply, askDecision) {
     openMs: opened.report.openMs ?? null,
     rangeRequests: opened.report.rangeRequests ?? null,
     restored: opened.report.restored ?? false,
+    fixedLayout: opened.report.fixedLayout ?? false,
   });
 }
 
-export function setFlow(message) {
+const nextFrame = () => new Promise((resolve) => requestAnimationFrame(() => resolve()));
+
+/**
+ * foliate re-anchors on a flow change from rects measured before the new
+ * layout has settled, which on the phone landed at the end of the section.
+ * Keep the CFI of the visible text, let two frames pass, and go back to it.
+ */
+export async function setFlow(message) {
   if (!current || current.id !== message.id) return false;
-  current.view.renderer.setAttribute("flow", flowOf(message.flow));
+  const { view } = current;
+  if (view.isFixedLayout) return false;
+  const next = flowOf(message.flow);
+  if (view.renderer.getAttribute("flow") === next) return true;
+  const cfi = view.lastLocation?.cfi ?? null;
+  view.renderer.setAttribute("flow", next);
+  if (!cfi) return true;
+  await nextFrame();
+  await nextFrame();
+  try {
+    const resolved = view.resolveNavigation(cfi);
+    if (resolved) await view.renderer.goTo(resolved);
+  } catch (error) {
+    console.error("could not return to the location after a flow change", error);
+  }
   return true;
 }
 
@@ -126,5 +165,12 @@ export async function turn(message) {
   if (!current || current.id !== message.id) return false;
   if (message.dir === "prev") await current.view.prev();
   else await current.view.next();
+  return true;
+}
+
+/** Android back closes an open note first. The host asks; the page answers with a note message. */
+export function closeNote(message) {
+  if (!current || current.id !== message.id) return false;
+  current.popup?.close();
   return true;
 }

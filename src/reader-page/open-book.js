@@ -200,8 +200,11 @@ export async function openBook(url, id, askDecision, { flow, lastLocation, onVie
   const book = await new epub.EPUB(loader).init();
   await view.open(book);
   attachBookSecurity(view.book);
-  view.renderer.setAttribute("flow", flow === "scrolled" ? "scrolled" : "paginated");
-  view.renderer.setStyles(`${TABLE_CSS}\n${READING_CSS}`);
+  // Fixed-layout books get foliate's fixed-layout renderer, which has no flow and no setStyles.
+  if (!view.isFixedLayout) {
+    view.renderer.setAttribute("flow", flow === "scrolled" ? "scrolled" : "paginated");
+    view.renderer.setStyles?.(`${TABLE_CSS}\n${READING_CSS}`);
+  }
   // A saved CFI that no longer resolves falls back to the start of the text.
   let restored = false;
   try {
@@ -213,6 +216,7 @@ export async function openBook(url, id, askDecision, { flow, lastLocation, onVie
   await waitFor(() => view.lastLocation?.cfi, 90000);
   report.engineOpened = true;
   report.restored = restored;
+  report.fixedLayout = Boolean(view.isFixedLayout);
   report.openMs = Math.round(performance.now() - openStarted);
   report.rangeRequests = counter.n;
   report.fullResponses = counter.fullResponses;

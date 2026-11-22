@@ -15,20 +15,63 @@ export function liveDoc(view) {
   return view.renderer?.getContents?.()?.[0]?.doc ?? null;
 }
 
+/**
+ * A table wider than the page scrolls sideways inside its own box.
+ * The box is never wider than one column. foliate sizes a paginated section
+ * from the rects of everything in it, clipped or not, so a 4000 px table
+ * still added a run of blank pages. The table is therefore moved into a
+ * shadow root on its wrapper, where that measurement does not reach, with
+ * a copy of the book's own rules so it keeps its look.
+ */
 export function wrapWideTables(doc, view) {
   if (!doc?.querySelectorAll) return;
-  const pageWidth = Math.floor(view?.renderer?.size ?? 0);
+  let wrapped = 0;
   for (const table of doc.querySelectorAll("table")) {
-    if (table.parentElement?.classList?.contains("quire-table-scroll")) continue;
+    if (table.closest(".quire-table-scroll")) continue;
     const wrap = doc.createElement("div");
     wrap.className = "quire-table-scroll";
-    if (pageWidth > 0) {
-      wrap.style.width = `${pageWidth}px`;
-      wrap.style.maxWidth = `${pageWidth}px`;
-    }
+    wrap.style.cssText = "display:block;overflow-x:auto;overflow-y:hidden;max-width:100%;box-sizing:border-box";
     table.replaceWith(wrap);
     wrap.append(table);
+    wrapped += 1;
   }
+  if (!wrapped || !view?.renderer) return;
+  // The section is laid out after this load event. Measure then, and lay out again if a table moved.
+  const win = doc.defaultView;
+  win?.requestAnimationFrame(() =>
+    win.requestAnimationFrame(() => {
+      if (shadowWideTables(doc)) view.renderer.render?.();
+    }),
+  );
+}
+
+function shadowWideTables(doc) {
+  let rules = null;
+  let moved = 0;
+  for (const wrap of doc.querySelectorAll(".quire-table-scroll")) {
+    const table = wrap.firstElementChild;
+    if (!table || wrap.shadowRoot || typeof wrap.attachShadow !== "function") continue;
+    if (table.scrollWidth <= wrap.clientWidth + 1) continue;
+    rules ??= bookRules(doc);
+    const root = wrap.attachShadow({ mode: "open" });
+    const style = doc.createElement("style");
+    style.textContent = `${rules}\n:host { display: block; overflow-x: auto; overflow-y: hidden; max-width: 100%; }`;
+    root.append(style, table);
+    moved += 1;
+  }
+  return moved;
+}
+
+function bookRules(doc) {
+  const out = [];
+  for (const sheet of Array.from(doc.styleSheets ?? [])) {
+    try {
+      for (const rule of Array.from(sheet.cssRules ?? [])) out.push(rule.cssText);
+    } catch {
+      // A sheet that cannot be read keeps its rules to itself.
+    }
+  }
+  return out.join("\n");
 }
 
 export function waitFor(predicate, timeoutMs) {

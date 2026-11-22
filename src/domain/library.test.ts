@@ -11,6 +11,7 @@ import {
   setFlow,
   sortedBooks,
   titleFromFileName,
+  updateSettings,
   upsertBook,
   type ImportFacts,
 } from "./library.ts";
@@ -111,4 +112,15 @@ test("flow is stored on the library", () => {
   const library = emptyLibrary();
   assert.equal(setFlow(library, "paginated"), library);
   assert.equal(setFlow(library, "scrolled").flow, "scrolled");
+});
+
+test("settings default to reading-direction taps and survive a round trip", () => {
+  const library = emptyLibrary();
+  assert.equal(library.settings.tapZones, "reading");
+  assert.equal(parseLibrary('{"books":[]}').settings.tapZones, "reading");
+  assert.equal(parseLibrary('{"settings":{"tapZones":"sideways"}}').settings.tapZones, "reading");
+  const screen = updateSettings(library, { tapZones: "screen" });
+  assert.equal(screen.settings.tapZones, "screen");
+  assert.equal(updateSettings(screen, { tapZones: "screen" }), screen);
+  assert.equal(parseLibrary(serializeLibrary(screen)).settings.tapZones, "screen");
 });

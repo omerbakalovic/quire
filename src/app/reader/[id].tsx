@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, BackHandler, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { WebView, type WebViewMessageEvent } from "react-native-webview";
 
@@ -48,6 +48,8 @@ export default function BookScreen() {
   const lastSaved = useRef(0);
   const pending = useRef<{ cfi: string; fraction: number | null } | null>(null);
   const latestCfi = useRef<string | null>(book?.cfi ?? null);
+  const noteOpen = useRef(false);
+  const tapZones = library.settings.tapZones;
 
   const post = useCallback((message: object) => {
     webRef.current?.postMessage(JSON.stringify(message));
@@ -122,7 +124,14 @@ export default function BookScreen() {
       case "pong": {
         if (message.id !== PING_ID || answered.current) return;
         answered.current = true;
-        post({ type: "open", id, url: bookUrl(id), flow: getLibrary().flow, cfi: latestCfi.current ?? findBook(getLibrary(), id)?.cfi ?? null });
+        post({
+          type: "open",
+          id,
+          url: bookUrl(id),
+          flow: getLibrary().flow,
+          cfi: latestCfi.current ?? findBook(getLibrary(), id)?.cfi ?? null,
+          settings: getLibrary().settings,
+        });
         return;
       }
       case "encryption": {
@@ -163,6 +172,11 @@ export default function BookScreen() {
       case "tap":
         setControls((value) => !value);
         return;
+      case "note":
+        noteOpen.current = message.open;
+        note({ phase: "note", id, open: message.open, href: message.href, error: message.error });
+        if (message.open) setControls(false);
+        return;
       case "refused":
         note({ phase: "refused", id, kind: message.kind });
         setPhase("drm");
@@ -178,6 +192,22 @@ export default function BookScreen() {
         return;
     }
   }
+
+  // Settings changed elsewhere reach the open page.
+  useEffect(() => {
+    if (id && phase === "reading") post({ type: "settings", id, tapZones });
+  }, [id, phase, tapZones, post]);
+
+  // Android back closes an open note before it leaves the book.
+  useEffect(() => {
+    const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
+      if (!noteOpen.current || !id) return false;
+      post({ type: "close-note", id });
+      noteOpen.current = false;
+      return true;
+    });
+    return () => subscription.remove();
+  }, [id, post]);
 
   // Save the position every so often while reading, not on every relocate.
   useEffect(() => {

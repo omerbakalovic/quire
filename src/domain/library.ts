@@ -23,16 +23,26 @@ export type LibraryBook = {
   fraction: number | null;
 };
 
+/** "reading": tap zones follow the book's page direction. "screen": right is always forward. */
+export type TapZones = "reading" | "screen";
+
+export type Settings = {
+  tapZones: TapZones;
+};
+
 export type Library = {
   version: 1;
   flow: Flow;
+  settings: Settings;
   books: LibraryBook[];
 };
+
+export const DEFAULT_SETTINGS: Settings = { tapZones: "reading" };
 
 const BOOK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 
 export function emptyLibrary(): Library {
-  return { version: 1, flow: "paginated", books: [] };
+  return { version: 1, flow: "paginated", settings: { ...DEFAULT_SETTINGS }, books: [] };
 }
 
 function str(value: unknown): string | null {
@@ -76,7 +86,7 @@ export function parseLibrary(json: string | null | undefined): Library {
     return emptyLibrary();
   }
   if (!value || typeof value !== "object") return emptyLibrary();
-  const raw = value as { flow?: unknown; books?: unknown };
+  const raw = value as { flow?: unknown; books?: unknown; settings?: unknown };
   const books: LibraryBook[] = [];
   const seen = new Set<string>();
   for (const item of Array.isArray(raw.books) ? raw.books : []) {
@@ -85,7 +95,18 @@ export function parseLibrary(json: string | null | undefined): Library {
     seen.add(book.id);
     books.push(book);
   }
-  return { version: 1, flow: raw.flow === "scrolled" ? "scrolled" : "paginated", books };
+  return { version: 1, flow: raw.flow === "scrolled" ? "scrolled" : "paginated", settings: parseSettings(raw.settings), books };
+}
+
+function parseSettings(value: unknown): Settings {
+  const raw = (value && typeof value === "object" ? value : {}) as { tapZones?: unknown };
+  return { tapZones: raw.tapZones === "screen" ? "screen" : DEFAULT_SETTINGS.tapZones };
+}
+
+export function updateSettings(library: Library, patch: Partial<Settings>): Library {
+  const settings = parseSettings({ ...library.settings, ...patch });
+  if (settings.tapZones === library.settings.tapZones) return library;
+  return { ...library, settings };
 }
 
 export function serializeLibrary(library: Library): string {

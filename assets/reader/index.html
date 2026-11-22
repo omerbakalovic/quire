@@ -2,6 +2,9 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- Without this the Android WebView lays the page out 980 px wide and shrinks it, so book text is tiny.
+         Page zoom is off: font size is a reader setting (Milestone 4), and a pinch-zoomed page stops page turns. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
     <meta
       http-equiv="Content-Security-Policy"
       content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src blob: data:; font-src blob: data:; connect-src 'self' blob:; frame-src blob:"

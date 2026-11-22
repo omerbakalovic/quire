@@ -19,6 +19,15 @@ export const en = {
     notEpub: (count: number) => `${count} not EPUB files`,
     failed: (count: number) => `${count} failed`,
     loading: "Loading the library…",
+    settings: "Settings",
+  },
+  settings: {
+    title: "Settings",
+    taps: "Page turns",
+    tapsFollowBook: "Tap sides follow the book's direction",
+    tapsFollowBookOn:
+      "In right-to-left and vertical books, like Arabic or Japanese, tapping the left side goes forward, as in a printed book.",
+    tapsFollowBookOff: "Tapping the right side always goes forward, in every book.",
   },
   book: {
     opening: "Opening…",

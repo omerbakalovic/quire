@@ -8,7 +8,7 @@ import { classifyEncryption } from "@/domain/drm";
 import { findBook, type Flow } from "@/domain/library";
 import { t } from "@/i18n";
 import { flushLibrary, getLibrary, loadLibrary, saveFlow, saveOpened, savePosition, useLibrary } from "@/library/store";
-import { bookUrl, ensureLoopback, isServing, readerUrl, registerBook } from "@/renderer/book-url";
+import { appendNote, bookUrl, ensureLoopback, isServing, readerUrl, registerBook } from "@/renderer/book-url";
 import { decideOpen } from "@/renderer/open-decision";
 import { parseReaderMessage } from "@/renderer/protocol";
 import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webview-allow";
@@ -17,6 +17,15 @@ type ReaderWebView = WebView<object>;
 type Phase = "starting" | "opening" | "reading" | "missing" | "drm" | "failed";
 
 const PING_ID = "reader-ping";
+
+/** One JSON line per reader event in files/quire-report.jsonl, for the phone matrix. */
+function note(payload: Record<string, unknown>) {
+  try {
+    appendNote(JSON.stringify({ source: "reader", at: Date.now(), ...payload }));
+  } catch {
+    // The report file is a debugging aid. Reading never depends on it.
+  }
+}
 const SAVE_EVERY_MS = 1500;
 
 export default function BookScreen() {
@@ -94,6 +103,7 @@ export default function BookScreen() {
         void flushLibrary();
         return;
       }
+      if (state === "active") note({ phase: "foreground", id, serving: isServing() });
       if (state === "active" && !isServing()) {
         setNotice(strings.reloading);
         void connect().catch(() => setPhase("failed"));
@@ -121,10 +131,28 @@ export default function BookScreen() {
         return;
       }
       case "opened":
+        note({
+          phase: "opened",
+          id,
+          title: message.title,
+          sections: message.sections,
+          openMs: message.openMs,
+          rangeRequests: message.rangeRequests,
+          restored: message.restored,
+          flow: getLibrary().flow,
+        });
         setPhase("reading");
         setNotice(null);
         return;
       case "relocate": {
+        note({
+          phase: "relocate",
+          id,
+          cfi: message.cfi,
+          fraction: message.fraction,
+          section: message.sectionIndex,
+          sinceTapMs: message.sinceTapMs,
+        });
         latestCfi.current = message.cfi;
         setFraction(message.fraction);
         setChapter(message.tocLabel);
@@ -136,9 +164,11 @@ export default function BookScreen() {
         setControls((value) => !value);
         return;
       case "refused":
+        note({ phase: "refused", id, kind: message.kind });
         setPhase("drm");
         return;
       case "failed":
+        note({ phase: "failed", id, error: message.error });
         setPhase("failed");
         return;
       case "external-link":
@@ -157,6 +187,7 @@ export default function BookScreen() {
 
   function switchFlow(next: Flow) {
     if (next === flow || !id) return;
+    note({ phase: "flow", id, flow: next, cfi: latestCfi.current });
     setFlowState(next);
     void saveFlow(next);
     post({ type: "flow", id, flow: next });
@@ -180,6 +211,7 @@ export default function BookScreen() {
           onMessage={onMessage}
           onShouldStartLoadWithRequest={(request) => allowReaderNavigation(request.url)}
           onRenderProcessGone={() => {
+            note({ phase: "render-process-gone", id });
             setNotice(strings.reloading);
             void connect().catch(() => setPhase("failed"));
           }}

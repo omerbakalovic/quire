@@ -26,6 +26,7 @@ type NativeLoopback = {
   isServing(): boolean;
   importBook(source: string): Promise<NativeImport>;
   registerBook(id: string): boolean;
+  takePendingImports(): string[];
   deleteBook(id: string): Promise<boolean>;
   readLibrary(): Promise<string | null>;
   writeLibrary(json: string): Promise<void>;
@@ -58,6 +59,11 @@ export function isServing(): boolean {
 /** Copies a picked file (content:// or file://) into app storage and reads its package document. */
 export function importBook(source: string): Promise<NativeImport> {
   return native.importBook(source);
+}
+
+/** Debug seam: file:// URIs the host queued in files/quire-import. Consumed once. */
+export function takePendingImports(): string[] {
+  return native.takePendingImports();
 }
 
 /** Makes an imported book reachable at bookUrl(id). */

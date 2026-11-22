@@ -38,6 +38,10 @@ class QuireLoopbackModule : Module() {
       importBook(source)
     }
 
+    Function("takePendingImports") {
+      takePendingImports()
+    }
+
     Function("registerBook") { id: String ->
       registerBook(id)
     }
@@ -117,6 +121,24 @@ class QuireLoopbackModule : Module() {
     next.start()
     server = next
     port = next.port
+  }
+
+  /**
+   * Debug seam for the phone matrix: the host writes plain file names, one per
+   * line, to files/quire-import, and pushes those books into the external files
+   * dir. The list is consumed once. The app imports them as if picked.
+   */
+  private fun takePendingImports(): List<String> {
+    val context = context()
+    val list = File(context.filesDir, IMPORT_LIST)
+    if (!list.isFile) return emptyList()
+    val names = list.readLines().map { it.trim() }.filter { isPlainFileName(it) }
+    list.delete()
+    return names.mapNotNull { name ->
+      listOfNotNull(context.getExternalFilesDir(null)?.let { File(it, name) }, File(context.filesDir, name))
+        .firstOrNull { it.isFile }
+        ?.let { Uri.fromFile(it).toString() }
+    }
   }
 
   private fun registerBook(id: String): Boolean {
@@ -286,5 +308,6 @@ class QuireLoopbackModule : Module() {
     const val TURNS = "quire-turns"
     const val CHECK = "quire-check"
     const val COVER_WIDTH = 480
+    const val IMPORT_LIST = "quire-import"
   }
 }

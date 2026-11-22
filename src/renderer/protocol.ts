@@ -12,6 +12,8 @@ export type ReaderToHost =
       sections: number;
       toc: TocEntry[];
       openMs: number | null;
+      rangeRequests: number | null;
+      restored: boolean;
     }
   | {
       type: "relocate";
@@ -21,6 +23,7 @@ export type ReaderToHost =
       tocLabel: string | null;
       sectionIndex: number | null;
       sectionCount: number | null;
+      sinceTapMs: number | null;
     }
   | { type: "tap"; id: string; zone: "center" }
   | { type: "refused"; id: string; kind: string }
@@ -87,6 +90,8 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       sections: optNumber(message.sections) ?? 0,
       toc: parseToc(message.toc),
       openMs: optNumber(message.openMs),
+      rangeRequests: optNumber(message.rangeRequests),
+      restored: message.restored === true,
     };
   }
   if (message.type === "relocate") {
@@ -100,6 +105,7 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       tocLabel: optString(message.tocLabel),
       sectionIndex: optNumber(message.sectionIndex),
       sectionCount: optNumber(message.sectionCount),
+      sinceTapMs: optNumber(message.sinceTapMs),
     };
   }
   if (message.type === "tap") return message.zone === "center" ? { type: "tap", id, zone: "center" } : null;

@@ -7,6 +7,8 @@ import { tapZone } from "./tap-zones.js";
  * The device check harness in entry.js is separate and unchanged.
  */
 let current = null;
+// When the last tap turned a page, for the turn time reported with the next relocate.
+let tapAt = null;
 
 function flowOf(value) {
   return value === "scrolled" ? "scrolled" : "paginated";
@@ -26,6 +28,7 @@ function attachTaps(view, doc, reply, id) {
     const frame = doc.defaultView?.frameElement;
     const left = frame ? frame.getBoundingClientRect().left : 0;
     const zone = tapZone(left + event.clientX, window.innerWidth);
+    if (zone === "left" || zone === "right") tapAt = performance.now();
     if (zone === "left") void view.goLeft();
     else if (zone === "right") void view.goRight();
     else reply({ type: "tap", id, zone: "center" });
@@ -74,6 +77,8 @@ export async function openForReading(message, reply, askDecision) {
       });
       view.addEventListener("relocate", (event) => {
         const detail = event.detail ?? {};
+        const sinceTapMs = tapAt === null ? null : Math.round(performance.now() - tapAt);
+        tapAt = null;
         reply({
           type: "relocate",
           id,
@@ -82,6 +87,7 @@ export async function openForReading(message, reply, askDecision) {
           tocLabel: detail.tocItem?.label ?? null,
           sectionIndex: detail.section?.current ?? null,
           sectionCount: detail.section?.total ?? null,
+          sinceTapMs,
         });
       });
       view.addEventListener("external-link", (event) => {
@@ -106,6 +112,7 @@ export async function openForReading(message, reply, askDecision) {
     toc: tocOf(book),
     openMs: opened.report.openMs ?? null,
     rangeRequests: opened.report.rangeRequests ?? null,
+    restored: opened.report.restored ?? false,
   });
 }
 

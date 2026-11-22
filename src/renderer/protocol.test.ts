@@ -58,6 +58,7 @@ test("accepts the reading messages and cleans their fields", () => {
       tocLabel: "Letter I",
       sectionIndex: null,
       sectionCount: 38,
+      sinceTapMs: null,
     },
   );
   assert.equal(parseReaderMessage('{"type":"relocate","id":"b1","cfi":""}'), null);
@@ -77,6 +78,8 @@ test("accepts the reading messages and cleans their fields", () => {
     sections: 4,
     toc: [{ label: "One", href: null, depth: 10 }],
     openMs: null,
+    rangeRequests: null,
+    restored: false,
   });
   assert.deepEqual(parseReaderMessage('{"type":"failed","id":"b1"}'), {
     type: "failed",

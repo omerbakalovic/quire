@@ -1,12 +1,12 @@
 import { getDocumentAsync } from "expo-document-picker";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { sortedBooks, type LibraryBook } from "@/domain/library";
 import { t } from "@/i18n";
 import { importFiles, loadLibrary, removeFromLibrary, useLibrary, type ImportSummary } from "@/library/store";
-import { launchCheck } from "@/renderer/book-url";
+import { appendNote, launchCheck, takePendingImports } from "@/renderer/book-url";
 
 const COVER_COLORS = ["#5B6C8F", "#8F5B6C", "#6C8F5B", "#8F7A5B", "#5B8F88", "#7A5B8F"];
 
@@ -78,6 +78,29 @@ export default function LibraryScreen() {
     void loadLibrary().then(() => setReady(true));
   }, [check]);
 
+  // Debug builds only: books the host queued over adb are imported on launch and on return.
+  useEffect(() => {
+    if (check || !__DEV__) return;
+    async function drain() {
+      const uris = takePendingImports();
+      if (uris.length === 0) return;
+      setBusy(true);
+      try {
+        const results = await importFiles(uris.map((uri) => ({ uri, name: uri.split("/").pop() ?? null })));
+        for (const result of results) {
+          appendNote(JSON.stringify({ source: "library", phase: "import", name: result.name, outcome: result.outcome }));
+        }
+      } finally {
+        setBusy(false);
+      }
+    }
+    void drain();
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void drain();
+    });
+    return () => subscription.remove();
+  }, [check]);
+
   // A launch that names a device check goes to the harness, as M1a did.
   if (check) return <Redirect href="/checks" />;
 
@@ -92,6 +115,9 @@ export default function LibraryScreen() {
     setBusy(true);
     try {
       const results = await importFiles(picked.assets.map((asset) => ({ uri: asset.uri, name: asset.name ?? null })));
+      for (const result of results) {
+        appendNote(JSON.stringify({ source: "library", phase: "pick", name: result.name, outcome: result.outcome }));
+      }
       const onlyAdded = results.every((result) => result.outcome.kind === "added");
       if (!onlyAdded || results.length > 1) Alert.alert(strings.summaryTitle, summarize(results));
     } finally {

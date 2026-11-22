@@ -28,8 +28,43 @@ function selectionIn(doc) {
   return Boolean(selection && !selection.isCollapsed && String(selection).trim().length > 0);
 }
 
+// A touch that moves less than this is a tap, not a swipe.
+const TAP_SLOP_PX = 10;
+
+/**
+ * foliate snaps to the nearest page one frame after every touchend. After a
+ * tap, that snap races the turn the tap's click starts and can cancel it, so
+ * the page stays put (seen after a chapter change). A touch that did not move
+ * is kept from foliate's touchend; a swipe still reaches it and snaps as before.
+ */
+function keepTapsFromSnap(doc) {
+  let start = null;
+  doc.addEventListener(
+    "touchstart",
+    (event) => {
+      const touch = event.changedTouches[0];
+      start = touch && event.touches.length === 1 ? { x: touch.screenX, y: touch.screenY } : null;
+    },
+    { capture: true, passive: true },
+  );
+  doc.addEventListener(
+    "touchend",
+    (event) => {
+      const touch = event.changedTouches[0];
+      const from = start;
+      start = null;
+      if (!from || !touch || event.touches.length > 0) return;
+      if (Math.abs(touch.screenX - from.x) < TAP_SLOP_PX && Math.abs(touch.screenY - from.y) < TAP_SLOP_PX) {
+        event.stopImmediatePropagation();
+      }
+    },
+    { capture: true },
+  );
+}
+
 /** Tap zones. Links keep their own click, and an active selection is never a page turn. */
 function attachTaps(view, doc, reply, id, popup) {
+  keepTapsFromSnap(doc);
   doc.addEventListener("click", (event) => {
     if (event.defaultPrevented) return;
     if (linkFromEvent(event)) return;

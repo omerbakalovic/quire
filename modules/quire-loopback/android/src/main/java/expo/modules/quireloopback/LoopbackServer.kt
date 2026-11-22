@@ -49,6 +49,8 @@ class LoopbackServer(
     Thread(this::acceptLoop, "quire-accept").apply { isDaemon = true }.start()
   }
 
+  fun isServing(): Boolean = running && !serverSocket.isClosed
+
   fun close() {
     running = false
     try {

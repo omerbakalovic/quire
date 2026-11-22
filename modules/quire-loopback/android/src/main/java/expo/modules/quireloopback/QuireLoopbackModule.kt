@@ -1,6 +1,9 @@
 package expo.modules.quireloopback
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.net.Uri
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
@@ -20,6 +23,35 @@ class QuireLoopbackModule : Module() {
     AsyncFunction("start") {
       startServer()
       mapOf("port" to port, "token" to token)
+    }
+
+    AsyncFunction("ensureStarted") {
+      ensureStarted()
+      mapOf("port" to port, "token" to token)
+    }
+
+    Function("isServing") {
+      server?.isServing() == true
+    }
+
+    AsyncFunction("importBook") { source: String ->
+      importBook(source)
+    }
+
+    Function("registerBook") { id: String ->
+      registerBook(id)
+    }
+
+    AsyncFunction("deleteBook") { id: String ->
+      store().delete(id)
+    }
+
+    AsyncFunction("readLibrary") {
+      store().readLibrary()
+    }
+
+    AsyncFunction("writeLibrary") { json: String ->
+      store().writeLibrary(json)
     }
 
     AsyncFunction("registerIfPresent") { id: String, fileName: String ->
@@ -66,6 +98,89 @@ class QuireLoopbackModule : Module() {
 
   private fun context(): Context {
     return appContext.reactContext ?: error("React context is not ready")
+  }
+
+  private fun store(): BookStore = BookStore(context().filesDir)
+
+  /** The reader keeps one server for the process. A dead one is replaced, a live one is kept. */
+  @Synchronized
+  private fun ensureStarted() {
+    val current = server
+    if (current != null && current.isServing()) return
+    current?.close()
+    val context = context()
+    staticDir = materialize(context)
+    val bytes = ByteArray(16)
+    SecureRandom().nextBytes(bytes)
+    token = bytes.joinToString("") { "%02x".format(it) }
+    val next = LoopbackServer(token, moduleBackend())
+    next.start()
+    server = next
+    port = next.port
+  }
+
+  private fun registerBook(id: String): Boolean {
+    val file = store().bookFile(id) ?: return false
+    if (!file.isFile) return false
+    books[id] = file.canonicalFile
+    return true
+  }
+
+  /** Copy the picked file into app storage while hashing it, then read its package document. */
+  private fun importBook(source: String): Map<String, Any?> {
+    val context = context()
+    val uri = Uri.parse(source)
+    val input = when (uri.scheme) {
+      "content" -> context.contentResolver.openInputStream(uri)
+      "file" -> uri.path?.let { java.io.File(it).inputStream() }
+      else -> null
+    } ?: throw java.io.IOException("cannot read $source")
+    val store = store()
+    val stored = input.use { store.importStream(it) }
+    val facts = try {
+      EpubInspector.inspect(stored.file)
+    } catch (error: NotAnEpubException) {
+      if (!stored.duplicate) store.delete(stored.id)
+      return mapOf("ok" to false, "reason" to "not-epub", "detail" to error.message)
+    }
+    val coverPath = facts.cover?.let { writeCover(store, stored.id, it) }
+    return mapOf(
+      "ok" to true,
+      "id" to stored.id,
+      "hash" to stored.hash,
+      "size" to stored.size.toDouble(),
+      "duplicate" to stored.duplicate,
+      "title" to facts.title,
+      "authors" to facts.authors,
+      "language" to facts.language,
+      "publisher" to facts.publisher,
+      "description" to facts.description,
+      "series" to facts.series,
+      "seriesIndex" to facts.seriesIndex,
+      "encryptionXml" to facts.encryptionXml,
+      "coverUri" to coverPath,
+      "warnings" to facts.warnings,
+    )
+  }
+
+  /** Library covers are downscaled once, here, so the list never decodes a full-size scan. */
+  private fun writeCover(store: BookStore, id: String, cover: EpubCover): String? {
+    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+    BitmapFactory.decodeByteArray(cover.bytes, 0, cover.bytes.size, bounds)
+    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return null
+    var sample = 1
+    while (bounds.outWidth / (sample * 2) >= COVER_WIDTH && bounds.outHeight / (sample * 2) >= COVER_WIDTH) sample *= 2
+    val bitmap = BitmapFactory.decodeByteArray(
+      cover.bytes,
+      0,
+      cover.bytes.size,
+      BitmapFactory.Options().apply { inSampleSize = sample },
+    ) ?: return null
+    val file = store.coverFile(id, "jpg") ?: return null
+    store.coversDir.mkdirs()
+    file.outputStream().use { bitmap.compress(Bitmap.CompressFormat.JPEG, 85, it) }
+    bitmap.recycle()
+    return Uri.fromFile(file).toString()
   }
 
   @Synchronized
@@ -170,5 +285,6 @@ class QuireLoopbackModule : Module() {
     const val FIRST = "quire-first"
     const val TURNS = "quire-turns"
     const val CHECK = "quire-check"
+    const val COVER_WIDTH = 480
   }
 }

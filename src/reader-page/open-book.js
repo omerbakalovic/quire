@@ -170,3 +170,51 @@ export async function openPrepared(url, id, readMode, askDecision) {
   report.sections = view.book?.sections?.length ?? null;
   return { report, view, counter };
 }
+
+/**
+ * The reading open path. Range reads only, which the M1a phone run chose.
+ * DRM is refused before the engine sees the book. onView runs before
+ * view.open, so load and relocate listeners see the first section.
+ */
+// One light look until themes arrive in Milestone 4. Publisher colors still win where set.
+const READING_CSS = "html { color-scheme: light; background: #fdfdfb; color: #1a1a1a; }";
+
+export async function openBook(url, id, askDecision, { flow, lastLocation, onView }) {
+  zip.configure({ useWebWorkers: false });
+  const counter = { n: 0, fullResponses: 0 };
+  const bytes = await bookSize(url);
+  const zipReader = new zip.ZipReader(makeRangeReader(url, bytes, counter));
+  const loader = await loaderFromReader(zipReader);
+  const xml = await loader.text("META-INF/encryption.xml");
+  const decision = await askDecision(id, xml);
+  const report = { engineOpened: false, kind: decision.kind, bytes, rangeRequests: counter.n };
+  if (!decision.open) return { report, view: null, counter };
+
+  const stage = clearStage();
+  const view = document.createElement("foliate-view");
+  view.style.cssText = "display:block;width:100%;height:100%";
+  stage.append(view);
+  view.addEventListener("load", (event) => wrapWideTables(event.detail?.doc, view));
+  onView?.(view);
+  const openStarted = performance.now();
+  const book = await new epub.EPUB(loader).init();
+  await view.open(book);
+  attachBookSecurity(view.book);
+  view.renderer.setAttribute("flow", flow === "scrolled" ? "scrolled" : "paginated");
+  view.renderer.setStyles(`${TABLE_CSS}\n${READING_CSS}`);
+  // A saved CFI that no longer resolves falls back to the start of the text.
+  let restored = false;
+  try {
+    restored = Boolean(lastLocation && view.resolveNavigation(lastLocation));
+  } catch (error) {
+    console.error("saved location did not resolve", error);
+  }
+  await view.init({ lastLocation: restored ? lastLocation : null, showTextStart: true });
+  await waitFor(() => view.lastLocation?.cfi, 90000);
+  report.engineOpened = true;
+  report.restored = restored;
+  report.openMs = Math.round(performance.now() - openStarted);
+  report.rangeRequests = counter.n;
+  report.fullResponses = counter.fullResponses;
+  return { report, view, counter };
+}

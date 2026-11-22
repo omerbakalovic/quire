@@ -3,6 +3,23 @@ import { readFile } from "node:fs/promises";
 
 import * as esbuild from "esbuild";
 
+import paginatorTurnWait from "../patches/foliate/paginator-turn-wait.mjs";
+
+/** Patches against the pinned commit. Each must match exactly once, or the bundle fails. */
+const PATCHES = [paginatorTurnWait];
+
+function applyPatches(path, contents) {
+  // A Windows checkout with core.autocrlf can give CRLF line ends.
+  let next = contents.replace(/\r\n/g, "\n");
+  for (const patch of PATCHES) {
+    if (!path.endsWith(`/vendor/foliate-js/${patch.file}`)) continue;
+    const count = next.split(patch.find).length - 1;
+    if (count !== 1) throw new Error(`patch for ${patch.file} matched ${count} times, expected 1`);
+    next = next.replace(patch.find, patch.replace);
+  }
+  return next;
+}
+
 const pin = readFileSync(new URL("../vendor/foliate-js/PIN", import.meta.url), "utf8").trim();
 if (!/^[0-9a-f]{40}$/.test(pin)) throw new Error(`foliate pin is not a commit: ${pin}`);
 
@@ -10,9 +27,11 @@ const dynamicImport = {
   name: "quire-dynamic-import",
   setup(build) {
     build.onLoad({ filter: /\.js$/ }, async (args) => {
-      if (!args.path.includes("/vendor/foliate-js/")) return null;
-      if (args.path.endsWith("/vendor/zip.js")) return null;
-      let contents = await readFile(args.path, "utf8");
+      // esbuild gives Windows paths with backslashes.
+      const path = args.path.replaceAll("\\", "/");
+      if (!path.includes("/vendor/foliate-js/")) return null;
+      if (path.endsWith("/vendor/zip.js")) return null;
+      let contents = applyPatches(path, await readFile(args.path, "utf8"));
       contents = contents.replace(
         /import\((['"])(\.[^'"]+)\1\)/g,
         (_match, _quote, spec) => `__quireImport(${JSON.stringify(spec)})`,

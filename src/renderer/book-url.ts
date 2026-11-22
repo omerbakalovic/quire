@@ -1,6 +1,13 @@
 export {
   appendNote,
   bookUrl,
+  deleteBook,
+  ensureLoopback,
+  importBook,
+  isServing,
+  readLibrary,
+  registerBook,
+  writeLibrary,
   hasGo,
   hasTurns,
   launchCheck,
@@ -10,3 +17,4 @@ export {
   registerIfPresent,
   startLoopback,
 } from "../../modules/quire-loopback/src/index.ts";
+export type { NativeImport } from "../../modules/quire-loopback/src/index.ts";

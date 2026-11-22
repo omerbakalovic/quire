@@ -36,3 +36,51 @@ test("accepts an encryption excerpt and a check result", () => {
     },
   );
 });
+
+test("accepts the reading messages and cleans their fields", () => {
+  assert.deepEqual(
+    parseReaderMessage(
+      JSON.stringify({
+        type: "relocate",
+        id: "b1",
+        cfi: "epubcfi(/6/4!/4/2)",
+        fraction: 0.5,
+        tocLabel: "Letter I",
+        sectionIndex: "3",
+        sectionCount: 38,
+      }),
+    ),
+    {
+      type: "relocate",
+      id: "b1",
+      cfi: "epubcfi(/6/4!/4/2)",
+      fraction: 0.5,
+      tocLabel: "Letter I",
+      sectionIndex: null,
+      sectionCount: 38,
+    },
+  );
+  assert.equal(parseReaderMessage('{"type":"relocate","id":"b1","cfi":""}'), null);
+  assert.deepEqual(parseReaderMessage('{"type":"tap","id":"b1","zone":"center"}'), {
+    type: "tap",
+    id: "b1",
+    zone: "center",
+  });
+  assert.equal(parseReaderMessage('{"type":"tap","id":"b1","zone":"left"}'), null);
+  const opened = parseReaderMessage(
+    JSON.stringify({ type: "opened", id: "b1", title: 7, sections: 4, toc: [{ label: "One", depth: 99 }, null] }),
+  );
+  assert.deepEqual(opened, {
+    type: "opened",
+    id: "b1",
+    title: null,
+    sections: 4,
+    toc: [{ label: "One", href: null, depth: 10 }],
+    openMs: null,
+  });
+  assert.deepEqual(parseReaderMessage('{"type":"failed","id":"b1"}'), {
+    type: "failed",
+    id: "b1",
+    error: "unknown error",
+  });
+});

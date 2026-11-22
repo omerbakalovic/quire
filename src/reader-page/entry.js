@@ -4,6 +4,7 @@ import * as paginator from "../../vendor/foliate-js/paginator.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
 import "../../vendor/foliate-js/view.js";
 
+import { openForReading, setFlow, turn } from "./app.js";
 import { chapterFacts, liveDoc, timeTurns } from "./measure.js";
 import { openPrepared } from "./open-book.js";
 import { cspOf, installBookCspParser } from "./security.js";
@@ -134,6 +135,20 @@ function onMessage(event) {
     if (!waiter) return;
     pendingContinue.delete(message.id);
     waiter();
+    return;
+  }
+  if (message.type === "open") {
+    openForReading(message, reply, askDecision).catch((error) => {
+      reply({ type: "failed", id: message.id, error: String(error?.message ?? error) });
+    });
+    return;
+  }
+  if (message.type === "flow") {
+    setFlow(message);
+    return;
+  }
+  if (message.type === "turn") {
+    turn(message).catch((error) => console.error(error));
     return;
   }
   if (message.type === "run") {

@@ -74,34 +74,81 @@ export function findTarget(doc, fragment) {
 
 /**
  * The note block for a target. An id on a note element is that note. An id on
- * an empty anchor uses the nearest enclosing block, and a paragraph block also
- * takes the paragraphs after it until the next element that carries an id,
- * which is where the next note starts.
+ * an element with text is the block around it. An id on an empty anchor marks
+ * a place, not a block: the note is the block holding the first text after
+ * that place (see emptyAnchorBlock).
  */
 export function noteBlock(target) {
   if (!target) return null;
   const container = target.closest?.("aside, li, [epub\\:type], [role]");
   if (container && isNoteElement(container)) return [container];
   if (target.localName === "li") return [target];
-  if (hasText(target) && target.localName !== "a" && target.localName !== "span") {
+  if (!hasText(target)) return emptyAnchorBlock(target);
+  if (target.localName !== "a" && target.localName !== "span") {
     return target.matches?.(BLOCKS) ? withContinuation(target) : [target.closest(BLOCKS) ?? target];
   }
   const block = target.closest?.("li, p, aside, dd, blockquote");
   if (block) return block.localName === "p" ? withContinuation(block) : [block];
   const div = target.closest?.("div");
   if (div && !containsOtherIds(div, target)) return [div];
-  // An empty anchor between blocks: the note is what follows it, up to the next id.
-  const first = target.nextElementSibling;
-  if (first) {
-    const out = [first];
-    let next = first.nextElementSibling;
-    while (next && next.localName === "p" && !startsNextNote(next) && out.length < 12) {
-      out.push(next);
-      next = next.nextElementSibling;
-    }
-    return out;
-  }
   return target.parentElement ? [blockFromAnchor(target, target.parentElement)] : null;
+}
+
+const TEXT_BLOCKS = "li, p, aside, dd, dt, blockquote, td, h1, h2, h3, h4, h5, h6, div, section";
+const SHOW_TEXT = 4;
+
+/** The first non-blank text node after the target in document order, outside the target. */
+function firstTextAfter(target) {
+  const doc = target.ownerDocument;
+  const root = doc?.body ?? doc?.documentElement;
+  if (!root || !doc.createTreeWalker) return null;
+  const walker = doc.createTreeWalker(root, SHOW_TEXT);
+  walker.currentNode = target;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (target.contains(node)) continue;
+    if (node.data.trim()) return node;
+  }
+  return null;
+}
+
+/**
+ * An empty anchor (<a id="n1"/>) only marks where its note starts. Read from
+ * that place: an enclosing div that holds no other note id and has text after
+ * the anchor is the note. Otherwise the note starts at the block of the first
+ * text after the anchor, which may be the anchor's own paragraph, a heading
+ * that labels the note, or the paragraph after an empty wrapper, and runs on
+ * through plain paragraphs until the next id. The note never starts at a
+ * heading or block that belongs to someone else's id.
+ */
+function emptyAnchorBlock(target) {
+  const text = firstTextAfter(target);
+  if (!text) return null;
+  const div = target.closest?.("div");
+  if (div && div.contains(text) && !containsOtherIds(div, target) && !hasTextBefore(div, target)) return [div];
+  const start = text.parentElement?.closest?.(TEXT_BLOCKS);
+  if (!start) return null;
+  const ownBlock = start.contains(target);
+  if (!ownBlock && /^h[1-6]$/.test(start.localName) && ownsOtherId(start, target)) return null;
+  if (!containsOtherIds(start, target)) return withContinuation(start);
+  // The text sits loose in a block that holds other notes: take only the child that holds it.
+  if (text.parentElement === start) return null;
+  return withContinuation(blockFromAnchor(text.parentElement, start));
+}
+
+/** True when the block has non-blank text before the target. */
+function hasTextBefore(block, target) {
+  const walker = block.ownerDocument.createTreeWalker(block, SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (target.contains(node) || target.compareDocumentPosition(node) & 4) return false;
+    if (node.data.trim()) return true;
+  }
+  return false;
+}
+
+/** True when the block carries an id of its own, or one inside it, that is not the target's. */
+function ownsOtherId(block, target) {
+  if ((block.id || block.getAttribute?.("name")) && block !== target) return true;
+  return containsOtherIds(block, target);
 }
 
 function containsOtherIds(block, target) {
@@ -123,7 +170,7 @@ function startsNextNote(el) {
 
 function withContinuation(block) {
   const out = [block];
-  if (block.localName !== "p") return out;
+  if (block.localName !== "p" && !/^h[1-6]$/.test(block.localName)) return out;
   let next = block.nextElementSibling;
   while (next && next.localName === "p" && !startsNextNote(next) && out.length < 12) {
     out.push(next);

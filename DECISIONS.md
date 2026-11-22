@@ -177,6 +177,10 @@ A block cache is not added. The open counts were 14 and 17, and the busiest turn
 
 On the same origin, still through range reads: the scripted book showed `SCRIPTED-BOOK-TEXT` with `scriptRan` false and `script-src 'none'`. DRM was refused before open (`kind` `drm`). The font-obfuscation book opened with `secureContext` and `crypto.subtle` true, and the chapter text contained `FONT-OBFUSCATION-TEXT`.
 
+## Notes are Quire's own code
+
+foliate's `FootnoteHandler` is not bundled. It opened a hidden `<foliate-view>` per note, which raised the M1a `doc is null` errors when those views were removed, and it extracted empty-anchor notes wrong. `src/reader-page/notes.js` classifies and extracts notes, and `note-popup.js` shows the sanitized copy in a bottom sheet over the page. Sections read in the background are parsed by their own media type through `section.createDocument()`, never forced to text/html, so a self-closed empty anchor stays empty. The note tests use jsdom, a dev dependency only.
+
 ## Known limits
 
 Size caps, when import arrives in M1b, use the sizes a zip declares. A hostile zip can forge those numbers. The WebView read path has no byte cap of its own.

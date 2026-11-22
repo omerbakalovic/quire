@@ -68,6 +68,21 @@ function el(tag, attrs = {}, text) {
   return node;
 }
 
+/**
+ * A section read in the background, parsed by its own media type. foliate's
+ * createDocument parses XHTML as XML, so <a id="n1"/> stays an empty anchor.
+ * Parsing XHTML as text/html would open an <a> there that swallows the note.
+ */
+export async function readSection(section) {
+  if (section?.createDocument) return section.createDocument();
+  const url = await section.load();
+  const response = await fetch(url);
+  const text = await response.text();
+  const type = /xhtml|xml/i.test(response.headers.get("content-type") ?? "") ? "application/xhtml+xml" : "text/html";
+  const doc = new DOMParser().parseFromString(text, type);
+  return doc.querySelector("parsererror") ? new DOMParser().parseFromString(text, "text/html") : doc;
+}
+
 export class NotePopup {
   #view;
   #reply;
@@ -180,11 +195,7 @@ export class NotePopup {
     if (live?.defaultView) return Promise.resolve(live);
     let parsed = this.#parsedDocs.get(index);
     if (!parsed) {
-      parsed = (async () => {
-        const url = await this.#section(index).load();
-        const html = await (await fetch(url)).text();
-        return new DOMParser().parseFromString(html, "text/html");
-      })();
+      parsed = readSection(this.#section(index));
       parsed.catch(() => this.#parsedDocs.delete(index));
       this.#parsedDocs.set(index, parsed);
     }

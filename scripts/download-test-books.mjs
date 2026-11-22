@@ -14,7 +14,8 @@ const BOOKS = [
   {
     file: "se-frankenstein.epub",
     url: "https://standardebooks.org/ebooks/mary-shelley/frankenstein/downloads/mary-shelley_frankenstein.epub?source=download",
-    sha256: "2809c5ba9434a4973735e160aa3d4fa2ff360297a796e3a0f4b1b8d1c1d8693f",
+    // Re-pinned 2026-11-22: Standard Ebooks rebuilt the file after M1a.
+    sha256: "4cb9f313382570a470a7055b4696ec63068dfea304a0c7ef878890d2b4e3c3e2",
   },
   {
     file: "pg1342.epub",
@@ -33,10 +34,11 @@ const BOOKS = [
   },
 ];
 
-// IDPF/W3C EPUB 3 samples for the M1b matrix. CC-BY-SA 3.0 unless the samples
-// README table says otherwise for a file. A null hash is not pinned yet: the
+// IDPF/W3C EPUB 3 samples for the M1b matrix. All six are CC-BY-SA 3.0: the
+// samples table lists no other license for them (checked 2026-11-22). A null hash is not pinned yet: the
 // file is kept and its hash printed so it can be pinned in this list.
-const IDPF = "https://github.com/IDPF/epub3-samples/releases/latest/download";
+// Release 20230704. The repository was archived on 2026-11-09, so this tag is final.
+const IDPF = "https://github.com/IDPF/epub3-samples/releases/download/20230704";
 const SAMPLES = [
   "moby-dick.epub",
   "wasteland.epub",
@@ -62,14 +64,33 @@ async function exists(path) {
   }
 }
 
+const STALL_MS = 60_000;
+
+/** A connection that sends nothing for STALL_MS is aborted, so one stalled host cannot hang the run. */
 async function download(url, destination) {
-  const response = await fetch(url, { headers: { "User-Agent": userAgent } });
-  if (!response.ok || !response.body) {
-    throw new Error(`${url} returned ${response.status}`);
+  const controller = new AbortController();
+  let timer = setTimeout(() => controller.abort(new Error("stalled")), STALL_MS);
+  const touch = () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => controller.abort(new Error(`no data for ${STALL_MS / 1000} s`)), STALL_MS);
+  };
+  try {
+    const response = await fetch(url, { headers: { "User-Agent": userAgent }, signal: controller.signal });
+    if (!response.ok || !response.body) {
+      throw new Error(`${url} returned ${response.status}`);
+    }
+    const temporary = `${destination}.partial`;
+    const watch = new TransformStream({
+      transform(chunk, sink) {
+        touch();
+        sink.enqueue(chunk);
+      },
+    });
+    await pipeline(response.body.pipeThrough(watch), createWriteStream(temporary), { signal: controller.signal });
+    await rename(temporary, destination);
+  } finally {
+    clearTimeout(timer);
   }
-  const temporary = `${destination}.partial`;
-  await pipeline(response.body, createWriteStream(temporary));
-  await rename(temporary, destination);
 }
 
 async function main() {

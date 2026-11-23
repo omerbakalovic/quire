@@ -199,6 +199,10 @@ export default function BookScreen() {
         });
         setToc(message.toc);
         setFixedLayout(message.fixedLayout);
+        // Every open starts an empty jump stack in the page. Match it here too, so a pill
+        // from an earlier visit can never outlive the open (phone run 7b, noteref).
+        backDepth.current = 0;
+        setBackStack({ depth: 0, label: null });
         setPhase("reading");
         setNotice(null);
         return;
@@ -232,6 +236,7 @@ export default function BookScreen() {
         setControls((value) => !value);
         return;
       case "back-stack":
+        if (message.id !== id) return;
         note({ phase: "back-stack", id, depth: message.depth });
         backDepth.current = message.depth;
         setBackStack({ depth: message.depth, label: message.label });

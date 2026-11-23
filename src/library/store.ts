@@ -29,6 +29,7 @@ import { averageColor, deleteBook, deleteFont, importBook, importFont, readLibra
 import {
   addUserFont,
   changeSetting,
+  deleteProfile,
   forgetBook as forgetBookSettings,
   removeUserFont,
   setActiveProfile,
@@ -165,6 +166,11 @@ export function resetGlobalGroups(groups: string[]): Promise<void> {
 
 export function saveProfile(id: string, name: string, values: Values): Promise<void> {
   return commit({ ...library, custom: saveProfileTo(library.custom, id, name, values) });
+}
+
+export function removeProfile(id: string): Promise<void> {
+  const custom = deleteProfile(library.custom, id);
+  return custom === library.custom ? writing : commit({ ...library, custom });
 }
 
 export function chooseProfile(id: string | null): Promise<void> {

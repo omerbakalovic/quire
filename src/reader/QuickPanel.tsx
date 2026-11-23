@@ -1,14 +1,12 @@
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { t } from "@/i18n";
+import { stepValue } from "@/settings/customize";
 import { FONT_CHOICES, fontLabel, type UserFont } from "@/settings/fonts";
-import { ALIGNMENTS, settingFor, THEME_IDS, type Resolved, type SettingKey } from "@/settings/registry";
+import { ALIGNMENTS, THEME_IDS, type Resolved, type SettingKey } from "@/settings/registry";
 import { THEMES, type ThemeTokens } from "@/settings/themes";
 
 export type Scope = "global" | "book";
-
-/** A number setting whose lowest value means "not set" (book's, system): where the first step lands, and the lowest real value. */
-type Unset = { value: number; first: number; floor?: number };
 
 type Props = {
   settings: Resolved;
@@ -37,33 +35,24 @@ export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, u
   const ink = { color: chrome.chromeInk };
   const muted = { color: chrome.chromeInk, opacity: 0.7 };
 
-  const step = (key: SettingKey, dir: 1 | -1, unset?: Unset) => {
-    const setting = settingFor(key);
-    if (!setting || setting.type !== "number") return;
-    const current = settings[key] as number;
-    // Sentinel "book's value": the first step lands on a real value.
-    if (unset && current === unset.value) {
-      onChange(key, unset.first);
-      return;
-    }
-    const next = current + dir * setting.step;
-    if (unset && next < (unset.floor ?? unset.first) - 1e-9) onChange(key, unset.value);
-    else onChange(key, next);
+  const step = (key: SettingKey, dir: 1 | -1) => {
+    const next = stepValue(key, settings[key] as number, dir);
+    if (next !== null) onChange(key, next);
   };
 
   const mark = (key: SettingKey) => (scope === "book" && overridden.has(key) ? " •" : "");
 
-  const stepper = (label: string, key: SettingKey, shown: string, unset?: Unset) => (
+  const stepper = (label: string, key: SettingKey, shown: string) => (
     <View style={styles.row}>
       <Text style={[styles.label, ink]}>
         {label}
         {mark(key)}
       </Text>
-      <Pressable onPress={() => step(key, -1, unset)} style={styles.stepButton} accessibilityRole="button" accessibilityLabel={strings.decrease(label)}>
+      <Pressable onPress={() => step(key, -1)} style={styles.stepButton} accessibilityRole="button" accessibilityLabel={strings.decrease(label)}>
         <Text style={[styles.stepText, ink]}>−</Text>
       </Pressable>
       <Text style={[styles.value, ink]}>{shown}</Text>
-      <Pressable onPress={() => step(key, 1, unset)} style={styles.stepButton} accessibilityRole="button" accessibilityLabel={strings.increase(label)}>
+      <Pressable onPress={() => step(key, 1)} style={styles.stepButton} accessibilityRole="button" accessibilityLabel={strings.increase(label)}>
         <Text style={[styles.stepText, ink]}>+</Text>
       </Pressable>
     </View>
@@ -187,10 +176,10 @@ export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, u
               })}
             </View>
           </View>
-          {stepper(strings.lookBrightness, "light.brightness", settings["light.brightness"] > 0 ? `${Math.round(settings["light.brightness"] * 100)}%` : strings.system, { value: 0, first: 0.5, floor: 0.05 })}
+          {stepper(strings.lookBrightness, "light.brightness", settings["light.brightness"] > 0 ? `${Math.round(settings["light.brightness"] * 100)}%` : strings.system)}
           {stepper(strings.lookDimmer, "light.dimmer", settings["light.dimmer"] > 0 ? `${Math.round(settings["light.dimmer"] * 100)}%` : strings.off)}
           {stepper(strings.lookWarmth, "light.warmth", settings["light.warmth"] > 0 ? `${Math.round(settings["light.warmth"] * 100)}%` : strings.off)}
-          {stepper(strings.lookSpacing, "type.lineHeight", lineHeight > 0 ? lineHeight.toFixed(2) : strings.bookDefault, { value: 0, first: 1.2, floor: 1 })}
+          {stepper(strings.lookSpacing, "type.lineHeight", lineHeight > 0 ? lineHeight.toFixed(2) : strings.bookDefault)}
           {stepper(strings.lookMargins, "page.marginX", `${settings["page.marginX"]}%`)}
           {chips(strings.lookAlign, "type.alignment", ALIGNMENTS, strings.aligns)}
           <View style={styles.row}>

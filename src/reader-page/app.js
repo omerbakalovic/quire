@@ -298,12 +298,20 @@ export async function turn(message) {
   return true;
 }
 
-/** The page behind and around the book follows the theme too. */
+/** The page behind and around the book, and the note sheet, follow the theme too. */
 function paintPage(look) {
-  const page = typeof look?.page === "string" && /^#[0-9a-f]{6}$/i.test(look.page) ? look.page : null;
+  const hex = (value) => (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : null);
+  const page = hex(look?.page);
   if (!page) return;
-  document.documentElement.style.setProperty("--quire-page", page);
+  const root = document.documentElement.style;
+  root.setProperty("--quire-page", page);
   document.body.style.background = page;
+  const vars = { "--quire-ink": look.ink, "--quire-ink-muted": look.muted, "--quire-link": look.link, "--quire-chrome": look.chrome, "--quire-chrome-ink": look.chromeInk };
+  for (const [name, value] of Object.entries(vars)) {
+    if (hex(value)) root.setProperty(name, value);
+  }
+  // Hairlines are the muted ink at low strength, so they show on every theme.
+  if (hex(look.muted)) root.setProperty("--quire-line", `${look.muted}55`);
 }
 
 /**

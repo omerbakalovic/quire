@@ -24,24 +24,24 @@ const POPUP_CSS = `
 #quire-note .shade { position: absolute; inset: 0; background: rgba(0,0,0,.28); }
 #quire-note .sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 62vh; display: flex;
   padding: 0 var(--quire-inset-right, 0px) var(--quire-inset-bottom, 0px) var(--quire-inset-left, 0px);
-  flex-direction: column; background: #fdfdfb; color: #1a1a1a; border-radius: 14px 14px 0 0;
+  flex-direction: column; background: var(--quire-page, #fdfdfb); color: var(--quire-ink, #1a1a1a); border-radius: 14px 14px 0 0;
   box-shadow: 0 -4px 24px rgba(0,0,0,.25); font: 17px/1.5 Georgia, "Noto Serif", serif; }
-#quire-note .bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid #e3e1da;
-  font: 14px system-ui, sans-serif; color: #555; }
+#quire-note .bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid var(--quire-line, #e3e1da);
+  font: 14px system-ui, sans-serif; color: var(--quire-ink-muted, #555); }
 #quire-note .bar .label { flex: 1; padding-left: 8px; }
 #quire-note button { font: 14px system-ui, sans-serif; min-width: 44px; min-height: 44px; padding: 0 10px;
-  border: 0; border-radius: 8px; background: transparent; color: #1f5fbf; }
-#quire-note button:disabled { color: #aaa; }
+  border: 0; border-radius: 8px; background: transparent; color: var(--quire-link, #1f5fbf); }
+#quire-note button:disabled { color: var(--quire-ink-muted, #aaa); opacity: .55; }
 #quire-note button:focus:not(:focus-visible) { outline: none; }
 #quire-note .body { overflow-y: auto; padding: 12px 18px 18px; -webkit-overflow-scrolling: touch; }
 #quire-note .body p { margin: 0 0 .7em; }
 #quire-note .body img { max-width: 100%; height: auto; }
-#quire-note .body a { color: #1f5fbf; }
+#quire-note .body a { color: var(--quire-link, #1f5fbf); }
 #quire-note .body .quire-sc { font-variant: small-caps; }
 #quire-note .actions { display: flex; justify-content: space-between; gap: 4px; padding: 4px 8px 10px;
-  border-top: 1px solid #e3e1da; }
+  border-top: 1px solid var(--quire-line, #e3e1da); }
 #quire-back { position: fixed; left: 50%; bottom: calc(18px + var(--quire-inset-bottom, 0px)); transform: translateX(-50%); z-index: 40; display: none;
-  min-height: 44px; padding: 0 18px; border: 0; border-radius: 22px; background: #1c1c1e; color: #fff;
+  min-height: 44px; padding: 0 18px; border: 0; border-radius: 22px; background: var(--quire-chrome, #1c1c1e); color: var(--quire-chrome-ink, #fff);
   font: 15px system-ui, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
 #quire-back.show { display: block; }
 `;

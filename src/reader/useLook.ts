@@ -11,7 +11,7 @@ import { lookFor, type Look } from "./look";
 import type { Scope } from "./QuickPanel";
 
 function sameLook(a: Look, b: Look): boolean {
-  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page && a.fonts.map((f) => f.file).join() === b.fonts.map((f) => f.file).join();
+  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page && a.ink === b.ink && a.link === b.link && a.chrome === b.chrome && a.fonts.map((f) => f.file).join() === b.fonts.map((f) => f.file).join();
 }
 
 /**

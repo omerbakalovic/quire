@@ -1,3 +1,5 @@
+import { parseNavEntries, type NavEntry } from "../domain/navigation.ts";
+
 export type CheckReport = { engineOpened: boolean } & Record<string, unknown>;
 
 export type ReaderToHost =
@@ -10,10 +12,11 @@ export type ReaderToHost =
       id: string;
       title: string | null;
       sections: number;
-      toc: TocEntry[];
+      toc: NavEntry[];
       openMs: number | null;
       rangeRequests: number | null;
       restored: boolean;
+      restoredFrom: "cfi" | "section" | "book" | "start" | null;
       fixedLayout: boolean;
     }
   | {
@@ -22,19 +25,22 @@ export type ReaderToHost =
       cfi: string;
       fraction: number | null;
       tocLabel: string | null;
+      tocHref: string | null;
       sectionIndex: number | null;
+      sectionFraction: number | null;
+      /** Book fraction where the visible page starts; `fraction` is where it ends. */
+      startFraction: number | null;
       sectionCount: number | null;
       sinceTapMs: number | null;
       canGoBack: boolean;
     }
   | { type: "tap"; id: string; zone: "center" }
+  | { type: "back-stack"; id: string; depth: number; label: string | null }
   | { type: "refused"; id: string; kind: string }
   | { type: "failed"; id: string; error: string }
   | { type: "external-link"; id: string; href: string }
   | { type: "note"; id: string; open: boolean; href: string | null; error: string | null }
   | { type: "debug"; id: string; reqId: string; result: unknown };
-
-export type TocEntry = { label: string; href: string | null; depth: number };
 
 function optString(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
@@ -44,20 +50,7 @@ function optNumber(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-function parseToc(value: unknown): TocEntry[] {
-  if (!Array.isArray(value)) return [];
-  const out: TocEntry[] = [];
-  for (const item of value.slice(0, 2000)) {
-    if (!item || typeof item !== "object") continue;
-    const raw = item as { label?: unknown; href?: unknown; depth?: unknown };
-    out.push({
-      label: typeof raw.label === "string" ? raw.label.slice(0, 500) : "",
-      href: optString(raw.href),
-      depth: Math.max(0, Math.min(10, optNumber(raw.depth) ?? 0)),
-    });
-  }
-  return out;
-}
+const RESTORED_FROM = new Set(["cfi", "section", "book", "start"]);
 
 function parseId(value: unknown): string | null {
   if (typeof value !== "string" || value.length === 0) return null;
@@ -92,10 +85,13 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       id,
       title: optString(message.title),
       sections: optNumber(message.sections) ?? 0,
-      toc: parseToc(message.toc),
+      toc: parseNavEntries(message.toc),
       openMs: optNumber(message.openMs),
       rangeRequests: optNumber(message.rangeRequests),
       restored: message.restored === true,
+      restoredFrom: RESTORED_FROM.has(message.restoredFrom as string)
+        ? (message.restoredFrom as "cfi" | "section" | "book" | "start")
+        : null,
       fixedLayout: message.fixedLayout === true,
     };
   }
@@ -108,11 +104,18 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       cfi,
       fraction: optNumber(message.fraction),
       tocLabel: optString(message.tocLabel),
+      tocHref: optString(message.tocHref),
       sectionIndex: optNumber(message.sectionIndex),
+      sectionFraction: optNumber(message.sectionFraction),
+      startFraction: optNumber(message.startFraction),
       sectionCount: optNumber(message.sectionCount),
       sinceTapMs: optNumber(message.sinceTapMs),
       canGoBack: message.canGoBack === true,
     };
+  }
+  if (message.type === "back-stack") {
+    const depth = optNumber(message.depth);
+    return { type: "back-stack", id, depth: depth === null ? 0 : Math.max(0, Math.floor(depth)), label: optString(message.label) };
   }
   if (message.type === "tap") return message.zone === "center" ? { type: "tap", id, zone: "center" } : null;
   if (message.type === "refused") return { type: "refused", id, kind: optString(message.kind) ?? "unknown" };

@@ -1,3 +1,4 @@
+import { createJumps, navEntries, positionOf } from "./jumps.js";
 import { NotePopup } from "./note-popup.js";
 import { linkFromEvent } from "./notes.js";
 import { openBook } from "./open-book.js";
@@ -108,19 +109,6 @@ function attachTaps(view, doc, reply, id, popup) {
   });
 }
 
-function tocOf(book) {
-  const out = [];
-  const walk = (items, depth) => {
-    for (const item of items ?? []) {
-      if (out.length >= 2000) return;
-      out.push({ label: String(item.label ?? "").trim(), href: item.href ?? null, depth });
-      walk(item.subitems, depth + 1);
-    }
-  };
-  walk(book?.toc, 0);
-  return out;
-}
-
 function metaText(value) {
   if (!value) return null;
   if (typeof value === "string") return value;
@@ -143,11 +131,16 @@ export async function openForReading(message, reply, askDecision) {
   }
   current = null;
   let popup = null;
+  let jumps = null;
   const opened = await openBook(url, id, askDecision, {
     flow,
     lastLocation: typeof message.cfi === "string" ? message.cfi : null,
+    position: message.position && typeof message.position === "object" ? message.position : null,
     onView(view) {
       popup = new NotePopup(view, reply, id);
+      jumps = createJumps(view, reply, id);
+      // Internal links that are not notes. Notes are taken earlier, in the popup's capture handler.
+      view.addEventListener("link", (event) => jumps.onLink(event));
       view.addEventListener("load", (event) => {
         const doc = event.detail?.doc;
         if (!doc) return;
@@ -162,9 +155,9 @@ export async function openForReading(message, reply, askDecision) {
           type: "relocate",
           id,
           cfi: detail.cfi ?? null,
-          fraction: typeof detail.fraction === "number" ? detail.fraction : null,
+          ...positionOf(view, detail),
           tocLabel: detail.tocItem?.label ?? null,
-          sectionIndex: detail.section?.current ?? null,
+          tocHref: detail.tocItem?.href ?? null,
           sectionCount: detail.section?.total ?? null,
           sinceTapMs,
           // After following a link, Android back returns here instead of leaving the book.
@@ -172,7 +165,7 @@ export async function openForReading(message, reply, askDecision) {
         });
       });
       view.addEventListener("external-link", (event) => {
-        // External links stay inside the book. Confirmation and the system browser are Milestone 2.
+        // Never opened from the page. The host asks the reader, then opens the system browser.
         event.preventDefault();
         reply({ type: "external-link", id, href: String(event.detail?.href_ ?? "") });
       });
@@ -182,7 +175,7 @@ export async function openForReading(message, reply, askDecision) {
     reply({ type: "refused", id, kind: opened.report.kind });
     return;
   }
-  current = { id, view: opened.view, popup };
+  current = { id, view: opened.view, popup, jumps };
   applyMargin(opened.view);
   const book = opened.view.book;
   reply({
@@ -191,10 +184,11 @@ export async function openForReading(message, reply, askDecision) {
     title: metaText(book?.metadata?.title),
     authors: metaText(book?.metadata?.author),
     sections: book?.sections?.length ?? 0,
-    toc: tocOf(book),
+    toc: navEntries(opened.view),
     openMs: opened.report.openMs ?? null,
     rangeRequests: opened.report.rangeRequests ?? null,
     restored: opened.report.restored ?? false,
+    restoredFrom: opened.report.restoredFrom ?? null,
     fixedLayout: opened.report.fixedLayout ?? false,
   });
 }
@@ -212,18 +206,87 @@ export async function setFlow(message) {
   if (view.isFixedLayout) return false;
   const next = flowOf(message.flow);
   if (view.renderer.getAttribute("flow") === next) return true;
-  const cfi = view.lastLocation?.cfi ?? null;
+  const cfi = anchorCfi(view);
   view.renderer.setAttribute("flow", next);
   if (!cfi) return true;
   await nextFrame();
   await nextFrame();
+  await returnTo(view, cfi, "flow change");
+  await remember(view, cfi);
+  return true;
+}
+
+/**
+ * The CFI to keep across a relayout. Scroll mode shows a little of the text
+ * above the anchor, so its visible range starts earlier than the page the
+ * reader came from; Pages, Scroll, Pages then landed a page early. While the
+ * reader has not moved since the last relayout, keep that relayout's anchor.
+ */
+let kept = null;
+function anchorCfi(view) {
+  const here = view.lastLocation?.cfi ?? null;
+  if (kept && kept.view === view && kept.landed === here) return kept.cfi;
+  return here;
+}
+
+async function remember(view, cfi) {
+  await nextFrame();
+  kept = { view, cfi, landed: view.lastLocation?.cfi ?? null };
+}
+
+/**
+ * Go back to the text a CFI names after a relayout. The visible range's start
+ * often sits exactly on a page boundary, where its first rect can belong to
+ * the previous column, so landing on the collapsed start showed the page
+ * before (phone run 7b: Pages, Scroll, Pages went one page early). Anchor on
+ * the first visible character after the start instead.
+ */
+export async function returnTo(view, cfi, why) {
   try {
     const resolved = view.resolveNavigation(cfi);
-    if (resolved) await view.renderer.goTo(resolved);
+    if (!resolved) return;
+    const { anchor } = resolved;
+    await view.renderer.goTo({
+      ...resolved,
+      anchor: typeof anchor === "function" ? (doc) => firstCharacter(anchor(doc)) : anchor,
+    });
   } catch (error) {
-    console.error("could not return to the location after a flow change", error);
+    console.error(`could not return to the location after a ${why}`, error);
   }
-  return true;
+}
+
+/** A one-character range at the first non-space character from a range's start, or the range itself. */
+export function firstCharacter(range) {
+  if (!range || typeof range.cloneRange !== "function") return range;
+  const doc = range.startContainer?.ownerDocument;
+  if (!doc) return range;
+  // 4 is NodeFilter.SHOW_TEXT.
+  const walker = doc.createTreeWalker(doc.body ?? doc.documentElement, 4);
+  let node = range.startContainer;
+  let offset = range.startOffset;
+  if (node.nodeType !== 3) {
+    // An element boundary: start at the first text node at or after that child.
+    const child = node.childNodes?.[offset] ?? null;
+    walker.currentNode = child ?? node;
+    node = child && child.nodeType === 3 ? child : walker.nextNode();
+    offset = 0;
+  } else {
+    walker.currentNode = node;
+  }
+  for (let steps = 0; node && steps < 200; steps++) {
+    const text = node.data ?? "";
+    for (let i = offset; i < text.length; i++) {
+      if (!/\s/.test(text[i])) {
+        const out = doc.createRange();
+        out.setStart(node, i);
+        out.setEnd(node, i + 1);
+        return out;
+      }
+    }
+    node = walker.nextNode();
+    offset = 0;
+  }
+  return range;
 }
 
 export async function turn(message) {
@@ -231,6 +294,29 @@ export async function turn(message) {
   if (message.dir === "prev") await current.view.prev();
   else await current.view.next();
   return true;
+}
+
+/**
+ * Jumps from the host: a TOC entry ({ href }), the slider ({ fraction }), or a
+ * chapter button ({ href }). Each one pushes the back stack.
+ */
+export async function goTo(message) {
+  if (!current || current.id !== message.id || !current.jumps) return false;
+  const target = message.target ?? {};
+  current.popup?.hideBack();
+  if (typeof target.href === "string" && target.href.length > 0) return current.jumps.goToHref(target.href);
+  if (typeof target.fraction === "number" && Number.isFinite(target.fraction)) return current.jumps.goToFraction(target.fraction);
+  return false;
+}
+
+/** "Back to where you were": one level per call. `clear` drops the whole stack. */
+export async function back(message) {
+  if (!current || current.id !== message.id || !current.jumps) return false;
+  if (message.clear === true) {
+    current.jumps.clear();
+    return true;
+  }
+  return current.jumps.back();
 }
 
 /** Android back after following a link: back to where the link was. */

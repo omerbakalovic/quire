@@ -56,7 +56,10 @@ test("accepts the reading messages and cleans their fields", () => {
       cfi: "epubcfi(/6/4!/4/2)",
       fraction: 0.5,
       tocLabel: "Letter I",
+      tocHref: null,
       sectionIndex: null,
+      sectionFraction: null,
+      startFraction: null,
       sectionCount: 38,
       sinceTapMs: null,
       canGoBack: false,
@@ -82,11 +85,47 @@ test("accepts the reading messages and cleans their fields", () => {
     id: "b1",
     title: null,
     sections: 4,
-    toc: [{ label: "One", href: null, depth: 10 }],
+    toc: [{ label: "One", href: null, depth: 10, section: null, fraction: null }],
     openMs: null,
     rangeRequests: null,
     restored: false,
+    restoredFrom: null,
     fixedLayout: false,
+  });
+  assert.deepEqual(
+    parseReaderMessage(
+      JSON.stringify({ type: "relocate", id: "b1", cfi: "epubcfi(/6/4)", tocHref: "c1.xhtml", sectionIndex: 1, sectionFraction: 0.25 }),
+    ),
+    {
+      type: "relocate",
+      id: "b1",
+      cfi: "epubcfi(/6/4)",
+      fraction: null,
+      tocLabel: null,
+      tocHref: "c1.xhtml",
+      sectionIndex: 1,
+      sectionFraction: 0.25,
+      startFraction: null,
+      sectionCount: null,
+      sinceTapMs: null,
+      canGoBack: false,
+    },
+  );
+  const restoredOpen = parseReaderMessage(JSON.stringify({ type: "opened", id: "b1", restored: true, restoredFrom: "section" }));
+  assert.equal(restoredOpen?.type === "opened" && restoredOpen.restoredFrom, "section");
+  const oddOpen = parseReaderMessage(JSON.stringify({ type: "opened", id: "b1", restoredFrom: "elsewhere" }));
+  assert.equal(oddOpen?.type === "opened" && oddOpen.restoredFrom, null);
+  assert.deepEqual(parseReaderMessage('{"type":"back-stack","id":"b1","depth":2.7,"label":"Two"}'), {
+    type: "back-stack",
+    id: "b1",
+    depth: 2,
+    label: "Two",
+  });
+  assert.deepEqual(parseReaderMessage('{"type":"back-stack","id":"b1","depth":-4}'), {
+    type: "back-stack",
+    id: "b1",
+    depth: 0,
+    label: null,
   });
   assert.deepEqual(parseReaderMessage('{"type":"failed","id":"b1"}'), {
     type: "failed",

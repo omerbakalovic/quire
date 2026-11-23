@@ -4,6 +4,7 @@
  * Parsing never throws: a damaged index keeps the rows it can read.
  */
 import { DEFAULT_LOOK, parseLook, type LibraryLook } from "./library-look.ts";
+import { cleanPosition } from "./position.ts";
 
 export type Flow = "paginated" | "scrolled";
 
@@ -20,9 +21,11 @@ export type LibraryBook = {
   coverUri: string | null;
   addedAt: number;
   lastOpenedAt: number | null;
-  /** Last reported location. Restore is hardened in Milestone 2. */
+  /** Last reported location, with the fallback used when the CFI does not resolve. */
   cfi: string | null;
   fraction: number | null;
+  sectionIndex: number | null;
+  sectionFraction: number | null;
 };
 
 /** "reading": tap zones follow the book's page direction. "screen": right is always forward. */
@@ -62,7 +65,12 @@ function parseBook(value: unknown): LibraryBook | null {
   const raw = value as Record<string, unknown>;
   const id = str(raw.id);
   if (!id || !BOOK_ID.test(id)) return null;
-  const fraction = num(raw.fraction);
+  const position = cleanPosition({
+    cfi: raw.cfi,
+    fraction: raw.fraction,
+    sectionIndex: raw.sectionIndex,
+    sectionFraction: raw.sectionFraction,
+  });
   return {
     id,
     hash: str(raw.hash) ?? "",
@@ -77,7 +85,9 @@ function parseBook(value: unknown): LibraryBook | null {
     addedAt: num(raw.addedAt) ?? 0,
     lastOpenedAt: num(raw.lastOpenedAt),
     cfi: str(raw.cfi),
-    fraction: fraction === null ? null : Math.min(1, Math.max(0, fraction)),
+    fraction: position.fraction,
+    sectionIndex: position.sectionIndex,
+    sectionFraction: position.sectionFraction,
   };
 }
 
@@ -166,6 +176,8 @@ export function upsertBook(library: Library, facts: ImportFacts, fileName: strin
     lastOpenedAt: existing?.lastOpenedAt ?? null,
     cfi: existing?.cfi ?? null,
     fraction: existing?.fraction ?? null,
+    sectionIndex: existing?.sectionIndex ?? null,
+    sectionFraction: existing?.sectionFraction ?? null,
   };
   const books = existing
     ? library.books.map((book) => (book.id === facts.id ? next : book))
@@ -177,22 +189,36 @@ export function removeBook(library: Library, id: string): Library {
   return { ...library, books: library.books.filter((book) => book.id !== id) };
 }
 
-export function recordPosition(
-  library: Library,
-  id: string,
-  cfi: string,
-  fraction: number | null,
-  now: number,
-): Library {
+/**
+ * Records where the reader is. A missing or non-finite part keeps what was
+ * saved before, so one bad report never erases a good position.
+ */
+export function recordPosition(library: Library, id: string, report: PositionReport, now: number): Library {
   let changed = false;
+  const clean = cleanPosition(report);
   const books = library.books.map((book) => {
     if (book.id !== id) return book;
     changed = true;
-    const clean = fraction === null || !Number.isFinite(fraction) ? book.fraction : Math.min(1, Math.max(0, fraction));
-    return { ...book, cfi, fraction: clean, lastOpenedAt: now };
+    const sectionIndex = clean.sectionIndex ?? book.sectionIndex;
+    return {
+      ...book,
+      cfi: report.cfi,
+      fraction: clean.fraction ?? book.fraction,
+      sectionIndex,
+      sectionFraction:
+        clean.sectionIndex !== null ? clean.sectionFraction : sectionIndex === book.sectionIndex ? book.sectionFraction : null,
+      lastOpenedAt: now,
+    };
   });
   return changed ? { ...library, books } : library;
 }
+
+export type PositionReport = {
+  cfi: string;
+  fraction: number | null;
+  sectionIndex?: number | null;
+  sectionFraction?: number | null;
+};
 
 export function markOpened(library: Library, id: string, now: number): Library {
   return {

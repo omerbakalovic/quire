@@ -56,6 +56,29 @@ Desktop Firefox medians for this book were about 35 ms to open and 101 ms per tu
 
 A second full run, after the table was widened to 4000 px, passed the same five checks. The large book fetched in 2098 ms and opened in 124 ms. Its turn wall times were 185, 101, 102, 103, and 115 ms, and the move before the 100 ms wait was 0, 1, 1, 3, and 15 ms.
 
+## Milestone 2, in progress (branch `claude/project-thread-xehbd9`, off `m1b-import-reading`)
+
+Android only; iOS is out of scope. Footnotes and `note-popup.js` are left alone (a separate fix is in flight).
+
+Built, cloud only, not yet run on the phone:
+
+- Position: every relocate now carries `sectionIndex` and `sectionFraction` next to the CFI and book fraction, and the library saves all four. Restore tries the CFI when it resolves to the saved section, then the saved section plus offset, then the book fraction, then the start of the text (`src/domain/position.ts`, `restoreTarget` in `src/reader-page/jumps.js`). The `opened` message reports which one was used as `restoredFrom`. M1b rows without a section still parse.
+- Back stack: TOC entries, the slider, the chapter buttons, and internal book links each push where the reader was (`src/reader-page/back-stack.js`, 30 levels). A "Back to …" pill shows the chapter it returns to and how many levels remain, with a dismiss button. Android back closes a note, then the contents, then steps back one jump level, then returns from a note's "Go to note" (M1b's foliate-history back), then leaves the book. Jumps move through `view.renderer.goTo`, not `view.goTo`, so they never add to foliate's history and the two stacks do not replay each other. The note popup's own "Back to text" chip is unchanged.
+- Phone run 7 (Xiaomi 15T, 2026-11-23, partial): quick matrix 123/123, Contents panel and Back pill passed. Three slider bugs were fixed afterwards: « did nothing on a chapter's first page, because foliate's relocate `fraction` is the END of the visible page, so the first page already read as inside the chapter. Relocate now also sends `startFraction` and a `sectionFraction` taken from the paginator's page count, and chapter logic uses those. Ticks now go one TOC level deeper when the top level has fewer than 8 entries (Frankenstein's volumes). The Back pill hides while the slider is dragged, so the preview no longer covers it. Back-key order, restore and the web-link confirm are still to check on the phone.
+- Contents panel (`src/reader/TocPanel.tsx`): nested, the current chapter marked and scrolled into view, entries that do not resolve are disabled.
+- Progress slider (`src/reader/ProgressSlider.tsx`): top-level chapter ticks, a chapter and percent preview while dragging, a jump on release, and adjustable accessibility actions. Previous/next chapter buttons sit either side. Previous goes to the start of the current chapter first.
+- External links: only `http`, `https`, and `mailto` are offered, after a confirmation that shows the host or address. Other schemes, spaces, control characters, and `user@host` URLs are refused (`src/domain/links.ts`).
+- `npm test`: 76 tests, 72 pass, 4 skipped (test books not downloaded). `tsc --noEmit` passes.
+- Desktop Chromium smoke run of the bundled reader page on `noteref.epub` and `malformed.epub`: TOC entries came back with sections and fractions, a TOC jump and a slider jump each pushed the stack (depth 1, then 2), two backs returned to the exact CFIs, a CFI past the spine with a saved section restored into that section (`restoredFrom: section`), and a good CFI restored exactly.
+
+Still to do for M2:
+
+- Phone checks: restart, rotation, flow switch and back-stack behavior on the Xiaomi 15T, plus the phone matrix (the bottom bar is taller now, two rows).
+- Move the library index to SQLite with migrations (needs `expo-sqlite` and a native rebuild).
+- The reader screen is about 490 lines. Split it after M1b merges, to avoid conflicts with that branch.
+- Reopening a book in the same page logs `Cannot read properties of null (reading 'destroy')` from foliate's `Paginator.destroy`. Seen on desktop; it is caught and the next book opens. It predates M2.
+- Fragment TOC entries inside one file share that file's start fraction, so ticks and the highlight fall back to the engine's own TOC item for those.
+
 ## Next
 
 M1a is proven on the Xiaomi 15T and recorded below. Do not start M1b until that work is asked for. M1b is import, flow modes, taps, the paginator patch, the book matrix, the lifecycle test, and the IDPF sample downloads. Empty-anchor notes and the 67 `doc is null` errors were later fixed on `claude/project-thread-q5b6uf`; see the footnote section above.

@@ -59,7 +59,7 @@ test("bad rows are dropped and good rows are kept", () => {
 
 test("serialize and parse round-trip", () => {
   let library = upsertBook(emptyLibrary(), facts("a1"), null, 100);
-  library = recordPosition(library, "a1", "epubcfi(/6/4!/4/2)", 0.25, 200);
+  library = recordPosition(library, "a1", { cfi: "epubcfi(/6/4!/4/2)", fraction: 0.25 }, 200);
   assert.deepEqual(parseLibrary(serializeLibrary(library)), library);
 });
 
@@ -74,7 +74,7 @@ test("a missing title falls back to the file name, then the id", () => {
 
 test("re-importing keeps the position and the added date", () => {
   let library = upsertBook(emptyLibrary(), facts("c1"), null, 100);
-  library = recordPosition(library, "c1", "epubcfi(/6/8!/4/2)", 0.5, 300);
+  library = recordPosition(library, "c1", { cfi: "epubcfi(/6/8!/4/2)", fraction: 0.5 }, 300);
   library = upsertBook(library, facts("c1", { title: "New title" }), null, 900);
   assert.equal(library.books.length, 1);
   const [book] = library.books;
@@ -87,13 +87,13 @@ test("re-importing keeps the position and the added date", () => {
 
 test("recording a position for an unknown book leaves the library unchanged", () => {
   const library = upsertBook(emptyLibrary(), facts("d1"), null, 1);
-  assert.equal(recordPosition(library, "zz", "epubcfi(/6/2)", 0.1, 5), library);
+  assert.equal(recordPosition(library, "zz", { cfi: "epubcfi(/6/2)", fraction: 0.1 }, 5), library);
 });
 
 test("a non-finite fraction keeps the previous one", () => {
   let library = upsertBook(emptyLibrary(), facts("e1"), null, 1);
-  library = recordPosition(library, "e1", "epubcfi(/6/2)", 0.3, 2);
-  library = recordPosition(library, "e1", "epubcfi(/6/4)", Number.NaN, 3);
+  library = recordPosition(library, "e1", { cfi: "epubcfi(/6/2)", fraction: 0.3 }, 2);
+  library = recordPosition(library, "e1", { cfi: "epubcfi(/6/4)", fraction: Number.NaN }, 3);
   assert.equal(library.books[0].fraction, 0.3);
   assert.equal(library.books[0].cfi, "epubcfi(/6/4)");
 });
@@ -123,4 +123,32 @@ test("settings default to reading-direction taps and survive a round trip", () =
   assert.equal(screen.settings.tapZones, "screen");
   assert.equal(updateSettings(screen, { tapZones: "screen" }), screen);
   assert.equal(parseLibrary(serializeLibrary(screen)).settings.tapZones, "screen");
+});
+
+test("the section fallback is saved, kept on re-import, and round-trips", () => {
+  let library = upsertBook(emptyLibrary(), facts("f1"), null, 1);
+  library = recordPosition(library, "f1", { cfi: "epubcfi(/6/6!/4/2)", fraction: 0.4, sectionIndex: 2, sectionFraction: 0.25 }, 2);
+  assert.equal(library.books[0].sectionIndex, 2);
+  assert.equal(library.books[0].sectionFraction, 0.25);
+  library = upsertBook(library, facts("f1"), null, 3);
+  assert.equal(library.books[0].sectionIndex, 2);
+  assert.deepEqual(parseLibrary(serializeLibrary(library)), library);
+});
+
+test("a report without a section keeps the saved section; a new section without an offset clears it", () => {
+  let library = upsertBook(emptyLibrary(), facts("g1"), null, 1);
+  library = recordPosition(library, "g1", { cfi: "epubcfi(/6/6)", fraction: 0.4, sectionIndex: 2, sectionFraction: 0.25 }, 2);
+  library = recordPosition(library, "g1", { cfi: "epubcfi(/6/6!/4)", fraction: 0.41 }, 3);
+  assert.equal(library.books[0].sectionIndex, 2);
+  assert.equal(library.books[0].sectionFraction, 0.25);
+  library = recordPosition(library, "g1", { cfi: "epubcfi(/6/8)", fraction: 0.6, sectionIndex: 3, sectionFraction: null }, 4);
+  assert.equal(library.books[0].sectionIndex, 3);
+  assert.equal(library.books[0].sectionFraction, null);
+});
+
+test("M1b rows without a section still parse", () => {
+  const library = parseLibrary(JSON.stringify({ books: [{ id: "h1", cfi: "epubcfi(/6/2)", fraction: 0.2 }] }));
+  assert.equal(library.books[0].sectionIndex, null);
+  assert.equal(library.books[0].sectionFraction, null);
+  assert.equal(library.books[0].cfi, "epubcfi(/6/2)");
 });

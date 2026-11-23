@@ -3,6 +3,7 @@
  * SQLite replaces it in Milestone 2, when saved positions get their own table.
  * Parsing never throws: a damaged index keeps the rows it can read.
  */
+import { emptyCustomization, parseCustomization, type Customization } from "../settings/customization.ts";
 import { DEFAULT_LOOK, parseLook, type LibraryLook } from "./library-look.ts";
 import { cleanPosition } from "./position.ts";
 
@@ -41,6 +42,8 @@ export type Library = {
   settings: Settings;
   /** How the shelf looks (src/domain/library-look.ts). */
   look: LibraryLook;
+  /** Reading look: global values, profiles, per-book overrides (src/settings). */
+  custom: Customization;
   books: LibraryBook[];
 };
 
@@ -49,7 +52,7 @@ export const DEFAULT_SETTINGS: Settings = { tapZones: "reading" };
 const BOOK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 
 export function emptyLibrary(): Library {
-  return { version: 1, flow: "paginated", settings: { ...DEFAULT_SETTINGS }, look: DEFAULT_LOOK, books: [] };
+  return { version: 1, flow: "paginated", settings: { ...DEFAULT_SETTINGS }, look: DEFAULT_LOOK, custom: emptyCustomization(), books: [] };
 }
 
 function str(value: unknown): string | null {
@@ -100,7 +103,7 @@ export function parseLibrary(json: string | null | undefined): Library {
     return emptyLibrary();
   }
   if (!value || typeof value !== "object") return emptyLibrary();
-  const raw = value as { flow?: unknown; books?: unknown; settings?: unknown; look?: unknown };
+  const raw = value as { flow?: unknown; books?: unknown; settings?: unknown; look?: unknown; custom?: unknown };
   const books: LibraryBook[] = [];
   const seen = new Set<string>();
   for (const item of Array.isArray(raw.books) ? raw.books : []) {
@@ -114,6 +117,7 @@ export function parseLibrary(json: string | null | undefined): Library {
     flow: raw.flow === "scrolled" ? "scrolled" : "paginated",
     settings: parseSettings(raw.settings),
     look: parseLook(raw.look),
+    custom: parseCustomization(raw.custom),
     books,
   };
 }

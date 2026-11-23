@@ -4,6 +4,7 @@ import { PanResponder, StyleSheet, Text, View, type LayoutChangeEvent } from "re
 import { chapterAt, chapterTicks, type NavEntry } from "@/domain/navigation";
 import { clamp01 } from "@/domain/position";
 import { t } from "@/i18n";
+import { useChrome } from "./chrome";
 
 type Props = {
   fraction: number | null;
@@ -25,6 +26,7 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
   const [width, setWidth] = useState(0);
   const [drag, setDrag] = useState<number | null>(null);
   const ticks = useMemo(() => chapterTicks(toc), [toc]);
+  const c = useChrome();
   const geometry = useRef({ width: 0, pageX: 0 });
   const trackRef = useRef<ComponentRef<typeof View>>(null);
   const commitRef = useRef(onCommit);
@@ -82,13 +84,13 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
   return (
     <View style={styles.wrap}>
       {drag !== null ? (
-        <View style={[styles.bubble, { left: Math.max(0, Math.min(width - 180, shown * width - 90)) }]} pointerEvents="none">
+        <View style={[styles.bubble, { left: Math.max(0, Math.min(width - 180, shown * width - 90)), backgroundColor: c.panel, borderColor: c.line }]} pointerEvents="none">
           {preview ? (
-            <Text style={styles.bubbleTitle} numberOfLines={1}>
+            <Text style={[styles.bubbleTitle, { color: c.ink }]} numberOfLines={1}>
               {preview}
             </Text>
           ) : null}
-          <Text style={styles.bubbleSub}>{`${percent}%`}</Text>
+          <Text style={[styles.bubbleSub, { color: c.muted }]}>{`${percent}%`}</Text>
         </View>
       ) : null}
       <View
@@ -107,18 +109,18 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
           onCommit(clamp01(next));
         }}
       >
-        <View style={styles.track}>
-          <View style={[styles.fill, { width: `${shown * 100}%` }]} />
+        <View style={[styles.track, { backgroundColor: c.track }]}>
+          <View style={[styles.fill, { width: `${shown * 100}%`, backgroundColor: c.accent }]} />
         </View>
         {/* Ticks sit in their own layer: Android clips children to a rounded view, which hid all
-            but a sliver of each tick inside the 4 px track (phone run 7b). Dark on the filled
-            part, light on the rest, so they show on both. */}
+            but a sliver of each tick inside the 4 px track (phone run 7b). They change colour
+            where the fill passes them, so they show on both sides. */}
         <View style={styles.ticks} pointerEvents="none">
           {ticks.map((tick) => (
-            <View key={tick} style={[styles.tick, { left: `${tick * 100}%` }, tick <= shown ? styles.tickDone : styles.tickAhead]} />
+            <View key={tick} style={[styles.tick, { left: `${tick * 100}%` }, { backgroundColor: tick <= shown ? c.onAccent : c.muted }]} />
           ))}
         </View>
-        <View style={[styles.thumb, { left: `${shown * 100}%` }]} />
+        <View style={[styles.thumb, { left: `${shown * 100}%`, backgroundColor: c.accent, borderColor: c.onAccent }]} />
       </View>
     </View>
   );
@@ -131,10 +133,9 @@ const styles = StyleSheet.create({
   ticks: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },
   fill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 2, backgroundColor: "#ddd" },
   tick: { position: "absolute", top: 16, width: 2, height: 12, marginLeft: -1, borderRadius: 1 },
-  tickDone: { backgroundColor: "#1c1c1e" },
-  tickAhead: { backgroundColor: "#d0d0d0" },
   thumb: {
     position: "absolute",
+    borderWidth: 2,
     width: 18,
     height: 18,
     marginLeft: -9,
@@ -142,6 +143,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#fff",
   },
   bubble: {
+    borderWidth: StyleSheet.hairlineWidth,
     position: "absolute",
     bottom: 48,
     width: 180,

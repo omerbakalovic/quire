@@ -12,6 +12,7 @@ export default function RootLayout() {
         <Stack.Screen name="reader/[id]" options={{ headerShown: false }} />
         <Stack.Screen name="checks" options={{ title: t().reader.title }} />
         <Stack.Screen name="settings" options={{ title: t().settings.title }} />
+        <Stack.Screen name="customize" options={{ title: t().customize.title }} />
       </Stack>
     </>
   );

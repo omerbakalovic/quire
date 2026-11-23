@@ -86,6 +86,14 @@ class QuireLoopbackModule : Module() {
       store().writeLibrary(json)
     }
 
+    AsyncFunction("importFont") { source: String, id: String ->
+      importFont(source, id)
+    }
+
+    AsyncFunction("deleteFont") { file: String ->
+      deleteFont(file)
+    }
+
     AsyncFunction("registerIfPresent") { id: String, fileName: String ->
       registerIfPresent(id, fileName)
     }
@@ -374,6 +382,12 @@ class QuireLoopbackModule : Module() {
         if (name != "reader.html" && name != "reader.js") return null
         return staticDir?.let { File(it, name) }
       }
+      override fun font(name: String): File? {
+        if (!isFontFile(name)) return null
+        // Imported fonts live with the user's data; bundled ones came out of the APK.
+        val dir = if (name.startsWith("user-")) userFontsDir(context()) else staticDir?.let { File(it, "fonts") }
+        return dir?.let { File(it, name) }
+      }
       override fun appendReport(body: String) {
         this@QuireLoopbackModule.appendReport(body)
       }
@@ -392,7 +406,43 @@ class QuireLoopbackModule : Module() {
       val source = if (pushed) File(dev, name).inputStream() else context.assets.open(asset)
       source.use { input -> File(dir, name).outputStream().use { output -> input.copyTo(output) } }
     }
+    materializeFonts(context, File(dir, "fonts"))
     return dir
+  }
+
+  /** Bundled fonts, copied once per installed APK (the stamp is the install's update time). */
+  private fun materializeFonts(context: Context, dir: File) {
+    dir.mkdirs()
+    val stamp = File(dir, ".installed")
+    val installed = context.packageManager.getPackageInfo(context.packageName, 0).lastUpdateTime.toString()
+    if (stamp.isFile && stamp.readText() == installed) return
+    val names = context.assets.list(FONT_ASSETS)?.filter { isFontFile(it) } ?: emptyList()
+    for (name in names) {
+      context.assets.open("$FONT_ASSETS/$name").use { input -> File(dir, name).outputStream().use { input.copyTo(it) } }
+    }
+    stamp.writeText(installed)
+  }
+
+  private fun userFontsDir(context: Context): File = File(context.filesDir, USER_FONTS_DIR)
+
+  /** Copy a picked font file into app storage under the id the app chose. */
+  private fun importFont(source: String, id: String): Map<String, Any?> {
+    val context = context()
+    val uri = Uri.parse(source)
+    val input = when (uri.scheme) {
+      "content" -> context.contentResolver.openInputStream(uri)
+      "file" -> uri.path?.let { File(it).inputStream() }
+      else -> null
+    } ?: return mapOf("ok" to false, "reason" to "unreadable")
+    return when (val result = input.use { storeFont(userFontsDir(context), id, it) }) {
+      is FontImport.Stored -> mapOf("ok" to true, "file" to result.file, "name" to displayName(uri))
+      is FontImport.Refused -> mapOf("ok" to false, "reason" to result.reason)
+    }
+  }
+
+  private fun deleteFont(file: String): Boolean {
+    if (!isFontFile(file) || !file.startsWith("user-")) return false
+    return File(userFontsDir(context()), file).delete()
   }
 
   private fun registerIfPresent(id: String, fileName: String): Boolean {
@@ -466,6 +516,8 @@ class QuireLoopbackModule : Module() {
     const val MAX_COMMANDS = 20
     const val MAX_COMMAND_BYTES = 65536L
     const val DEV_READER_DIR = "quire-dev"
+    const val FONT_ASSETS = "quire-reader/fonts"
+    const val USER_FONTS_DIR = "quire-fonts"
     val READER_FILES = listOf("quire-reader/reader.html" to "reader.html", "quire-reader/reader.js" to "reader.js")
   }
 }

@@ -317,3 +317,19 @@ One-time setup with the SDK's command-line tools:
 - The shelf's look lives in `library.look` (`src/domain/library-look.ts`), apart from the book rows, so the wider customization work can extend it without touching reading data. Unknown or damaged values fall back to the defaults.
 - Default is **Minimal**: plain text rows, title with author and progress, each of which can be switched off. **Pills** are rounded cards; their background is the colour the reader picked (long-press a book), else the average colour of the cover (measured natively once, `averageColor`), else a neutral grey. Text is black or white by WCAG luminance. Covers on pills are optional and off by default.
 - The two Power Moby-Dick entries were two different files (the footnote and the link edition from the phone matrix), not a failed dedupe: import dedupes by content hash. Books that share a title and authors now show the imported file name (else publisher, else "Copy N") so editions are told apart. The matrix now imports into Quire Dev, so the everyday library only holds what the reader adds.
+
+## Customization storage, Milestone 4
+
+The saved reading look (global values, profiles, per-book overrides) lives in the library index as `custom`, beside the books, so it is written in the same single ordered write as everything else. It moves to SQLite (`settings` and `book_settings`) with the rest of the index. Two sentinel values stand for "leave it to the book": line height 0 and paragraph spacing -1. They keep every setting a plain number in the registry instead of adding a nullable type for two entries.
+
+## Reading fonts, Milestone 4
+
+Four bundled fonts, all SIL OFL 1.1 from @fontsource 5.3.0: Literata (made for e-reading), EB Garamond (classic book face), Atkinson Hyperlegible (low vision) and OpenDyslexic. Few on purpose, matching the stripped-down default; anything else comes in through import. Subsets are Latin, Latin Extended, Cyrillic and Greek where a font has them, so Bosnian, Croatian, Serbian and Czech text never falls back mid-word. WOFF2 only, 1.4 MB in all. The files are committed, so builds stay offline.
+
+Fonts reach the book as blob: URLs the reader page makes from its own fetch of the loopback `fonts/` route, not as http URLs, so the book CSP keeps `font-src blob: data:` and a book cannot use the route. CSS families are named "Quire <name>" so a book's own embedded "Literata" never collides. An imported font is one file used for every weight and style (the WebView synthesizes bold and italic); its type comes from the file's signature, not its name, and font collections (.ttc) are refused. Removing an imported font clears every layer that chose it.
+
+## Brightness, dimmer and warmth, Milestone 4
+
+`expo-brightness` 58.0.3 (MIT, maintained by Expo, matched to SDK 58) sets the reader window's brightness. It never writes the system setting, so it needs no permission, and "restore the previous brightness" holds by construction: leaving the reader, closing the app or going to the background hands the window back to the system value (`restoreSystemBrightnessAsync`). It is a native module, so the APK has to be rebuilt once. The hook loads it lazily and does nothing on an older APK.
+
+The software dimmer and the warm filter are two veils in React Native over the WebView, under the controls. They take no touches and never restyle the book, so moving them costs no relayout.

@@ -1,7 +1,7 @@
 import { createJumps, navEntries, positionOf } from "./jumps.js";
 import { NotePopup } from "./note-popup.js";
 import { linkFromEvent } from "./notes.js";
-import { openBook } from "./open-book.js";
+import { applyLookTo, openBook } from "./open-book.js";
 import { pageErrors } from "./page-errors.js";
 import * as probe from "./probe.js";
 import { tapZone } from "./tap-zones.js";
@@ -122,6 +122,7 @@ export async function openForReading(message, reply, askDecision) {
   const flow = flowOf(message.flow);
   applySettings(message.settings ?? {});
   applyInsets(message.insets ?? insets);
+  paintPage(message.look);
   if (current?.view) {
     try {
       current.view.close();
@@ -136,6 +137,7 @@ export async function openForReading(message, reply, askDecision) {
     flow,
     lastLocation: typeof message.cfi === "string" ? message.cfi : null,
     position: message.position && typeof message.position === "object" ? message.position : null,
+    look: message.look ?? null,
     onView(view) {
       popup = new NotePopup(view, reply, id);
       jumps = createJumps(view, reply, id);
@@ -293,6 +295,43 @@ export async function turn(message) {
   if (!current || current.id !== message.id) return false;
   if (message.dir === "prev") await current.view.prev();
   else await current.view.next();
+  return true;
+}
+
+/** The page behind and around the book, and the note sheet, follow the theme too. */
+function paintPage(look) {
+  const hex = (value) => (typeof value === "string" && /^#[0-9a-f]{6}$/i.test(value) ? value : null);
+  const page = hex(look?.page);
+  if (!page) return;
+  const root = document.documentElement.style;
+  root.setProperty("--quire-page", page);
+  document.body.style.background = page;
+  const vars = { "--quire-ink": look.ink, "--quire-ink-muted": look.muted, "--quire-link": look.link, "--quire-chrome": look.chrome, "--quire-chrome-ink": look.chromeInk };
+  for (const [name, value] of Object.entries(vars)) {
+    if (hex(value)) root.setProperty(name, value);
+  }
+  // Hairlines are the muted ink at low strength, so they show on every theme.
+  if (hex(look.muted)) root.setProperty("--quire-line", `${look.muted}55`);
+}
+
+/**
+ * A new look from the host. Colours only: restyle in place. Typography or
+ * margins: restyle, let the layout settle, then go back to the same text, as
+ * a flow change does (foliate re-anchors on rects measured too early).
+ */
+export async function setLook(message) {
+  paintPage(message.look);
+  if (!current || current.id !== message.id) return false;
+  const { view } = current;
+  if (view.isFixedLayout) return true;
+  const cfi = message.relayout ? anchorCfi(view) : null;
+  await applyLookTo(view, message.look);
+  if (!cfi) return true;
+  await nextFrame();
+  await nextFrame();
+  await returnTo(view, cfi, "style change");
+  // Stepping the size up and back keeps the original anchor, so the page does not drift.
+  await remember(view, cfi);
   return true;
 }
 

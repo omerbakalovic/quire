@@ -5,6 +5,7 @@ import type { NavEntry } from "@/domain/navigation";
 import { t } from "@/i18n";
 
 import { ProgressSlider } from "./ProgressSlider";
+import { useChrome } from "./chrome";
 
 type Props = {
   bottomInset: number;
@@ -19,38 +20,44 @@ type Props = {
   onSeek: (fraction: number) => void;
   /** True while the slider is dragged, so the Back pill can step out of the preview's way. */
   onScrub: (active: boolean) => void;
+  onLook: () => void;
 };
 
 /** Reader controls: chapter buttons around the progress slider, then contents and the flow switch. */
-export function BottomBar({ bottomInset, fraction, toc, flow, fixedLayout, onFlow, onContents, onChapter, onSeek, onScrub }: Props) {
+export function BottomBar({ bottomInset, fraction, toc, flow, fixedLayout, onFlow, onContents, onChapter, onSeek, onScrub, onLook }: Props) {
   const strings = t().book;
   const percent = fraction === null ? null : Math.round(fraction * 100);
+  const c = useChrome();
+  const ink = { color: c.ink };
   return (
-    <View style={[styles.bar, { paddingBottom: bottomInset + 8 }]}>
+    <View style={[styles.bar, { paddingBottom: bottomInset + 8, backgroundColor: c.bar }]}>
       <View style={styles.row}>
         <Pressable onPress={() => onChapter("prev")} accessibilityRole="button" accessibilityLabel={strings.prevChapter} style={styles.icon}>
-          <Text style={styles.button}>«</Text>
+          <Text style={[styles.button, ink]}>«</Text>
         </Pressable>
         <ProgressSlider fraction={fraction} toc={toc} onCommit={onSeek} onScrub={onScrub} />
         <Pressable onPress={() => onChapter("next")} accessibilityRole="button" accessibilityLabel={strings.nextChapter} style={styles.icon}>
-          <Text style={styles.button}>»</Text>
+          <Text style={[styles.button, ink]}>»</Text>
         </Pressable>
-        <Text style={styles.percent}>{percent === null ? "" : `${percent}%`}</Text>
+        <Text style={[styles.percent, { color: c.muted }]}>{percent === null ? "" : `${percent}%`}</Text>
       </View>
       <View style={[styles.row, styles.spread]}>
         <Pressable onPress={onContents} accessibilityRole="button" style={styles.contents} hitSlop={6}>
-          <Text style={styles.button}>☰ {strings.contents}</Text>
+          <Text style={[styles.button, ink]}>☰ {strings.contents}</Text>
         </Pressable>
-        <View style={[styles.segment, fixedLayout && styles.hidden]}>
+        <Pressable onPress={onLook} accessibilityRole="button" accessibilityLabel={strings.look} style={[styles.contents, fixedLayout && styles.hidden]} hitSlop={6}>
+          <Text style={[styles.button, ink]}>Aa</Text>
+        </Pressable>
+        <View style={[styles.segment, { borderColor: c.line }, fixedLayout && styles.hidden]}>
           {(["paginated", "scrolled"] as const).map((option) => (
             <Pressable
               key={option}
               onPress={() => onFlow(option)}
               accessibilityRole="button"
               accessibilityState={{ selected: flow === option }}
-              style={[styles.segmentItem, flow === option && styles.segmentOn]}
+              style={[styles.segmentItem, flow === option && { backgroundColor: c.accent }]}
             >
-              <Text style={[styles.segmentText, flow === option && styles.segmentTextOn]}>
+              <Text style={[styles.segmentText, ink, flow === option && [styles.segmentTextOn, { color: c.onAccent }]]}>
                 {option === "paginated" ? strings.paginated : strings.scrolled}
               </Text>
             </Pressable>
@@ -81,7 +88,6 @@ const styles = StyleSheet.create({
   segment: { flexDirection: "row", borderRadius: 8, borderWidth: 1, borderColor: "#555", overflow: "hidden" },
   hidden: { opacity: 0, pointerEvents: "none" },
   segmentItem: { paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, justifyContent: "center" },
-  segmentOn: { backgroundColor: "#eee" },
   segmentText: { color: "#eee", fontSize: 14 },
   segmentTextOn: { color: "#111", fontWeight: "600" },
 });

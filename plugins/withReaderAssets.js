@@ -11,7 +11,12 @@ tasks.register("copyQuireReaderAssets", Copy) {
     from(new File(quireReaderSrc, "reader.js"))
     into("src/main/assets/quire-reader")
 }
-tasks.named("preBuild").configure { dependsOn("copyQuireReaderAssets") }
+// Bundled reading fonts (OFL, assets/fonts). Font files are already compressed, so the APK stores them as they are.
+tasks.register("copyQuireFonts", Copy) {
+    from(new File(rootDir, "../assets/fonts")) { include("*.woff2") }
+    into("src/main/assets/quire-reader/fonts")
+}
+tasks.named("preBuild").configure { dependsOn("copyQuireReaderAssets", "copyQuireFonts") }
 `;
 
 /** Copy the reader page into the APK on every build. reader.js is generated and gitignored. */

@@ -41,6 +41,11 @@ const server = createServer((req, res) => {
     sendFile(res, readerJs, "text/javascript; charset=utf-8");
     return;
   }
+  const font = /^\/fonts\/([a-z0-9-]{1,80}\.woff2)$/.exec(url.pathname);
+  if (req.method === "GET" && font && existsSync(join(root, "assets/fonts", font[1]))) {
+    sendFile(res, join(root, "assets/fonts", font[1]), "font/woff2");
+    return;
+  }
   if (req.method === "GET" && url.pathname.startsWith("/books/")) {
     const file = bookFile(url.pathname);
     if (!file) {

@@ -25,7 +25,20 @@ import {
   type PositionReport,
   type Settings,
 } from "@/domain/library";
-import { averageColor, deleteBook, importBook, readLibrary, writeLibrary } from "@/renderer/book-url";
+import { averageColor, deleteBook, deleteFont, importBook, importFont, readLibrary, writeLibrary } from "@/renderer/book-url";
+import {
+  addUserFont,
+  changeSetting,
+  deleteProfile,
+  forgetBook as forgetBookSettings,
+  removeUserFont,
+  setActiveProfile,
+  saveProfile as saveProfileTo,
+} from "@/settings/customization";
+import { MAX_USER_FONTS, newUserFontId, userFontLabel, type UserFont } from "@/settings/fonts";
+import { resetGroup } from "@/settings/layers";
+import type { Values } from "@/settings/layers";
+import type { Layer, SettingKey } from "@/settings/registry";
 
 /**
  * One library for the process. Every change is written whole by the native
@@ -108,7 +121,7 @@ export async function importFiles(files: { uri: string; name: string | null }[])
 }
 
 export async function removeFromLibrary(id: string): Promise<void> {
-  await commit(removeBook(library, id));
+  await commit({ ...removeBook(library, id), custom: forgetBookSettings(library.custom, id) });
   await changeLook((look) => forgetBook(look, id));
   await deleteBook(id);
 }
@@ -127,6 +140,64 @@ export function saveFlow(flow: Flow): Promise<void> {
 
 export function saveSettings(patch: Partial<Settings>): Promise<void> {
   return commit(updateSettings(library, patch));
+}
+
+/** One reading-look setting, in the global, profile, or this-book layer. `null` clears it. */
+export function saveSetting(layer: Exclude<Layer, "session">, key: SettingKey, value: unknown, bookId: string | null): Promise<void> {
+  const custom = changeSetting(library.custom, layer, key, value, bookId);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+/** Reset buttons: clear some groups from one book's overrides, or from the global values. */
+export function resetBookGroups(bookId: string, groups: string[]): Promise<void> {
+  let values = { book: library.custom.books[bookId] ?? {} };
+  for (const group of groups) values = { book: resetGroup(values, "book", group).book ?? {} };
+  const books = { ...library.custom.books };
+  if (Object.keys(values.book).length > 0) books[bookId] = values.book;
+  else delete books[bookId];
+  return commit({ ...library, custom: { ...library.custom, books } });
+}
+
+export function resetGlobalGroups(groups: string[]): Promise<void> {
+  let values = { global: library.custom.global };
+  for (const group of groups) values = { global: resetGroup(values, "global", group).global ?? {} };
+  return commit({ ...library, custom: { ...library.custom, global: values.global } });
+}
+
+export function saveProfile(id: string, name: string, values: Values): Promise<void> {
+  return commit({ ...library, custom: saveProfileTo(library.custom, id, name, values) });
+}
+
+export function removeProfile(id: string): Promise<void> {
+  const custom = deleteProfile(library.custom, id);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+export function chooseProfile(id: string | null): Promise<void> {
+  const custom = setActiveProfile(library.custom, id);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+export type FontAdded = { ok: true; font: UserFont } | { ok: false; reason: "full" | "unreadable" | "not-font" | "too-large" | "bad-id" };
+
+/** Copy a picked font file into app storage and list it with the reading fonts. */
+export async function addFont(uri: string, name: string | null): Promise<FontAdded> {
+  await loadLibrary();
+  if (library.custom.fonts.length >= MAX_USER_FONTS) return { ok: false, reason: "full" };
+  const id = newUserFontId(library.custom.fonts.map((f) => f.id));
+  const stored = await importFont(uri, id);
+  if (!stored.ok) return stored;
+  const font = { id, label: userFontLabel(name ?? stored.name, id), file: stored.file };
+  await commit({ ...library, custom: addUserFont(library.custom, font) });
+  return { ok: true, font };
+}
+
+/** Forget an imported font and delete its file. Settings that chose it go back to the book's fonts. */
+export async function removeFont(id: string): Promise<void> {
+  const font = library.custom.fonts.find((f) => f.id === id);
+  if (!font) return;
+  await commit({ ...library, custom: removeUserFont(library.custom, id) });
+  await deleteFont(font.file).catch(() => false);
 }
 
 /** Resolves once every write queued so far is on disk. */

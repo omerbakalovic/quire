@@ -2,6 +2,8 @@ export {
   appendNote,
   bookUrl,
   deleteBook,
+  deleteFont,
+  importFont,
   ensureLoopback,
   importBook,
   isServing,
@@ -22,4 +24,4 @@ export {
   registerIfPresent,
   startLoopback,
 } from "../../modules/quire-loopback/src/index.ts";
-export type { IncomingBook, NativeImport } from "../../modules/quire-loopback/src/index.ts";
+export type { FontImport, IncomingBook, NativeImport } from "../../modules/quire-loopback/src/index.ts";

@@ -1,4 +1,4 @@
-import { Stack } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
@@ -15,9 +15,11 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   );
 }
 
-/** Library look and global reader settings. Typography and themes join this screen in Milestone 4. */
+/** Library look and global reader settings. The reading look has its own screen (customize.tsx). */
 export default function SettingsScreen() {
   const strings = t().settings;
+  const reading = t().customize;
+  const router = useRouter();
   const library = useLibrary();
   const followBook = library.settings.tapZones === "reading";
   const look = library.look;
@@ -55,6 +57,12 @@ export default function SettingsScreen() {
       ) : null}
       <Toggle label={strings.showAuthor} value={look.showAuthor} onChange={(value) => set({ showAuthor: value })} />
       <Toggle label={strings.showProgress} value={look.showProgress} onChange={(value) => set({ showProgress: value })} />
+      <Text style={styles.section}>{reading.title}</Text>
+      <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" style={styles.row}>
+        <Text style={styles.label}>{reading.open}</Text>
+        <Text style={styles.chevron}>›</Text>
+      </Pressable>
+      <Text style={styles.help}>{reading.openHelp}</Text>
       <Text style={styles.section}>{strings.taps}</Text>
       <View style={styles.row}>
         <Text style={styles.label}>{strings.tapsFollowBook}</Text>
@@ -79,5 +87,6 @@ const styles = StyleSheet.create({
   segmentOn: { backgroundColor: "#1F3A5F" },
   segmentText: { fontSize: 14 },
   segmentTextOn: { color: "#fff", fontWeight: "600" },
+  chevron: { fontSize: 22, opacity: 0.6 },
   help: { fontSize: 14, opacity: 0.7, lineHeight: 20 },
 });

@@ -36,8 +36,10 @@ import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const PKG = "app.quire.reader";
-const ACTIVITY = `${PKG}/.MainActivity`;
+// Debug builds install as app.quire.reader.dev ("Quire Dev", plugins/withDevVariant.js),
+// beside the everyday release app, so a run never touches the reader's own library.
+const PKG = "app.quire.reader.dev";
+const ACTIVITY = `${PKG}/app.quire.reader.MainActivity`;
 const REPORT = "files/quire-report.jsonl";
 const COMMANDS = "files/quire-cmd";
 const EXTERNAL = `/sdcard/Android/data/${PKG}/files`;
@@ -1431,7 +1433,7 @@ async function main() {
   const device = `${(await shell("getprop ro.product.model")).trim()}, Android ${(await shell("getprop ro.build.version.release")).trim()} (${serial})`;
   const meta = { started, device, commit: await gitCommit(), mode: opts.quick ? "quick" : opts.only ? `only ${opts.only}` : "full" };
   say(device);
-  if (!(await shell(`pm path ${PKG}`)).includes("package:")) throw new Error(`${PKG} is not installed`);
+  if (!(await shell(`pm path ${PKG}`)).includes("package:")) throw new Error(`${PKG} (Quire Dev) is not installed. Debug builds install under that id now; run \`npm run android\` once.`);
   await adb(["reverse", "tcp:8081", "tcp:8081"]);
   await pickInput();
 

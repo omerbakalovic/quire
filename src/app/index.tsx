@@ -1,12 +1,21 @@
 import { getDocumentAsync } from "expo-document-picker";
 import { Redirect, Stack, useRouter } from "expo-router";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, Alert, AppState, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { sortedBooks, type LibraryBook } from "@/domain/library";
 import { t } from "@/i18n";
 import { importFiles, loadLibrary, removeFromLibrary, useLibrary, type ImportSummary } from "@/library/store";
-import { appendNote, launchCheck, takePendingImports } from "@/renderer/book-url";
+import {
+  appendNote,
+  launchCheck,
+  onIncomingBooks,
+  takeIncomingBooks,
+  takePendingImports,
+  type IncomingBook,
+} from "@/renderer/book-url";
+
+type ImportSource = "pick" | "incoming" | "import";
 
 const COVER_COLORS = ["#5B6C8F", "#8F5B6C", "#6C8F5B", "#8F7A5B", "#5B8F88", "#7A5B8F"];
 
@@ -72,34 +81,78 @@ export default function LibraryScreen() {
   const [check] = useState(() => launchCheck());
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  // Imports run one batch at a time, whether picked, shared in, or queued over adb.
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+
+  const runImport = useCallback(
+    (files: IncomingBook[], source: ImportSource): Promise<ImportSummary[]> => {
+      const run = queue.current.then(async () => {
+        setBusy(true);
+        try {
+          const results = await importFiles(files);
+          for (const result of results) {
+            appendNote(JSON.stringify({ source: "library", phase: source, name: result.name, outcome: result.outcome }));
+          }
+          return results;
+        } finally {
+          setBusy(false);
+        }
+      });
+      queue.current = run.catch(() => undefined);
+      return run;
+    },
+    [],
+  );
 
   useEffect(() => {
     if (check) return;
     void loadLibrary().then(() => setReady(true));
   }, [check]);
 
+  // Books another app handed over ("Open with Quire", "Share"): at launch, and while running.
+  // One book opens straight away, as a file manager's "Open with" expects. More go to the shelf.
+  useEffect(() => {
+    if (check) return;
+    async function receive() {
+      const files = takeIncomingBooks();
+      if (files.length === 0) return;
+      const results = await runImport(files, "incoming");
+      const opened = results.length === 1 ? results[0].outcome : null;
+      if (opened && (opened.kind === "added" || opened.kind === "duplicate")) {
+        router.push({ pathname: "/reader/[id]", params: { id: opened.facts.id } });
+        return;
+      }
+      const onlyAdded = results.every((result) => result.outcome.kind === "added");
+      if (!onlyAdded || results.length > 1) Alert.alert(strings.summaryTitle, summarize(results));
+    }
+    void receive();
+    const stop = onIncomingBooks(() => void receive());
+    const subscription = AppState.addEventListener("change", (state) => {
+      if (state === "active") void receive();
+    });
+    return () => {
+      stop();
+      subscription.remove();
+    };
+  }, [check, runImport, router, strings]);
+
   // Debug builds only: books the host queued over adb are imported on launch and on return.
   useEffect(() => {
     if (check || !__DEV__) return;
-    async function drain() {
+    function drain() {
       const uris = takePendingImports();
       if (uris.length === 0) return;
-      setBusy(true);
-      try {
-        const results = await importFiles(uris.map((uri) => ({ uri, name: uri.split("/").pop() ?? null })));
-        for (const result of results) {
-          appendNote(JSON.stringify({ source: "library", phase: "import", name: result.name, outcome: result.outcome }));
-        }
-      } finally {
-        setBusy(false);
-      }
+      void runImport(
+        uris.map((uri) => ({ uri, name: uri.split("/").pop() ?? null })),
+        "import",
+      );
     }
-    void drain();
+    drain();
     const subscription = AppState.addEventListener("change", (state) => {
-      if (state === "active") void drain();
+      if (state === "active") drain();
     });
     return () => subscription.remove();
-  }, [check]);
+  }, [check, runImport]);
 
   // A launch that names a device check goes to the harness, as M1a did.
   if (check) return <Redirect href="/checks" />;
@@ -112,17 +165,12 @@ export default function LibraryScreen() {
       copyToCacheDirectory: false,
     });
     if (picked.canceled || picked.assets.length === 0) return;
-    setBusy(true);
-    try {
-      const results = await importFiles(picked.assets.map((asset) => ({ uri: asset.uri, name: asset.name ?? null })));
-      for (const result of results) {
-        appendNote(JSON.stringify({ source: "library", phase: "pick", name: result.name, outcome: result.outcome }));
-      }
-      const onlyAdded = results.every((result) => result.outcome.kind === "added");
-      if (!onlyAdded || results.length > 1) Alert.alert(strings.summaryTitle, summarize(results));
-    } finally {
-      setBusy(false);
-    }
+    const results = await runImport(
+      picked.assets.map((asset) => ({ uri: asset.uri, name: asset.name ?? null })),
+      "pick",
+    );
+    const onlyAdded = results.every((result) => result.outcome.kind === "added");
+    if (!onlyAdded || results.length > 1) Alert.alert(strings.summaryTitle, summarize(results));
   }
 
   function confirmRemove(book: LibraryBook) {
@@ -157,7 +205,17 @@ export default function LibraryScreen() {
         </View>
       ) : books.length === 0 ? (
         <View style={styles.center}>
+          <Text style={styles.welcome}>{strings.welcomeTitle}</Text>
           <Text style={styles.hint}>{strings.empty}</Text>
+          <Pressable
+            onPress={pick}
+            disabled={busy}
+            accessibilityRole="button"
+            style={({ pressed }) => [styles.addButton, (pressed || busy) && styles.pressed]}
+          >
+            <Text style={styles.addButtonText}>{strings.addBooks}</Text>
+          </Pressable>
+          <Text style={styles.small}>{strings.openWithHint}</Text>
         </View>
       ) : (
         <FlatList
@@ -170,6 +228,7 @@ export default function LibraryScreen() {
               onRemove={() => confirmRemove(item)}
             />
           )}
+          ListFooterComponent={<Text style={styles.footer}>{strings.removeHint}</Text>}
         />
       )}
       {busy ? (
@@ -184,7 +243,12 @@ export default function LibraryScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1 },
   center: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 12 },
-  hint: { fontSize: 16, textAlign: "center", opacity: 0.7 },
+  hint: { fontSize: 16, textAlign: "center", opacity: 0.7, lineHeight: 22 },
+  welcome: { fontSize: 22, fontWeight: "700", textAlign: "center" },
+  small: { fontSize: 13, textAlign: "center", opacity: 0.55, lineHeight: 18, maxWidth: 320 },
+  addButton: { backgroundColor: "#1F3A5F", paddingHorizontal: 28, paddingVertical: 14, borderRadius: 24, marginVertical: 8 },
+  addButtonText: { color: "#fff", fontSize: 17, fontWeight: "600" },
+  footer: { fontSize: 13, textAlign: "center", opacity: 0.5, padding: 20 },
   row: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 10, gap: 14, minHeight: 116 },
   pressed: { opacity: 0.6 },
   cover: { width: 64, height: 96, borderRadius: 4, backgroundColor: "#ddd" },

@@ -276,3 +276,10 @@ The script also copes with the two things that wasted run 3 and the first try at
 
 For a blank page, the scan names what starts on it and what runs across it, and the script takes a screenshot of that page.
 
+
+## Everyday app and dev build
+
+- The everyday app is a release APK (`npm run apk`, or the `Android APK` GitHub workflow) with the JS bundle and reader page inside, so it opens from the launcher with no Metro. It is signed with the Expo template's debug key: fine for sideloading, to be replaced before any store upload.
+- Debug builds get `applicationIdSuffix ".dev"` and the name "Quire Dev" (`plugins/withDevVariant.js`). Both apps install side by side, and the phone matrix (`PKG = app.quire.reader.dev`) never imports test books into, or clears, the reader's own library. `npm run android` passes `--app-id app.quire.reader.dev` so Expo launches the right package.
+- Release builds ignore `files/quire-check` and the `quireCheck` extra, and write no `quire-report.jsonl`. The phone checks and matrix stay debug-only.
+- "Open with" and Share for `application/epub+zip` (`plugins/withOpenBooks.js`): VIEW, SEND and SEND_MULTIPLE filters on MainActivity. `takeIncomingBooks()` returns the launch intent's books once (not when reopened from Recents) plus any from `OnNewIntent`, which also fires `onIncomingBooks`. The library imports them through the same path as the picker; a single book opens in the reader right away. `src/app/+native-intent.tsx` sends the content:// URL to the library so the router never shows "unmatched route".

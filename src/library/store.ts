@@ -148,6 +148,13 @@ export function saveSetting(layer: Exclude<Layer, "session">, key: SettingKey, v
   return custom === library.custom ? writing : commit({ ...library, custom });
 }
 
+/** Several settings in one layer at once, written once (a layout preset). */
+export function saveSettingsIn(layer: Exclude<Layer, "session">, values: Values, bookId: string | null): Promise<void> {
+  let custom = library.custom;
+  for (const [key, value] of Object.entries(values)) custom = changeSetting(custom, layer, key as SettingKey, value, bookId);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
 /** Reset buttons: clear some groups from one book's overrides, or from the global values. */
 export function resetBookGroups(bookId: string, groups: string[]): Promise<void> {
   let values = { book: library.custom.books[bookId] ?? {} };

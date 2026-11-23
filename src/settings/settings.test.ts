@@ -11,7 +11,7 @@ test("every registry entry's default passes its own validation", () => {
   for (const setting of SETTINGS) {
     assert.ok(!seen.has(setting.key), `duplicate ${setting.key}`);
     seen.add(setting.key);
-    assert.equal(cleanValue(setting.key, setting.default), setting.default, setting.key);
+    assert.deepEqual(cleanValue(setting.key, setting.default), setting.default, setting.key);
   }
 });
 

@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Library } from "@/domain/library";
-import { resetBookGroups, saveSetting, resetGlobalGroups } from "@/library/store";
+import { resetBookGroups, saveSetting, saveSettingsIn, resetGlobalGroups } from "@/library/store";
 import { layersFor, resolvedFor } from "@/settings/customization";
 import { needsRelayout } from "@/settings/layers";
+import { presetValues, type LayoutPreset } from "@/settings/layout";
 import type { Resolved, SettingKey } from "@/settings/registry";
 import { themeFor } from "@/settings/themes";
 
@@ -11,7 +12,7 @@ import { lookFor, type Look } from "./look";
 import type { Scope } from "./QuickPanel";
 
 function sameLook(a: Look, b: Look): boolean {
-  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page && a.ink === b.ink && a.link === b.link && a.chrome === b.chrome && a.fonts.map((f) => f.file).join() === b.fonts.map((f) => f.file).join();
+  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page && a.band === b.band && a.ink === b.ink && a.link === b.link && a.chrome === b.chrome && a.fonts.map((f) => f.file).join() === b.fonts.map((f) => f.file).join();
 }
 
 /**
@@ -54,19 +55,28 @@ export function useLook(library: Library, bookId: string | null, reading: boolea
     [scope, bookId],
   );
 
+  const layout = useCallback(
+    (preset: LayoutPreset) => {
+      void saveSettingsIn(scope, presetValues(preset), bookId);
+    },
+    [scope, bookId],
+  );
+
   const reset = useCallback(() => {
-    if (scope === "book" && bookId) void resetBookGroups(bookId, ["typography", "page", "theme", "light"]);
-    else void resetGlobalGroups(["typography", "page", "theme", "light"]);
+    if (scope === "book" && bookId) void resetBookGroups(bookId, ["typography", "page", "theme", "light", "layout"]);
+    else void resetGlobalGroups(["typography", "page", "theme", "light", "layout"]);
   }, [scope, bookId]);
 
   return {
     settings,
     look: look as Look,
     chrome: themeFor(settings["theme.id"]),
+    theme: themeFor(settings["theme.id"]),
     scope,
     setScope,
     overridden,
     change,
+    layout,
     reset,
     opened,
     layers: layersFor(library.custom, bookId),

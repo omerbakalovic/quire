@@ -3,6 +3,7 @@ import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-nat
 import { t } from "@/i18n";
 import { stepValue } from "@/settings/customize";
 import { FONT_CHOICES, fontLabel, type UserFont } from "@/settings/fonts";
+import { LAYOUT_PRESETS, presetOf, type LayoutPreset } from "@/settings/layout";
 import { ALIGNMENTS, THEME_IDS, type Resolved, type SettingKey } from "@/settings/registry";
 import { THEMES, type ThemeTokens } from "@/settings/themes";
 
@@ -21,6 +22,7 @@ type Props = {
   onRemoveFont: (font: UserFont) => void;
   onScope: (scope: Scope) => void;
   onChange: (key: SettingKey, value: number | string | boolean) => void;
+  onLayout: (preset: LayoutPreset) => void;
   onReset: () => void;
   onClose: () => void;
 };
@@ -30,8 +32,10 @@ type Props = {
  * Every change applies live; the scope switch decides whether it is saved for
  * all books or only this one.
  */
-export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, userFonts, onAddFont, onRemoveFont, onScope, onChange, onReset, onClose }: Props) {
+export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, userFonts, onAddFont, onRemoveFont, onScope, onChange, onLayout, onReset, onClose }: Props) {
   const strings = t().book;
+  const custom = t().customize;
+  const layoutNow = presetOf(settings);
   const ink = { color: chrome.chromeInk };
   const muted = { color: chrome.chromeInk, opacity: 0.7 };
 
@@ -182,6 +186,13 @@ export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, u
           {stepper(strings.lookSpacing, "type.lineHeight", lineHeight > 0 ? lineHeight.toFixed(2) : strings.bookDefault)}
           {stepper(strings.lookMargins, "page.marginX", `${settings["page.marginX"]}%`)}
           {chips(strings.lookAlign, "type.alignment", ALIGNMENTS, strings.aligns)}
+          <View style={styles.block}>
+            <Text style={[styles.label, ink]}>{custom.layoutPreset}</Text>
+            <View style={styles.chips}>
+              {LAYOUT_PRESETS.map((preset) => chip(preset, custom.layoutPresets[preset] ?? preset, layoutNow === preset, () => onLayout(preset)))}
+              {layoutNow === null ? chip("custom", custom.layoutCustom, true, () => undefined) : null}
+            </View>
+          </View>
           <View style={styles.row}>
             <Text style={[styles.label, styles.grow, ink]}>
               {strings.lookHyphens}

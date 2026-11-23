@@ -8,7 +8,7 @@ import { isFontId } from "./fonts.ts";
 
 export type Layer = "session" | "book" | "profile" | "global";
 
-export type Group = "typography" | "page" | "theme" | "light" | "turns" | "behaviour";
+export type Group = "typography" | "page" | "theme" | "light" | "layout" | "turns" | "behaviour";
 
 type Base = {
   key: string;
@@ -23,11 +23,13 @@ type Base = {
 export type NumberSetting = Base & { type: "number"; default: number; min: number; max: number; step: number };
 export type ChoiceSetting = Base & { type: "choice"; default: string; choices: readonly string[] };
 export type BooleanSetting = Base & { type: "boolean"; default: boolean };
+/** An ordered list of elements for a layout slot, each from the slot's catalog, no repeats. */
+export type ElementsSetting = Base & { type: "elements"; default: readonly string[]; catalog: readonly string[]; max: number };
 /** A reading font: a built-in choice or an imported font's id (see fonts.ts). */
 export type FontSetting = Base & { type: "font"; default: string };
 
-export type Setting = NumberSetting | ChoiceSetting | BooleanSetting | FontSetting;
-export type Value = number | string | boolean;
+export type Setting = NumberSetting | ChoiceSetting | BooleanSetting | FontSetting | ElementsSetting;
+export type Value = number | string | boolean | readonly string[];
 
 const ALL: Layer[] = ["session", "book", "profile", "global"];
 const NOT_SESSION: Layer[] = ["book", "profile", "global"];
@@ -35,6 +37,20 @@ const NOT_SESSION: Layer[] = ["book", "profile", "global"];
 export const ALIGNMENTS = ["publisher", "start", "justify"] as const;
 export const THEME_IDS = ["light", "paper", "gray", "dark", "black", "night", "contrast"] as const;
 export const TURN_STYLES = ["none", "slide", "fade"] as const;
+/**
+ * What the header and footer bands can show while reading (docs/customization.md, 3.3).
+ * Battery and time left come later: one needs a native module, the other reading speed (M7).
+ */
+export const AMBIENT = ["title", "author", "chapter", "page", "pagesLeft", "percent", "clock"] as const;
+export const AMBIENT_SLOTS = [
+  "layout.header.left",
+  "layout.header.center",
+  "layout.header.right",
+  "layout.footer.left",
+  "layout.footer.center",
+  "layout.footer.right",
+] as const;
+const NONE: readonly string[] = [];
 
 export const SETTINGS = [
   { key: "type.fontSize", type: "number", default: 100, min: 60, max: 300, step: 5, group: "typography", scopes: ALL, relayout: true, depth: "quick" },
@@ -54,6 +70,14 @@ export const SETTINGS = [
   { key: "light.dimmer", type: "number", default: 0, min: 0, max: 0.85, step: 0.05, group: "light", scopes: ALL, relayout: false, depth: "quick" },
   // An amber veil, independent of the theme. 0 is off.
   { key: "light.warmth", type: "number", default: 0, min: 0, max: 0.6, step: 0.05, group: "light", scopes: ALL, relayout: false, depth: "quick" },
+  // Header and footer slots. Empty by default: the page shows only the text. A band with
+  // anything in it grows the page margin to fit, so these repaginate.
+  { key: "layout.header.left", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
+  { key: "layout.header.center", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
+  { key: "layout.header.right", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
+  { key: "layout.footer.left", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
+  { key: "layout.footer.center", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
+  { key: "layout.footer.right", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "turn.style", type: "choice", default: "none", choices: TURN_STYLES, group: "turns", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "turn.followReduceMotion", type: "boolean", default: true, group: "turns", scopes: ["global"], relayout: false, depth: "advanced" },
 ] as const satisfies readonly Setting[];
@@ -68,7 +92,9 @@ export type SettingValue<K extends SettingKey> =
       ? boolean
       : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "font" }
         ? string
-        : Extract<(typeof SETTINGS)[number], { key: K }> extends { choices: readonly (infer C)[] }
+        : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "elements" }
+          ? readonly string[]
+          : Extract<(typeof SETTINGS)[number], { key: K }> extends { choices: readonly (infer C)[] }
         ? C
         : never;
 
@@ -101,7 +127,21 @@ export function cleanValue(key: string, value: unknown): Value | null {
       return typeof value === "boolean" ? value : null;
     case "font":
       return isFontId(value) ? value : null;
+    case "elements": {
+      if (!Array.isArray(value)) return null;
+      const out: string[] = [];
+      for (const item of value) {
+        if (typeof item === "string" && setting.catalog.includes(item) && !out.includes(item)) out.push(item);
+      }
+      return out.slice(0, setting.max);
+    }
   }
+}
+
+/** Equality for setting values: lists compare item by item. */
+export function sameValue(a: Value | undefined, b: Value | undefined): boolean {
+  if (Array.isArray(a) && Array.isArray(b)) return a.length === b.length && a.every((item, i) => item === b[i]);
+  return a === b;
 }
 
 export function defaults(): Resolved {

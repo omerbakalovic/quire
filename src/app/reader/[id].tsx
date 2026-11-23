@@ -1,4 +1,5 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import { ActivityIndicator, AppState, BackHandler, PixelRatio, Pressable, StyleSheet, Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -18,6 +19,7 @@ import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
 import { BottomBar } from "@/reader/BottomBar";
 import { QuickPanel } from "@/reader/QuickPanel";
+import { chromeFor, ChromeProvider } from "@/reader/chrome";
 import { TocPanel } from "@/reader/TocPanel";
 import { useLook } from "@/reader/useLook";
 
@@ -388,115 +390,119 @@ export default function BookScreen() {
   const message =
     phase === "missing" ? strings.notFound : phase === "drm" ? strings.drm : phase === "failed" ? strings.failed : null;
 
+  const chrome = chromeFor(reader.chrome);
   return (
-    <View ref={screenRef} style={styles.screen} collapsable={false}>
-      <Stack.Screen options={{ headerShown: false }} />
-      {pageUrl && !message ? (
-        <WebView<object>
-          key={mount}
-          ref={webRef}
-          style={[styles.web, { backgroundColor: reader.look.page }]}
-          originWhitelist={READER_ORIGIN_WHITELIST}
-          source={{ uri: pageUrl }}
-          onLoadEnd={() => post({ type: "ping", id: PING_ID })}
-          onMessage={onMessage}
-          onShouldStartLoadWithRequest={(request) => allowReaderNavigation(request.url)}
-          onRenderProcessGone={() => {
-            note({ phase: "render-process-gone", id });
-            setNotice(strings.reloading);
-            void connect().catch(() => setPhase("failed"));
-          }}
-          setSupportMultipleWindows={false}
-          javaScriptEnabled
-        />
-      ) : null}
-      {phase === "starting" || phase === "opening" ? (
-        <View style={styles.overlay} pointerEvents="none">
-          <ActivityIndicator size="large" />
-          <Text style={styles.overlayText}>{strings.opening}</Text>
-        </View>
-      ) : null}
-      {message ? (
-        <View style={styles.overlay}>
-          <Text style={styles.overlayText}>{message}</Text>
-          <Pressable onPress={() => router.back()} accessibilityRole="button" style={styles.button}>
-            <Text style={styles.buttonText}>{strings.back}</Text>
-          </Pressable>
-        </View>
-      ) : null}
-      {controls && phase === "reading" ? (
-        <>
-          <View style={[styles.bar, styles.top, { paddingTop: insets.top + 6 }]}>
-            <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={10}>
-              <Text style={styles.barButton}>‹ {strings.back}</Text>
-            </Pressable>
-            <View style={styles.titleBox}>
-              <Text style={styles.barTitle} numberOfLines={1}>
-                {book?.title ?? ""}
-              </Text>
-              {chapter ? (
-                <Text style={styles.barSub} numberOfLines={1}>
-                  {chapter}
-                </Text>
-              ) : null}
-            </View>
-          </View>
-          <BottomBar
-            bottomInset={insets.bottom}
-            fraction={fraction}
-            toc={toc}
-            flow={flow}
-            fixedLayout={fixedLayout}
-            onFlow={switchFlow}
-            onContents={() => showToc(true)}
-            onChapter={stepChapter}
-            onSeek={(value) => jumpTo({ fraction: value })}
-            onScrub={setScrubbing}
-            onLook={() => showLook(true)}
+    <ChromeProvider chrome={chrome}>
+      <View ref={screenRef} style={[styles.screen, { backgroundColor: reader.look.page }]} collapsable={false}>
+        <StatusBar style={chrome.dark ? "light" : "dark"} />
+        <Stack.Screen options={{ headerShown: false }} />
+        {pageUrl && !message ? (
+          <WebView<object>
+            key={mount}
+            ref={webRef}
+            style={[styles.web, { backgroundColor: reader.look.page }]}
+            originWhitelist={READER_ORIGIN_WHITELIST}
+            source={{ uri: pageUrl }}
+            onLoadEnd={() => post({ type: "ping", id: PING_ID })}
+            onMessage={onMessage}
+            onShouldStartLoadWithRequest={(request) => allowReaderNavigation(request.url)}
+            onRenderProcessGone={() => {
+              note({ phase: "render-process-gone", id });
+              setNotice(strings.reloading);
+              void connect().catch(() => setPhase("failed"));
+            }}
+            setSupportMultipleWindows={false}
+            javaScriptEnabled
           />
-        </>
-      ) : null}
-      {phase === "reading" && !tocOpen && !lookOpen && !scrubbing ? (
-        <BackPill
-          depth={backStack.depth}
-          label={backStack.label}
-          bottom={insets.bottom + (controls ? 132 : 24)}
-          onBack={() => post({ type: "back", id })}
-          onDismiss={() => post({ type: "back", id, clear: true })}
-        />
-      ) : null}
-      {lookOpen ? (
-        <QuickPanel
-          settings={reader.settings}
-          chrome={reader.chrome}
-          scope={reader.scope}
-          overridden={reader.overridden}
-          bottomInset={insets.bottom}
-          onScope={reader.setScope}
-          onChange={reader.change}
-          onReset={reader.reset}
-          onClose={() => showLook(false)}
-        />
-      ) : null}
-      {tocOpen ? (
-        <TocPanel
-          toc={toc}
-          current={current}
-          topInset={insets.top}
-          bottomInset={insets.bottom}
-          onClose={() => showToc(false)}
-          onSelect={(entry) => {
-            showToc(false);
-            if (entry.href) jumpTo({ href: entry.href });
-          }}
-        />
-      ) : null}
-      {notice ? (
-        <Pressable style={[styles.notice, { bottom: insets.bottom + (controls ? 132 : 72) }]} onPress={() => setNotice(null)}>
-          <Text style={styles.noticeText}>{notice}</Text>
-        </Pressable>
-      ) : null}
-    </View>
+        ) : null}
+        {phase === "starting" || phase === "opening" ? (
+          <View style={styles.overlay} pointerEvents="none">
+            <ActivityIndicator size="large" />
+            <Text style={styles.overlayText}>{strings.opening}</Text>
+          </View>
+        ) : null}
+        {message ? (
+          <View style={styles.overlay}>
+            <Text style={styles.overlayText}>{message}</Text>
+            <Pressable onPress={() => router.back()} accessibilityRole="button" style={styles.button}>
+              <Text style={styles.buttonText}>{strings.back}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+        {controls && phase === "reading" ? (
+          <>
+            <View style={[styles.bar, styles.top, { paddingTop: insets.top + 6, backgroundColor: chrome.bar }]}>
+              <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={10}>
+                <Text style={[styles.barButton, { color: chrome.ink }]}>‹ {strings.back}</Text>
+              </Pressable>
+              <View style={styles.titleBox}>
+                <Text style={[styles.barTitle, { color: chrome.ink }]} numberOfLines={1}>
+                  {book?.title ?? ""}
+                </Text>
+                {chapter ? (
+                  <Text style={[styles.barSub, { color: chrome.muted }]} numberOfLines={1}>
+                    {chapter}
+                  </Text>
+                ) : null}
+              </View>
+            </View>
+            <BottomBar
+              bottomInset={insets.bottom}
+              fraction={fraction}
+              toc={toc}
+              flow={flow}
+              fixedLayout={fixedLayout}
+              onFlow={switchFlow}
+              onContents={() => showToc(true)}
+              onChapter={stepChapter}
+              onSeek={(value) => jumpTo({ fraction: value })}
+              onScrub={setScrubbing}
+              onLook={() => showLook(true)}
+            />
+          </>
+        ) : null}
+        {phase === "reading" && !tocOpen && !lookOpen && !scrubbing ? (
+          <BackPill
+            depth={backStack.depth}
+            label={backStack.label}
+            bottom={insets.bottom + (controls ? 132 : 24)}
+            onBack={() => post({ type: "back", id })}
+            onDismiss={() => post({ type: "back", id, clear: true })}
+          />
+        ) : null}
+        {lookOpen ? (
+          <QuickPanel
+            settings={reader.settings}
+            chrome={reader.chrome}
+            scope={reader.scope}
+            overridden={reader.overridden}
+            bottomInset={insets.bottom}
+            onScope={reader.setScope}
+            onChange={reader.change}
+            onReset={reader.reset}
+            onClose={() => showLook(false)}
+          />
+        ) : null}
+        {tocOpen ? (
+          <TocPanel
+            toc={toc}
+            current={current}
+            topInset={insets.top}
+            bottomInset={insets.bottom}
+            onClose={() => showToc(false)}
+            onSelect={(entry) => {
+              showToc(false);
+              if (entry.href) jumpTo({ href: entry.href });
+            }}
+          />
+        ) : null}
+        {notice ? (
+          <Pressable style={[styles.notice, { bottom: insets.bottom + (controls ? 132 : 72) }]} onPress={() => setNotice(null)}>
+            <Text style={styles.noticeText}>{notice}</Text>
+          </Pressable>
+        ) : null}
+      </View>
+    </ChromeProvider>
   );
 }
 

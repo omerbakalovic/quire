@@ -3,6 +3,7 @@ import { FlatList, Pressable, StyleSheet, Text, View } from "react-native";
 
 import type { NavEntry } from "@/domain/navigation";
 import { t } from "@/i18n";
+import { useChrome } from "./chrome";
 
 type Props = {
   toc: NavEntry[];
@@ -19,6 +20,7 @@ const ROW = 52;
 export function TocPanel({ toc, current, topInset, bottomInset, onSelect, onClose }: Props) {
   const strings = t().book;
   const list = useRef<FlatList<NavEntry>>(null);
+  const c = useChrome();
 
   useEffect(() => {
     if (current < 0 || current >= toc.length) return;
@@ -27,18 +29,18 @@ export function TocPanel({ toc, current, topInset, bottomInset, onSelect, onClos
   }, [current, toc.length]);
 
   return (
-    <View style={styles.shade}>
-      <View style={[styles.panel, { paddingTop: topInset + 8, paddingBottom: bottomInset }]}>
+    <View style={[styles.shade, { backgroundColor: c.shade }]}>
+      <View style={[styles.panel, { paddingTop: topInset + 8, paddingBottom: bottomInset, backgroundColor: c.panel }]}>
         <View style={styles.header}>
-          <Text style={styles.title} accessibilityRole="header">
+          <Text style={[styles.title, { color: c.ink }]} accessibilityRole="header">
             {strings.contents}
           </Text>
           <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={strings.contentsClose} hitSlop={12}>
-            <Text style={styles.close}>✕</Text>
+            <Text style={[styles.close, { color: c.ink }]}>✕</Text>
           </Pressable>
         </View>
         {toc.length === 0 ? (
-          <Text style={styles.empty}>{strings.contentsEmpty}</Text>
+          <Text style={[styles.empty, { color: c.muted }]}>{strings.contentsEmpty}</Text>
         ) : (
           <FlatList
             ref={list}
@@ -56,12 +58,12 @@ export function TocPanel({ toc, current, topInset, bottomInset, onSelect, onClos
                   accessibilityRole="button"
                   accessibilityState={{ selected: here, disabled }}
                   accessibilityHint={here ? strings.currentChapter : undefined}
-                  style={[styles.row, { paddingLeft: 16 + Math.min(item.depth, 6) * 16 }, here && styles.rowHere]}
+                  style={[styles.row, { paddingLeft: 16 + Math.min(item.depth, 6) * 16 }, here && { backgroundColor: c.selected }]}
                 >
-                  <Text style={[styles.label, here && styles.labelHere, disabled && styles.labelOff]} numberOfLines={2}>
+                  <Text style={[styles.label, { color: c.ink }, here && styles.labelHere, disabled && { color: c.line }]} numberOfLines={2}>
                     {item.label || "—"}
                   </Text>
-                  {item.fraction !== null ? <Text style={styles.percent}>{Math.round(item.fraction * 100)}%</Text> : null}
+                  {item.fraction !== null ? <Text style={[styles.percent, { color: c.muted }]}>{Math.round(item.fraction * 100)}%</Text> : null}
                 </Pressable>
               );
             }}
@@ -82,9 +84,7 @@ const styles = StyleSheet.create({
   close: { color: "#ddd", fontSize: 18, padding: 6 },
   empty: { color: "#bbb", padding: 16, fontSize: 15 },
   row: { height: ROW, flexDirection: "row", alignItems: "center", paddingRight: 16, gap: 8 },
-  rowHere: { backgroundColor: "#3a3a3c" },
   label: { flex: 1, color: "#eee", fontSize: 15 },
-  labelHere: { color: "#fff", fontWeight: "700" },
-  labelOff: { color: "#777" },
+  labelHere: { fontWeight: "700" },
   percent: { color: "#999", fontSize: 12, minWidth: 36, textAlign: "right" },
 });

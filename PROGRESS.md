@@ -65,7 +65,9 @@ Follows `docs/customization.md` (PR #4). First slice, cloud only, not yet on the
 - Quick panel (Aa in the bottom bar): size, font, theme swatches, line spacing, margins, alignment, hyphenation, publisher styles, "All books / This book" scope with a dot on overridden settings, and reset.
 - `npm test`: 97 tests, 93 pass, 4 skipped. `tsc --noEmit` passes. Desktop Chromium: a look sent at open and a live change to Dark, serif, 150%, 1.8 line height, justified, 10% margins applied inside the book frame (24 px, Georgia, rgb(222,220,214) on rgb(31,31,33), justify), and the reader stayed at the start of chapter 2.
 
-Still to do for M4: the reader bars, contents panel and note sheet in theme colours; bundled OFL fonts and custom font import; brightness slider with restore and the software dimmer; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
+- Reader chrome follows the theme (`src/reader/chrome.tsx`): top and bottom bars, contents panel, Back pill, slider (accent fill and thumb, ticks that change colour where the fill passes), and the status bar icons. The note sheet is the footnote thread's and still uses its own colours; it can read the `--quire-page` variable the page already sets.
+
+Still to do for M4: the note sheet in theme colours; bundled OFL fonts and custom font import; brightness slider with restore and the software dimmer; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
 
 ## Milestone 2, in progress (branch `claude/project-thread-xehbd9`, off `m1b-import-reading`)
 

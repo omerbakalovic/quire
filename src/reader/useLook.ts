@@ -11,7 +11,7 @@ import { lookFor, type Look } from "./look";
 import type { Scope } from "./QuickPanel";
 
 function sameLook(a: Look, b: Look): boolean {
-  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page;
+  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page && a.fonts.map((f) => f.file).join() === b.fonts.map((f) => f.file).join();
 }
 
 /**
@@ -22,7 +22,8 @@ function sameLook(a: Look, b: Look): boolean {
 export function useLook(library: Library, bookId: string | null, reading: boolean, post: (message: object) => void) {
   const [scope, setScope] = useState<Scope>(() => (bookId && library.custom.books[bookId] ? "book" : "global"));
   const settings = useMemo(() => resolvedFor(library.custom, bookId), [library.custom, bookId]);
-  const look = useMemo(() => lookFor(settings), [settings]);
+  const fonts = library.custom.fonts;
+  const look = useMemo(() => lookFor(settings, fonts), [settings, fonts]);
   const sent = useRef<Resolved | null>(null);
 
   // Every change reaches the open page; a typography change keeps the place around a relayout.
@@ -32,9 +33,9 @@ export function useLook(library: Library, bookId: string | null, reading: boolea
     sent.current = settings;
     if (before === settings) return;
     // The dimmer and warmth are veils over the page; they never restyle the book.
-    if (before && sameLook(lookFor(before), look)) return;
+    if (before && sameLook(lookFor(before, fonts), look)) return;
     post({ type: "look", id: bookId, look, relayout: before ? needsRelayout(before, settings) : false });
-  }, [reading, bookId, settings, look, post]);
+  }, [reading, bookId, settings, fonts, look, post]);
 
   // A fresh page (reconnect, new mount) gets the look with the open message; start over.
   const opened = useCallback(() => {

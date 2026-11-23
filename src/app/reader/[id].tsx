@@ -18,6 +18,7 @@ import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webvi
 import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
 import { BottomBar } from "@/reader/BottomBar";
+import { confirmRemoveFont, pickFont } from "@/reader/font-import";
 import { LightVeil } from "@/reader/LightVeil";
 import { useBrightness } from "@/reader/useBrightness";
 import { QuickPanel } from "@/reader/QuickPanel";
@@ -481,6 +482,9 @@ export default function BookScreen() {
             scope={reader.scope}
             overridden={reader.overridden}
             bottomInset={insets.bottom}
+            userFonts={library.custom.fonts}
+            onAddFont={() => void pickFont((font) => reader.change("type.fontFamily", font.id))}
+            onRemoveFont={confirmRemoveFont}
             onScope={reader.setScope}
             onChange={reader.change}
             onReset={reader.reset}

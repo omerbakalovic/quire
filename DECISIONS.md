@@ -302,7 +302,11 @@ For a blank page, the scan names what starts on it and what runs across it, and 
 
 The saved reading look (global values, profiles, per-book overrides) lives in the library index as `custom`, beside the books, so it is written in the same single ordered write as everything else. It moves to SQLite (`settings` and `book_settings`) with the rest of the index. Two sentinel values stand for "leave it to the book": line height 0 and paragraph spacing -1. They keep every setting a plain number in the registry instead of adding a nullable type for two entries.
 
-Font families in this slice are the phone's own (serif, sans, mono, plus the book's). Bundled OFL fonts need their files and recorded licences, and come with custom font import.
+## Reading fonts, Milestone 4
+
+Four bundled fonts, all SIL OFL 1.1 from @fontsource 5.3.0: Literata (made for e-reading), EB Garamond (classic book face), Atkinson Hyperlegible (low vision) and OpenDyslexic. Few on purpose, matching the stripped-down default; anything else comes in through import. Subsets are Latin, Latin Extended, Cyrillic and Greek where a font has them, so Bosnian, Croatian, Serbian and Czech text never falls back mid-word. WOFF2 only, 1.4 MB in all. The files are committed, so builds stay offline.
+
+Fonts reach the book as blob: URLs the reader page makes from its own fetch of the loopback `fonts/` route, not as http URLs, so the book CSP keeps `font-src blob: data:` and a book cannot use the route. CSS families are named "Quire <name>" so a book's own embedded "Literata" never collides. An imported font is one file used for every weight and style (the WebView synthesizes bold and italic); its type comes from the file's signature, not its name, and font collections (.ttc) are refused. Removing an imported font clears every layer that chose it.
 
 ## Brightness, dimmer and warmth, Milestone 4
 

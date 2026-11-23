@@ -16,6 +16,8 @@ import java.util.concurrent.Semaphore
 interface Backend {
   fun book(id: String): File?
   fun staticFile(name: String): File?
+  /** A bundled or imported font by its served name, or null. */
+  fun font(name: String): File? = null
   fun appendReport(body: String)
 }
 
@@ -114,6 +116,7 @@ class LoopbackServer(
       RouteKind.READER_HTML -> serveNamed(method, "reader.html", HTML, headers, output)
       RouteKind.READER_JS -> serveNamed(method, "reader.js", JS, headers, output)
       RouteKind.BOOK -> serveBook(method, route.bookId, headers, output)
+      RouteKind.FONT -> serveFont(method, route.fontName, headers, output)
     }
   }
 
@@ -159,6 +162,19 @@ class LoopbackServer(
       return
     }
     serve(file, contentType, headers["range"], method == "HEAD", output)
+  }
+
+  private fun serveFont(method: String, name: String?, headers: Map<String, String>, output: OutputStream) {
+    if (method != "GET" && method != "HEAD" || name == null) {
+      writeStatus(output, 404, "Not Found", emptyList())
+      return
+    }
+    val file = backend.font(name)
+    if (file == null || !file.isFile) {
+      writeStatus(output, 404, "Not Found", emptyList())
+      return
+    }
+    serve(file, fontContentType(name), headers["range"], method == "HEAD", output)
   }
 
   private fun serveBook(method: String, bookId: String?, headers: Map<String, String>, output: OutputStream) {

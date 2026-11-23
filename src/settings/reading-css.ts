@@ -1,4 +1,5 @@
 import type { Resolved } from "./registry.ts";
+import { fontStack, type UserFont } from "./fonts.ts";
 import type { ThemeTokens } from "./themes.ts";
 
 /**
@@ -11,16 +12,7 @@ import type { ThemeTokens } from "./themes.ts";
  *
  * Sentinels: lineHeight 0 and paragraphSpacing -1 mean "leave it to the book".
  */
-const FAMILY: Record<string, string> = {
-  serif: 'Georgia, "Noto Serif", "Droid Serif", serif',
-  "sans-serif": 'Roboto, "Noto Sans", Arial, sans-serif',
-  monospace: '"Roboto Mono", "Droid Sans Mono", monospace',
-};
-
-// CJK, Arabic, Hebrew and symbol fallbacks, so a chosen family never shows missing-glyph boxes.
-const FALLBACK = '"Noto Sans CJK SC", "Noto Sans Arabic", "Noto Sans Hebrew", "Noto Sans Symbols", "Noto Color Emoji"';
-
-export function readingCss(settings: Resolved, theme: ThemeTokens): string {
+export function readingCss(settings: Resolved, theme: ThemeTokens, userFonts: readonly UserFont[] = []): string {
   const force = !settings["type.publisherStyles"];
   const important = force ? " !important" : "";
   const rules: string[] = [];
@@ -43,10 +35,9 @@ export function readingCss(settings: Resolved, theme: ThemeTokens): string {
   const size = settings["type.fontSize"];
   if (size !== 100) rules.push(`html { font-size: ${size}% !important; }`);
 
-  const family = settings["type.fontFamily"];
-  if (family !== "publisher" && FAMILY[family]) {
-    rules.push(`html, body, p, div, span, li, td, th, blockquote, h1, h2, h3, h4, h5, h6 { font-family: ${FAMILY[family]}, ${FALLBACK} !important; }`);
-  }
+  // Code keeps a monospace face whatever the reading font is.
+  const family = fontStack(settings["type.fontFamily"], userFonts);
+  if (family) rules.push(`html, body, p, div, span, li, td, th, blockquote, h1, h2, h3, h4, h5, h6 { font-family: ${family} !important; }`);
 
   const lineHeight = settings["type.lineHeight"];
   if (lineHeight > 0) rules.push(`html, body, p, li, blockquote, div { line-height: ${lineHeight} !important; }`);

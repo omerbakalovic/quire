@@ -317,7 +317,7 @@ export async function setLook(message) {
   const { view } = current;
   if (view.isFixedLayout) return true;
   const cfi = message.relayout ? anchorCfi(view) : null;
-  applyLookTo(view, message.look);
+  await applyLookTo(view, message.look);
   if (!cfi) return true;
   await nextFrame();
   await nextFrame();

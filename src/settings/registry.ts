@@ -4,6 +4,8 @@
  * override it, and whether a change repaginates the book. Screens, the quick
  * panel, reset, export and import are all driven from this list.
  */
+import { isFontId } from "./fonts.ts";
+
 export type Layer = "session" | "book" | "profile" | "global";
 
 export type Group = "typography" | "page" | "theme" | "light" | "turns" | "behaviour";
@@ -21,22 +23,22 @@ type Base = {
 export type NumberSetting = Base & { type: "number"; default: number; min: number; max: number; step: number };
 export type ChoiceSetting = Base & { type: "choice"; default: string; choices: readonly string[] };
 export type BooleanSetting = Base & { type: "boolean"; default: boolean };
+/** A reading font: a built-in choice or an imported font's id (see fonts.ts). */
+export type FontSetting = Base & { type: "font"; default: string };
 
-export type Setting = NumberSetting | ChoiceSetting | BooleanSetting;
+export type Setting = NumberSetting | ChoiceSetting | BooleanSetting | FontSetting;
 export type Value = number | string | boolean;
 
 const ALL: Layer[] = ["session", "book", "profile", "global"];
 const NOT_SESSION: Layer[] = ["book", "profile", "global"];
 
-/** Font families that need no bundled file. Bundled and imported fonts join this list later. */
-export const FONT_FAMILIES = ["publisher", "serif", "sans-serif", "monospace"] as const;
 export const ALIGNMENTS = ["publisher", "start", "justify"] as const;
 export const THEME_IDS = ["light", "paper", "gray", "dark", "black", "night", "contrast"] as const;
 export const TURN_STYLES = ["none", "slide", "fade"] as const;
 
 export const SETTINGS = [
   { key: "type.fontSize", type: "number", default: 100, min: 60, max: 300, step: 5, group: "typography", scopes: ALL, relayout: true, depth: "quick" },
-  { key: "type.fontFamily", type: "choice", default: "publisher", choices: FONT_FAMILIES, group: "typography", scopes: NOT_SESSION, relayout: true, depth: "quick" },
+  { key: "type.fontFamily", type: "font", default: "publisher", group: "typography", scopes: NOT_SESSION, relayout: true, depth: "quick" },
   { key: "type.lineHeight", type: "number", default: 0, min: 0, max: 2.4, step: 0.05, group: "typography", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "type.paragraphSpacing", type: "number", default: -1, min: -1, max: 2, step: 0.1, group: "typography", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "type.alignment", type: "choice", default: "publisher", choices: ALIGNMENTS, group: "typography", scopes: NOT_SESSION, relayout: true, depth: "standard" },
@@ -64,7 +66,9 @@ export type SettingValue<K extends SettingKey> =
     ? number
     : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "boolean" }
       ? boolean
-      : Extract<(typeof SETTINGS)[number], { key: K }> extends { choices: readonly (infer C)[] }
+      : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "font" }
+        ? string
+        : Extract<(typeof SETTINGS)[number], { key: K }> extends { choices: readonly (infer C)[] }
         ? C
         : never;
 
@@ -95,6 +99,8 @@ export function cleanValue(key: string, value: unknown): Value | null {
       return typeof value === "string" && setting.choices.includes(value) ? value : null;
     case "boolean":
       return typeof value === "boolean" ? value : null;
+    case "font":
+      return isFontId(value) ? value : null;
   }
 }
 

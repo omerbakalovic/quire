@@ -73,7 +73,9 @@ Follows `docs/customization.md` (PR #4). First slice, cloud only, not yet on the
 
 - Light (Aa panel): reader brightness (System or 5 to 100 percent, window only, handed back on exit and background), a dimmer veil to 85 percent, and a warm amber veil. Brightness needs one APK rebuild for `expo-brightness`.
 
-Still to do for M4: the note sheet in theme colours; bundled OFL fonts and custom font import; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
+- Fonts: four bundled reading fonts under the SIL OFL 1.1 (Literata, EB Garamond as "Garamond", Atkinson Hyperlegible as "Atkinson", OpenDyslexic), regular and bold, upright and italic, Latin, Latin Extended, Cyrillic and Greek where the font has them (1.4 MB in `assets/fonts`, licences beside the files; `scripts/vendor-fonts.mjs` rebuilds them from @fontsource 5.3.0). Import your own TTF, OTF, WOFF or WOFF2 from the Aa panel ("+ Add font"); long press an imported font to remove it, and settings that chose it go back to the book's fonts. The loopback server gained a `fonts/` route (bundled files copied out of the APK once per install, imported ones from `files/quire-fonts`); the reader page fetches a font only once it is chosen and gives the book a blob: URL, so the book's CSP is unchanged. Imported files are checked by their signature, capped at 8 MB, and stored under an id, never their own name. Needs an APK rebuild. Desktop Chromium: Literata at open, then a live switch to OpenDyslexic, both loaded inside the book frame, and the reader stayed at the start of chapter 2.
+
+Still to do for M4: the note sheet in theme colours; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
 
 ## Milestone 2, in progress (branch `claude/project-thread-xehbd9`, off `m1b-import-reading`)
 

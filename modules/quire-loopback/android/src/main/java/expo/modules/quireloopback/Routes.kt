@@ -8,10 +8,11 @@ enum class RouteKind {
   READER_JS,
   BOOK,
   REPORT,
+  FONT,
   NOT_FOUND,
 }
 
-data class Route(val kind: RouteKind, val bookId: String? = null)
+data class Route(val kind: RouteKind, val bookId: String? = null, val fontName: String? = null)
 
 fun isBookId(id: String): Boolean = BOOK_ID.matches(id)
 
@@ -32,6 +33,9 @@ fun resolveRoute(token: String, rawTarget: String): Route {
   if (segments.size == 3 && segments[2] == "reader.html") return Route(RouteKind.READER_HTML)
   if (segments.size == 3 && segments[2] == "reader.js") return Route(RouteKind.READER_JS)
   if (segments.size == 3 && segments[2] == "report") return Route(RouteKind.REPORT)
+  if (segments.size == 4 && segments[2] == "fonts" && isFontFile(segments[3])) {
+    return Route(RouteKind.FONT, fontName = segments[3])
+  }
   if (segments.size == 4 && segments[2] == "books" && isBookId(segments[3])) {
     return Route(RouteKind.BOOK, segments[3])
   }

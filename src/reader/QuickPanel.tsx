@@ -1,7 +1,8 @@
 import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
 
 import { t } from "@/i18n";
-import { ALIGNMENTS, FONT_FAMILIES, settingFor, THEME_IDS, type Resolved, type SettingKey } from "@/settings/registry";
+import { FONT_CHOICES, fontLabel, type UserFont } from "@/settings/fonts";
+import { ALIGNMENTS, settingFor, THEME_IDS, type Resolved, type SettingKey } from "@/settings/registry";
 import { THEMES, type ThemeTokens } from "@/settings/themes";
 
 export type Scope = "global" | "book";
@@ -16,6 +17,10 @@ type Props = {
   /** Keys this book overrides, to mark them. */
   overridden: ReadonlySet<SettingKey>;
   bottomInset: number;
+  /** Fonts the reader imported, listed after the built-in ones. */
+  userFonts: readonly UserFont[];
+  onAddFont: () => void;
+  onRemoveFont: (font: UserFont) => void;
   onScope: (scope: Scope) => void;
   onChange: (key: SettingKey, value: number | string | boolean) => void;
   onReset: () => void;
@@ -27,7 +32,7 @@ type Props = {
  * Every change applies live; the scope switch decides whether it is saved for
  * all books or only this one.
  */
-export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, onScope, onChange, onReset, onClose }: Props) {
+export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, userFonts, onAddFont, onRemoveFont, onScope, onChange, onReset, onClose }: Props) {
   const strings = t().book;
   const ink = { color: chrome.chromeInk };
   const muted = { color: chrome.chromeInk, opacity: 0.7 };
@@ -89,6 +94,37 @@ export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, o
     </View>
   );
 
+  const chip = (key: string, text: string, on: boolean, onPress: () => void, extra?: { onLongPress?: () => void; hint?: string }) => (
+    <Pressable
+      key={key}
+      onPress={onPress}
+      onLongPress={extra?.onLongPress}
+      accessibilityRole="button"
+      accessibilityState={{ selected: on }}
+      accessibilityHint={extra?.hint}
+      style={[styles.chip, { borderColor: chrome.chromeInk }, on && { backgroundColor: chrome.accent, borderColor: chrome.accent }]}
+    >
+      <Text style={[styles.chipText, ink, on && { color: chrome.page }]}>{text}</Text>
+    </Pressable>
+  );
+
+  const font = settings["type.fontFamily"];
+  const fontRow = (
+    <View style={styles.block}>
+      <Text style={[styles.label, ink]}>
+        {strings.lookFont}
+        {mark("type.fontFamily")}
+      </Text>
+      <View style={styles.chips}>
+        {FONT_CHOICES.map((id) => chip(id, fontLabel(id, strings.fonts), font === id, () => onChange("type.fontFamily", id)))}
+        {userFonts.map((f) =>
+          chip(f.id, f.label, font === f.id, () => onChange("type.fontFamily", f.id), { onLongPress: () => onRemoveFont(f), hint: strings.fontRemoveHint }),
+        )}
+        {chip("add", `+ ${strings.fontAdd}`, false, onAddFont, { hint: strings.fontAddHint })}
+      </View>
+    </View>
+  );
+
   const lineHeight = settings["type.lineHeight"];
   return (
     <View style={styles.shade}>
@@ -126,7 +162,7 @@ export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, o
             </View>
           </View>
           {stepper(strings.lookSize, "type.fontSize", `${settings["type.fontSize"]}%`)}
-          {chips(strings.lookFont, "type.fontFamily", FONT_FAMILIES, strings.fonts)}
+          {fontRow}
           <View style={styles.block}>
             <Text style={[styles.label, ink]}>
               {strings.lookTheme}

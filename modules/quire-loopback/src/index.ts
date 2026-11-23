@@ -20,6 +20,10 @@ export type NativeImport =
     }
   | { ok: false; reason: "not-epub"; detail: string | null };
 
+export type FontImport =
+  | { ok: true; file: string; name: string | null }
+  | { ok: false; reason: "unreadable" | "not-font" | "too-large" | "bad-id" };
+
 export type IncomingBook = { uri: string; name: string | null };
 
 type NativeLoopback = {
@@ -37,6 +41,8 @@ type NativeLoopback = {
   readLibrary(): Promise<string | null>;
   writeLibrary(json: string): Promise<void>;
   registerIfPresent(id: string, fileName: string): Promise<boolean>;
+  importFont(source: string, id: string): Promise<FontImport>;
+  deleteFont(file: string): Promise<boolean>;
   bookUrl(id: string): string;
   readerUrl(): string;
   launchCheck(): string | null;
@@ -145,4 +151,13 @@ export function hasTurns(): boolean {
 
 export function appendNote(line: string): void {
   native.appendNote(line);
+}
+
+/** Copy a picked font file into app storage as <id>.<ext>. The extension comes from the file's signature. */
+export function importFont(source: string, id: string): Promise<FontImport> {
+  return native.importFont(source, id);
+}
+
+export function deleteFont(file: string): Promise<boolean> {
+  return native.deleteFont(file);
 }

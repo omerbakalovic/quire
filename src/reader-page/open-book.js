@@ -1,3 +1,4 @@
+import { fontCss } from "./fonts.js";
 import * as epub from "../../vendor/foliate-js/epub.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
 import { restoreTarget } from "./jumps.js";
@@ -185,10 +186,16 @@ const READING_CSS = "html { color-scheme: light; background: #fdfdfb; color: #1a
  * by the host) and foliate's paginator attributes for margins and line width.
  * Without a look from the host, the plain light page.
  */
-export function applyLookTo(view, look) {
+let lookSeq = 0;
+
+export async function applyLookTo(view, look) {
   if (!view || view.isFixedLayout) return;
+  const seq = ++lookSeq;
   const css = typeof look?.css === "string" && look.css.length < 20000 ? look.css : READING_CSS;
-  view.renderer.setStyles?.(`${TABLE_CSS}\n${css}`);
+  const faces = await fontCss(look?.fonts);
+  // A newer look arrived while this one's fonts loaded: that one wins.
+  if (seq !== lookSeq) return;
+  view.renderer.setStyles?.(`${faces}\n${TABLE_CSS}\n${css}`);
   if (typeof look?.gap === "string" && /^\d{1,2}%$/.test(look.gap)) view.renderer.setAttribute("gap", look.gap);
   if (typeof look?.maxInlineSize === "string" && /^\d{3,4}px$/.test(look.maxInlineSize)) {
     view.renderer.setAttribute("max-inline-size", look.maxInlineSize);
@@ -219,7 +226,7 @@ export async function openBook(url, id, askDecision, { flow, lastLocation, posit
   // Fixed-layout books get foliate's fixed-layout renderer, which has no flow and no setStyles.
   if (!view.isFixedLayout) {
     view.renderer.setAttribute("flow", flow === "scrolled" ? "scrolled" : "paginated");
-    applyLookTo(view, look);
+    await applyLookTo(view, look);
   }
   // The saved CFI, else the saved section and offset, else the book fraction, else the start of the text.
   let restore = { target: null, plan: { kind: "start" } };

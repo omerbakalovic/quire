@@ -1,4 +1,5 @@
 import { cleanLayer, resolve, setValue, type LayerValues, type Values } from "./layers.ts";
+import { MAX_USER_FONTS, parseUserFonts, type UserFont } from "./fonts.ts";
 import type { Layer, Resolved, SettingKey } from "./registry.ts";
 
 /**
@@ -13,13 +14,15 @@ export type Customization = {
   profiles: Profile[];
   activeProfile: string | null;
   books: Record<string, Values>;
+  /** Fonts the reader imported; their files live in the app's font folder. */
+  fonts: UserFont[];
 };
 
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const MAX_PROFILES = 50;
 
 export function emptyCustomization(): Customization {
-  return { global: {}, profiles: [], activeProfile: null, books: {} };
+  return { global: {}, profiles: [], activeProfile: null, books: {}, fonts: [] };
 }
 
 export function parseCustomization(value: unknown): Customization {
@@ -44,7 +47,7 @@ export function parseCustomization(value: unknown): Customization {
     }
   }
   const active = typeof raw.activeProfile === "string" && seen.has(raw.activeProfile) ? raw.activeProfile : null;
-  return { global: cleanLayer("global", raw.global), profiles, activeProfile: active, books };
+  return { global: cleanLayer("global", raw.global), profiles, activeProfile: active, books, fonts: parseUserFonts(raw.fonts) };
 }
 
 /** The layers for one book, plus any session values the reader holds in memory. */
@@ -121,4 +124,37 @@ export function forgetBook(custom: Customization, bookId: string): Customization
   const books = { ...custom.books };
   delete books[bookId];
   return { ...custom, books };
+}
+
+/** Add an imported font. A full list, or a repeated id, changes nothing. */
+export function addUserFont(custom: Customization, font: UserFont): Customization {
+  const [clean] = parseUserFonts([font]);
+  if (!clean || custom.fonts.some((f) => f.id === clean.id) || custom.fonts.length >= MAX_USER_FONTS) return custom;
+  return { ...custom, fonts: [...custom.fonts, clean] };
+}
+
+/**
+ * Remove an imported font. Every layer that chose it goes back to the book's
+ * own fonts, so no saved value points at a missing file.
+ */
+export function removeUserFont(custom: Customization, id: string): Customization {
+  if (!custom.fonts.some((f) => f.id === id)) return custom;
+  const drop = (values: Values): Values => {
+    if (values["type.fontFamily"] !== id) return values;
+    const next = { ...values };
+    delete next["type.fontFamily"];
+    return next;
+  };
+  const books: Record<string, Values> = {};
+  for (const [bookId, values] of Object.entries(custom.books)) {
+    const next = drop(values);
+    if (Object.keys(next).length > 0) books[bookId] = next;
+  }
+  return {
+    ...custom,
+    fonts: custom.fonts.filter((f) => f.id !== id),
+    global: drop(custom.global),
+    profiles: custom.profiles.map((p) => ({ ...p, values: drop(p.values) })),
+    books,
+  };
 }

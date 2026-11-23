@@ -1,5 +1,32 @@
 # Progress
 
+## Current checkpoint: 2026-11-23
+
+Source: `m4-bars` at `cec1b25`, integrating the import/library, navigation, footnote and customization work. This checkpoint is 58 commits ahead of the fork's previous `master` (`5417a65`). The sections below preserve results from earlier milestones; their old counts, package ids and next steps are historical, not the current implementation status.
+
+Implemented now:
+
+- Android standalone APK workflow and local build script, with separate Quire and Quire Dev packages; EPUB import/Open/Share, local library and reading-position persistence.
+- Contents, progress slider, chapter navigation, jump-back history, footnote sheets and external-link confirmation.
+- Layered typography, themes, light controls, bundled/imported fonts, Reading look screen, profile creation/switching/deletion and per-book overrides. Aa edits the active profile when one is selected. Footnote sheets now follow the theme.
+- Header/footer information slots and Bare/Classic/Informative presets; editable top bar, quick row and bottom bar. Controls wrap on narrow screens (`cec1b25`). Layout presets affect information bands only.
+- Publisher-relative text scaling and a stable anchor for consecutive look changes until navigation, including asynchronous font loading (`863c2ed`, `fdf0b78`).
+
+Remaining work and verification:
+
+- Recheck the latest controls on a device: crowded rows in portrait/landscape, slider dragging, Back pill placement, empty slots and fixed-layout books.
+- Recheck profile/book scope, successive font/size/theme changes, restart/rotation/flow restore, Android back order and external-link confirmation. Earlier partial phone runs below do not establish that the latest integrated state passes all of these.
+- Page-turn effects are not implemented. Start with the planned Skia capture/performance spike; registry choices alone do not activate effects.
+- Theme editing, preset sharing, assignable gestures and the rest of [the customization design](docs/customization.md) remain open. SQLite migration, library folders/tags and later product milestones also remain open.
+- iOS is not implemented by the Android-only loopback module and has not been validated.
+
+Validation of this checkpoint on Windows, 2026-11-23 (Node 22.17.0, using the existing local dependencies):
+
+- `npm test`: 152 tests, 148 passed, 4 skipped, 0 failures. The skips are the four optional downloaded-book checks; downloaded and personal books were not included in the verification checkout.
+- `node node_modules/typescript/bin/tsc --noEmit`: passed.
+- `npm run reader`: passed, bundling pinned foliate-js `78914aef4466` and its build-time patch.
+- `git diff --check`: passed. No new APK build, native unit-test run or device matrix was performed for this documentation checkpoint; use the Android APK workflow for the new commit's build result.
+
 ## Done
 
 - Toolchain checked. Node 22.23.5 is installed for this user. OpenJDK 17.0.21.1 (Temurin) is at `~/.local/jdk`. Android platforms 36 and 37.0, build-tools 37.0.0, cmdline-tools, CMake 3.30.5, and NDK 27.1.12297006 are under `~/Android/Sdk`. System Java 21 and system Node 18 were left as they were.
@@ -52,7 +79,7 @@ Page turns on the phone, same section, paginated, five samples. `wallMs` is `nex
 | 4 | 104 | 3 |
 | 5 | 115 | 14 |
 
-Desktop Firefox medians for this book were about 35 ms to open and 101 ms per turn. The phone open, after the file was already fetched, was 136 ms. The phone turn wall times sit on the same 100 ms wait. The move itself was 0–14 ms.
+Desktop Firefox medians for this book were about 35 ms to open and 101 ms per turn. The phone open, after the file was already fetched, was 136 ms. The phone turn wall times sit on the same 100 ms wait. The move itself was 0-14 ms.
 
 A second full run, after the table was widened to 4000 px, passed the same five checks. The large book fetched in 2098 ms and opened in 124 ms. Its turn wall times were 185, 101, 102, 103, and 115 ms, and the move before the 100 ms wait was 0, 1, 1, 3, and 15 ms.
 
@@ -78,7 +105,7 @@ Follows `docs/customization.md` (PR #4). First slice, cloud only, not yet on the
 - Look changes keep the place (phone run 9 fix): the first change's anchor is kept until the reader turns, swipes, scrolls or jumps, so five Aa changes in a row no longer walk the page backwards, and quick overlapping changes share the anchor. The page waits for new fonts before going back. Desktop Chromium on Moby-Dick: seven changes (size, Serif, Literata, OpenDyslexic, Garamond, back to 100%) sent in pairs 30 ms apart all kept the anchor on screen and came back to the exact CFI; the old page drifted a page early. Pages, Scroll, Pages twice still lands on the exact CFI.
 - Phone matrix `add-font` command (debug builds): imports a font the host copied into `files/quire-cmd-fonts/` with run-as, since the system picker can't be driven by taps.
 
-Still to do for M4: the note sheet in theme colours; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
+Since this first slice, the themed note sheet, profile UI, registry-generated Reading look screen, information slots and control rows have been integrated. The Skia spike and page-turn styles remain outstanding; see the current checkpoint above.
 
 ## Milestone 2, in progress (branch `claude/project-thread-xehbd9`, off `m1b-import-reading`)
 
@@ -87,8 +114,8 @@ Android only; iOS is out of scope. Footnotes and `note-popup.js` are left alone 
 Built, cloud only, not yet run on the phone:
 
 - Position: every relocate now carries `sectionIndex` and `sectionFraction` next to the CFI and book fraction, and the library saves all four. Restore tries the CFI when it resolves to the saved section, then the saved section plus offset, then the book fraction, then the start of the text (`src/domain/position.ts`, `restoreTarget` in `src/reader-page/jumps.js`). The `opened` message reports which one was used as `restoredFrom`. M1b rows without a section still parse.
-- Back stack: TOC entries, the slider, the chapter buttons, and internal book links each push where the reader was (`src/reader-page/back-stack.js`, 30 levels). A "Back to …" pill shows the chapter it returns to and how many levels remain, with a dismiss button. Android back closes a note, then the contents, then steps back one jump level, then returns from a note's "Go to note" (M1b's foliate-history back), then leaves the book. Jumps move through `view.renderer.goTo`, not `view.goTo`, so they never add to foliate's history and the two stacks do not replay each other. The note popup's own "Back to text" chip is unchanged.
-- Phone run 7 (Xiaomi 15T, 2026-11-23, partial): quick matrix 123/123, Contents panel and Back pill passed. Three slider bugs were fixed afterwards: « did nothing on a chapter's first page, because foliate's relocate `fraction` is the END of the visible page, so the first page already read as inside the chapter. Relocate now also sends `startFraction` and a `sectionFraction` taken from the paginator's page count, and chapter logic uses those. Ticks now go one TOC level deeper when the top level has fewer than 8 entries (Frankenstein's volumes). The Back pill hides while the slider is dragged, so the preview no longer covers it. Back-key order, restore and the web-link confirm are still to check on the phone.
+- Back stack: TOC entries, the slider, the chapter buttons, and internal book links each push where the reader was (`src/reader-page/back-stack.js`, 30 levels). A "Back to ." pill shows the chapter it returns to and how many levels remain, with a dismiss button. Android back closes a note, then the contents, then steps back one jump level, then returns from a note's "Go to note" (M1b's foliate-history back), then leaves the book. Jumps move through `view.renderer.goTo`, not `view.goTo`, so they never add to foliate's history and the two stacks do not replay each other. The note popup's own "Back to text" chip is unchanged.
+- Phone run 7 (Xiaomi 15T, 2026-11-23, partial): quick matrix 123/123, Contents panel and Back pill passed. Three slider bugs were fixed afterwards: � did nothing on a chapter's first page, because foliate's relocate `fraction` is the END of the visible page, so the first page already read as inside the chapter. Relocate now also sends `startFraction` and a `sectionFraction` taken from the paginator's page count, and chapter logic uses those. Ticks now go one TOC level deeper when the top level has fewer than 8 entries (Frankenstein's volumes). The Back pill hides while the slider is dragged, so the preview no longer covers it. Back-key order, restore and the web-link confirm are still to check on the phone.
 - Contents panel (`src/reader/TocPanel.tsx`): nested, the current chapter marked and scrolled into view, entries that do not resolve are disabled.
 - Progress slider (`src/reader/ProgressSlider.tsx`): top-level chapter ticks, a chapter and percent preview while dragging, a jump on release, and adjustable accessibility actions. Previous/next chapter buttons sit either side. Previous goes to the start of the current chapter first.
 - External links: only `http`, `https`, and `mailto` are offered, after a confirmation that shows the host or address. Other schemes, spaces, control characters, and `user@host` URLs are refused (`src/domain/links.ts`).
@@ -103,7 +130,7 @@ Still to do for M2:
 - Reopening a book in the same page logs `Cannot read properties of null (reading 'destroy')` from foliate's `Paginator.destroy`. Seen on desktop; it is caught and the next book opens. It predates M2.
 - Fragment TOC entries inside one file share that file's start fraction, so ticks and the highlight fall back to the engine's own TOC item for those.
 
-## Next
+## Historical next step after M1a
 
 M1a is proven on the Xiaomi 15T and recorded below. Do not start M1b until that work is asked for. M1b is import, flow modes, taps, the paginator patch, the book matrix, the lifecycle test, and the IDPF sample downloads. Empty-anchor notes and the 67 `doc is null` errors were later fixed on `claude/project-thread-q5b6uf`; see the footnote section above.
 
@@ -155,7 +182,7 @@ PSS is `TOTAL PSS` in KB. Growth is the first page minus ready. Hermes `js_heapS
 | large-range, 81 MB | 62 ms | 345 ms | 17 | 0 | 373,075 | 400,723 | 27,648 | pass, cover, 124 sections, image 671 px |
 | large-blob, 81 MB | 246 ms | 116 ms | 0 | 0 | 373,509 | 398,530 | 25,021 | pass, cover, 124 sections, image 671 px |
 | scripted | 43 ms | 143 ms | 8 | 0 | 372,802 | 385,461 | 12,659 | pass, script did not run |
-| drm | 113 ms | — | 4 | 0 | 371,415 | 378,026 | 6,611 | pass, refused before open |
+| drm | 113 ms | - | 4 | 0 | 371,415 | 378,026 | 6,611 | pass, refused before open |
 | font | 68 ms | 179 ms | 12 | 0 | 369,711 | 382,968 | 13,257 | pass, obfuscation opened, subtle crypto true |
 
 Large-book turns, range mode, same section. `wallMs` includes the hardcoded 100 ms wait.
@@ -170,6 +197,6 @@ Large-book turns, range mode, same section. `wallMs` includes the hardcoded 100 
 
 The choice is range. The numbers and the iOS server limit are in `DECISIONS.md`.
 
-## Still untested
+## Historical untested list after M1a
 
 iOS. Import, taps, flow switching, the 100 ms paginator patch, the book matrix, the lifecycle test, and `test-books/mine/`. The step 5 phone numbers higher up are the computer server on port 8765. They are not these M1a numbers.

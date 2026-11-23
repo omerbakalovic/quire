@@ -13,6 +13,8 @@ type Props = {
   settings: Resolved;
   chrome: ThemeTokens;
   scope: Scope;
+  /** The active reading profile, which "All books" edits while it is on. */
+  profileName: string | null;
   /** Keys this book overrides, to mark them. */
   overridden: ReadonlySet<SettingKey>;
   bottomInset: number;
@@ -32,7 +34,7 @@ type Props = {
  * Every change applies live; the scope switch decides whether it is saved for
  * all books or only this one.
  */
-export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, userFonts, onAddFont, onRemoveFont, onScope, onChange, onLayout, onReset, onClose }: Props) {
+export function QuickPanel({ settings, chrome, scope, profileName, overridden, bottomInset, userFonts, onAddFont, onRemoveFont, onScope, onChange, onLayout, onReset, onClose }: Props) {
   const strings = t().book;
   const custom = t().customize;
   const layoutNow = presetOf(settings);
@@ -148,7 +150,7 @@ export function QuickPanel({ settings, chrome, scope, overridden, bottomInset, u
                     accessibilityState={{ selected: on }}
                     style={[styles.chip, { borderColor: chrome.chromeInk }, on && { backgroundColor: chrome.accent, borderColor: chrome.accent }]}
                   >
-                    <Text style={[styles.chipText, ink, on && { color: chrome.page }]}>{option === "global" ? strings.scopeAll : strings.scopeBook}</Text>
+                    <Text style={[styles.chipText, ink, on && { color: chrome.page }]}>{option === "global" ? (profileName ? strings.scopeProfile(profileName) : strings.scopeAll) : strings.scopeBook}</Text>
                   </Pressable>
                 );
               })}

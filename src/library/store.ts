@@ -171,6 +171,16 @@ export function resetGlobalGroups(groups: string[]): Promise<void> {
   return commit({ ...library, custom: { ...library.custom, global: values.global } });
 }
 
+/** Reset some groups in the active reading profile. Nothing happens without one. */
+export function resetProfileGroups(groups: string[]): Promise<void> {
+  const index = library.custom.profiles.findIndex((p) => p.id === library.custom.activeProfile);
+  if (index < 0) return writing;
+  let values = { profile: library.custom.profiles[index].values };
+  for (const group of groups) values = { profile: resetGroup(values, "profile", group).profile ?? {} };
+  const profiles = library.custom.profiles.map((p, i) => (i === index ? { ...p, values: values.profile } : p));
+  return commit({ ...library, custom: { ...library.custom, profiles } });
+}
+
 export function saveProfile(id: string, name: string, values: Values): Promise<void> {
   return commit({ ...library, custom: saveProfileTo(library.custom, id, name, values) });
 }

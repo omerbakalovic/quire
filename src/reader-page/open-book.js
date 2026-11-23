@@ -1,3 +1,4 @@
+import { applyFontScale, setFontScale } from "./font-scale.js";
 import { fontCss } from "./fonts.js";
 import * as epub from "../../vendor/foliate-js/epub.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
@@ -195,6 +196,7 @@ export async function applyLookTo(view, look) {
   const faces = await fontCss(look?.fonts);
   // A newer look arrived while this one's fonts loaded: that one wins.
   if (seq !== lookSeq) return;
+  setFontScale(view, look);
   view.renderer.setStyles?.(`${faces}\n${TABLE_CSS}\n${css}`);
   if (typeof look?.gap === "string" && /^\d{1,2}%$/.test(look.gap)) view.renderer.setAttribute("gap", look.gap);
   if (typeof look?.maxInlineSize === "string" && /^\d{3,4}px$/.test(look.maxInlineSize)) {
@@ -217,7 +219,11 @@ export async function openBook(url, id, askDecision, { flow, lastLocation, posit
   const view = document.createElement("foliate-view");
   view.style.cssText = "display:block;width:100%;height:100%";
   stage.append(view);
-  view.addEventListener("load", (event) => wrapWideTables(event.detail?.doc, view));
+  view.addEventListener("load", (event) => {
+    // Before wide tables are measured, so they see the final text size.
+    applyFontScale(event.detail?.doc);
+    wrapWideTables(event.detail?.doc, view);
+  });
   onView?.(view);
   const openStarted = performance.now();
   const book = await new epub.EPUB(loader).init();

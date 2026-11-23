@@ -186,6 +186,7 @@ export const en = {
     lookPublisher: "Use the book's own styles",
     lookScope: "Apply to",
     scopeAll: "All books",
+    scopeProfile: (name: string) => `All books (${name})`,
     scopeBook: "This book",
     lookReset: "Reset",
     bookDefault: "Book's",

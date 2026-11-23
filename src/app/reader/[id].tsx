@@ -505,6 +505,7 @@ export default function BookScreen() {
             settings={reader.settings}
             chrome={reader.chrome}
             scope={reader.scope}
+            profileName={reader.profileName}
             overridden={reader.overridden}
             bottomInset={insets.bottom}
             userFonts={library.custom.fonts}

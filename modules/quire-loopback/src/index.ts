@@ -24,6 +24,7 @@ export type IncomingBook = { uri: string; name: string | null };
 
 type NativeLoopback = {
   takeIncomingBooks(): IncomingBook[];
+  averageColor(coverUri: string): Promise<string | null>;
   addListener(event: "onIncomingBooks", listener: (event: { count: number }) => void): { remove(): void };
   start(): Promise<{ port: number; token: string }>;
   ensureStarted(): Promise<{ port: number; token: string }>;
@@ -64,6 +65,11 @@ export function isServing(): boolean {
 /** Copies a picked file (content:// or file://) into app storage and reads its package document. */
 export function importBook(source: string): Promise<NativeImport> {
   return native.importBook(source);
+}
+
+/** The average colour (#RRGGBB) of a stored cover, or null. */
+export function averageColor(coverUri: string): Promise<string | null> {
+  return native.averageColor(coverUri);
 }
 
 /** EPUBs another app handed to Quire ("Open with", "Share"), each returned once. */

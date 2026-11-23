@@ -1,11 +1,20 @@
 import { getDocumentAsync } from "expo-document-picker";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, FlatList, Image, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, Alert, AppState, FlatList, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { sortedBooks, type LibraryBook } from "@/domain/library";
+import { editionLabels, NEUTRAL_PILL, PALETTE, pillColor, textOn, type LibraryLook } from "@/domain/library-look";
 import { t } from "@/i18n";
-import { importFiles, loadLibrary, removeFromLibrary, useLibrary, type ImportSummary } from "@/library/store";
+import {
+  importFiles,
+  loadLibrary,
+  measureMissingCovers,
+  removeFromLibrary,
+  saveBookColor,
+  useLibrary,
+  type ImportSummary,
+} from "@/library/store";
 import {
   appendNote,
   launchCheck,
@@ -16,14 +25,6 @@ import {
 } from "@/renderer/book-url";
 
 type ImportSource = "pick" | "incoming" | "import";
-
-const COVER_COLORS = ["#5B6C8F", "#8F5B6C", "#6C8F5B", "#8F7A5B", "#5B8F88", "#7A5B8F"];
-
-function fallbackColor(id: string): string {
-  let sum = 0;
-  for (const char of id) sum = (sum * 31 + char.charCodeAt(0)) >>> 0;
-  return COVER_COLORS[sum % COVER_COLORS.length];
-}
 
 function summarize(results: ImportSummary[]): string {
   const strings = t().library;
@@ -41,36 +42,126 @@ function summarize(results: ImportSummary[]): string {
   return [...lines.filter(Boolean), ...failures].join("\n");
 }
 
-function BookRow({ book, onOpen, onRemove }: { book: LibraryBook; onOpen: () => void; onRemove: () => void }) {
+function BookRow({
+  book,
+  look,
+  edition,
+  onOpen,
+  onLongPress,
+}: {
+  book: LibraryBook;
+  look: LibraryLook;
+  edition: string | null;
+  onOpen: () => void;
+  onLongPress: () => void;
+}) {
   const strings = t().library;
   const percent = book.fraction === null ? null : Math.round(book.fraction * 100);
+  const author = book.authors.join(", ") || strings.unknownAuthor;
+  const pills = look.style === "pills";
+  const background = pills ? pillColor(look, book.id) : null;
+  const ink = background ? textOn(background) : null;
+  const inkStyle = ink ? { color: ink } : null;
+  const details = [
+    look.showAuthor ? author : null,
+    edition,
+    look.showProgress ? (percent === null ? strings.notStarted : strings.percentRead(percent)) : null,
+  ].filter(Boolean);
   return (
     <Pressable
-      style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+      style={({ pressed }) => [
+        pills ? styles.pill : styles.line,
+        background ? { backgroundColor: background } : null,
+        pressed && styles.pressed,
+      ]}
       onPress={onOpen}
-      onLongPress={onRemove}
+      onLongPress={onLongPress}
       accessibilityRole="button"
-      accessibilityLabel={`${book.title}, ${book.authors.join(", ") || strings.unknownAuthor}`}
+      accessibilityLabel={`${book.title}, ${author}`}
+      accessibilityHint={strings.longPressHint}
     >
-      {book.coverUri ? (
+      {pills && look.showCovers && book.coverUri ? (
         <Image source={{ uri: book.coverUri }} style={styles.cover} resizeMode="cover" />
-      ) : (
-        <View style={[styles.cover, styles.fallback, { backgroundColor: fallbackColor(book.id) }]}>
-          <Text style={styles.fallbackText} numberOfLines={4}>
-            {book.title}
-          </Text>
-        </View>
-      )}
+      ) : null}
       <View style={styles.meta}>
-        <Text style={styles.title} numberOfLines={2}>
+        <Text style={[styles.title, inkStyle]} numberOfLines={2}>
           {book.title}
         </Text>
-        <Text style={styles.author} numberOfLines={1}>
-          {book.authors.join(", ") || strings.unknownAuthor}
-        </Text>
-        <Text style={styles.progress}>{percent === null ? strings.notStarted : strings.percentRead(percent)}</Text>
+        {details.length > 0 ? (
+          <Text style={[styles.detail, inkStyle]} numberOfLines={1}>
+            {details.join("  ·  ")}
+          </Text>
+        ) : null}
       </View>
     </Pressable>
+  );
+}
+
+/** Long-press on a book: its pill colour and removal. */
+function BookSheet({
+  book,
+  look,
+  onClose,
+  onRemove,
+}: {
+  book: LibraryBook | null;
+  look: LibraryLook;
+  onClose: () => void;
+  onRemove: (book: LibraryBook) => void;
+}) {
+  const strings = t().library;
+  if (!book) return null;
+  const chosen = look.bookColors[book.id] ?? null;
+  const cover = look.coverColors[book.id] ?? null;
+  return (
+    <Modal transparent animationType="fade" visible onRequestClose={onClose}>
+      <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel={strings.cancel}>
+        <Pressable style={styles.sheet} onPress={() => {}}>
+          <Text style={styles.sheetTitle} numberOfLines={2}>
+            {book.title}
+          </Text>
+          {look.style === "pills" ? (
+            <>
+              <Text style={styles.sheetLabel}>{strings.colour}</Text>
+              <View style={styles.swatches}>
+                <Pressable
+                  onPress={() => void saveBookColor(book.id, null)}
+                  accessibilityRole="button"
+                  accessibilityLabel={strings.coverColour}
+                  accessibilityState={{ selected: chosen === null }}
+                  style={[
+                    styles.swatch,
+                    styles.coverSwatch,
+                    { backgroundColor: cover ?? NEUTRAL_PILL },
+                    chosen === null && styles.swatchOn,
+                  ]}
+                >
+                  <Text style={[styles.swatchText, { color: textOn(cover ?? NEUTRAL_PILL) }]}>{strings.coverShort}</Text>
+                </Pressable>
+                {PALETTE.map((color) => (
+                  <Pressable
+                    key={color}
+                    onPress={() => void saveBookColor(book.id, color)}
+                    accessibilityRole="button"
+                    accessibilityLabel={color}
+                    accessibilityState={{ selected: chosen === color }}
+                    style={[styles.swatch, { backgroundColor: color }, chosen === color && styles.swatchOn]}
+                  />
+                ))}
+              </View>
+            </>
+          ) : (
+            <Text style={styles.sheetHint}>{strings.colourNeedsPills}</Text>
+          )}
+          <Pressable onPress={() => onRemove(book)} accessibilityRole="button" style={styles.sheetRow}>
+            <Text style={styles.removeText}>{strings.removeBook}</Text>
+          </Pressable>
+          <Pressable onPress={onClose} accessibilityRole="button" style={styles.sheetRow}>
+            <Text style={styles.sheetDone}>{strings.done}</Text>
+          </Pressable>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 }
 
@@ -81,6 +172,7 @@ export default function LibraryScreen() {
   const [check] = useState(() => launchCheck());
   const [ready, setReady] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [sheetFor, setSheetFor] = useState<string | null>(null);
   // Imports run one batch at a time, whether picked, shared in, or queued over adb.
   const queue = useRef<Promise<unknown>>(Promise.resolve());
 
@@ -106,7 +198,10 @@ export default function LibraryScreen() {
 
   useEffect(() => {
     if (check) return;
-    void loadLibrary().then(() => setReady(true));
+    void loadLibrary().then(() => {
+      setReady(true);
+      void measureMissingCovers();
+    });
   }, [check]);
 
   // Books another app handed over ("Open with Quire", "Share"): at launch, and while running.
@@ -174,6 +269,7 @@ export default function LibraryScreen() {
   }
 
   function confirmRemove(book: LibraryBook) {
+    setSheetFor(null);
     Alert.alert(strings.deleteTitle, strings.deleteBody(book.title), [
       { text: strings.cancel, style: "cancel" },
       { text: strings.deleteConfirm, style: "destructive", onPress: () => void removeFromLibrary(book.id) },
@@ -181,6 +277,9 @@ export default function LibraryScreen() {
   }
 
   const books = sortedBooks(library);
+  const look = library.look;
+  const editions = editionLabels(books, look);
+  const sheetBook = sheetFor ? (books.find((book) => book.id === sheetFor) ?? null) : null;
   return (
     <View style={styles.screen}>
       <Stack.Screen
@@ -221,16 +320,20 @@ export default function LibraryScreen() {
         <FlatList
           data={books}
           keyExtractor={(book) => book.id}
+          contentContainerStyle={look.style === "pills" ? styles.pillList : null}
           renderItem={({ item }) => (
             <BookRow
               book={item}
+              look={look}
+              edition={editions.get(item.id) ?? null}
               onOpen={() => router.push({ pathname: "/reader/[id]", params: { id: item.id } })}
-              onRemove={() => confirmRemove(item)}
+              onLongPress={() => setSheetFor(item.id)}
             />
           )}
           ListFooterComponent={<Text style={styles.footer}>{strings.removeHint}</Text>}
         />
       )}
+      <BookSheet book={sheetBook} look={look} onClose={() => setSheetFor(null)} onRemove={confirmRemove} />
       {busy ? (
         <View style={styles.busy} pointerEvents="none">
           <ActivityIndicator size="large" />
@@ -249,15 +352,40 @@ const styles = StyleSheet.create({
   addButton: { backgroundColor: "#1F3A5F", paddingHorizontal: 28, paddingVertical: 14, borderRadius: 24, marginVertical: 8 },
   addButtonText: { color: "#fff", fontSize: 17, fontWeight: "600" },
   footer: { fontSize: 13, textAlign: "center", opacity: 0.5, padding: 20 },
-  row: { flexDirection: "row", paddingHorizontal: 16, paddingVertical: 10, gap: 14, minHeight: 116 },
+  line: {
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: "#8884",
+  },
+  pillList: { padding: 12, gap: 10 },
+  pill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 14,
+    borderRadius: 28,
+    minHeight: 56,
+  },
   pressed: { opacity: 0.6 },
-  cover: { width: 64, height: 96, borderRadius: 4, backgroundColor: "#ddd" },
-  fallback: { padding: 6, justifyContent: "center" },
-  fallbackText: { color: "#fff", fontSize: 10, fontWeight: "600" },
-  meta: { flex: 1, justifyContent: "center", gap: 4 },
+  cover: { width: 40, height: 60, borderRadius: 6, backgroundColor: "#0002" },
+  meta: { flex: 1, justifyContent: "center", gap: 3 },
   title: { fontSize: 17, fontWeight: "600" },
-  author: { fontSize: 14, opacity: 0.75 },
-  progress: { fontSize: 13, opacity: 0.6 },
+  detail: { fontSize: 13, opacity: 0.7 },
+  scrim: { flex: 1, backgroundColor: "#0006", justifyContent: "flex-end" },
+  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, gap: 12 },
+  sheetTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
+  sheetLabel: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", opacity: 0.6, color: "#000" },
+  sheetHint: { fontSize: 14, opacity: 0.7, color: "#000" },
+  swatches: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
+  swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: "#0002" },
+  coverSwatch: { width: 64, alignItems: "center", justifyContent: "center" },
+  swatchText: { fontSize: 12, fontWeight: "600" },
+  swatchOn: { borderWidth: 3, borderColor: "#208AEF" },
+  sheetRow: { minHeight: 48, justifyContent: "center" },
+  removeText: { fontSize: 16, color: "#C0392B", fontWeight: "600" },
+  sheetDone: { fontSize: 16, color: "#208AEF", fontWeight: "600" },
   headerButtons: { flexDirection: "row", gap: 8 },
   importButton: { fontSize: 16, fontWeight: "600", color: "#208AEF", paddingHorizontal: 8 },
   disabled: { opacity: 0.5 },

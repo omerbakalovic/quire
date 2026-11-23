@@ -10,6 +10,7 @@ export {
   takeCommands,
   takePendingImports,
   takeIncomingBooks,
+  averageColor,
   onIncomingBooks,
   writeLibrary,
   hasGo,

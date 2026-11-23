@@ -36,6 +36,10 @@ class QuireLoopbackModule : Module() {
       sendEvent("onIncomingBooks", mapOf("count" to books.size))
     }
 
+    AsyncFunction("averageColor") { uri: String ->
+      averageColor(uri)
+    }
+
     Function("takeIncomingBooks") {
       takeIncomingBooks()
     }
@@ -245,6 +249,38 @@ class QuireLoopbackModule : Module() {
     } catch (error: Exception) {
       null
     } ?: uri.lastPathSegment
+  }
+
+  /**
+   * The average colour of a stored cover, as #RRGGBB, for the library's pill
+   * background. Only covers inside app storage are read.
+   */
+  private fun averageColor(source: String): String? {
+    val uri = Uri.parse(source)
+    if (uri.scheme != "file") return null
+    val file = File(uri.path ?: return null).canonicalFile
+    val covers = store().coversDir.canonicalFile
+    if (!file.path.startsWith(covers.path + File.separator) || !file.isFile) return null
+    val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = 8 }) ?: return null
+    try {
+      var red = 0L
+      var green = 0L
+      var blue = 0L
+      var count = 0L
+      val pixels = IntArray(bitmap.width * bitmap.height)
+      bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+      for (pixel in pixels) {
+        if ((pixel ushr 24) < 128) continue
+        red += (pixel shr 16) and 0xFF
+        green += (pixel shr 8) and 0xFF
+        blue += pixel and 0xFF
+        count++
+      }
+      if (count == 0L) return null
+      return "#%02X%02X%02X".format(red / count, green / count, blue / count)
+    } finally {
+      bitmap.recycle()
+    }
   }
 
   private fun debuggable(context: Context): Boolean {

@@ -67,7 +67,9 @@ Follows `docs/customization.md` (PR #4). First slice, cloud only, not yet on the
 
 - Reader chrome follows the theme (`src/reader/chrome.tsx`): top and bottom bars, contents panel, Back pill, slider (accent fill and thumb, ticks that change colour where the fill passes), and the status bar icons. The note sheet is the footnote thread's and still uses its own colours; it can read the `--quire-page` variable the page already sets.
 
-Still to do for M4: the note sheet in theme colours; bundled OFL fonts and custom font import; brightness slider with restore and the software dimmer; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
+- Light (Aa panel): reader brightness (System or 5 to 100 percent, window only, handed back on exit and background), a dimmer veil to 85 percent, and a warm amber veil. Brightness needs one APK rebuild for `expo-brightness`.
+
+Still to do for M4: the note sheet in theme colours; bundled OFL fonts and custom font import; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
 
 ## Milestone 2, in progress (branch `claude/project-thread-xehbd9`, off `m1b-import-reading`)
 

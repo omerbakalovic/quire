@@ -6,7 +6,7 @@
  */
 export type Layer = "session" | "book" | "profile" | "global";
 
-export type Group = "typography" | "page" | "theme" | "turns" | "behaviour";
+export type Group = "typography" | "page" | "theme" | "light" | "turns" | "behaviour";
 
 type Base = {
   key: string;
@@ -45,6 +45,13 @@ export const SETTINGS = [
   { key: "page.marginX", type: "number", default: 4, min: 0, max: 20, step: 1, group: "page", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "page.maxWidth", type: "number", default: 720, min: 400, max: 1600, step: 20, group: "page", scopes: NOT_SESSION, relayout: true, depth: "advanced" },
   { key: "theme.id", type: "choice", default: "light", choices: THEME_IDS, group: "theme", scopes: ALL, relayout: false, depth: "quick" },
+  // The reader's own screen brightness. 0 follows the system. Only the reader's window changes,
+  // so leaving the reader or the app always gives the system value back.
+  { key: "light.brightness", type: "number", default: 0, min: 0, max: 1, step: 0.05, group: "light", scopes: ALL, relayout: false, depth: "quick" },
+  // A black veil over the page, for going dimmer than the system minimum (spec 4E). 0 is off.
+  { key: "light.dimmer", type: "number", default: 0, min: 0, max: 0.85, step: 0.05, group: "light", scopes: ALL, relayout: false, depth: "quick" },
+  // An amber veil, independent of the theme. 0 is off.
+  { key: "light.warmth", type: "number", default: 0, min: 0, max: 0.6, step: 0.05, group: "light", scopes: ALL, relayout: false, depth: "quick" },
   { key: "turn.style", type: "choice", default: "none", choices: TURN_STYLES, group: "turns", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "turn.followReduceMotion", type: "boolean", default: true, group: "turns", scopes: ["global"], relayout: false, depth: "advanced" },
 ] as const satisfies readonly Setting[];

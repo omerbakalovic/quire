@@ -10,6 +10,10 @@ import { themeFor } from "@/settings/themes";
 import { lookFor, type Look } from "./look";
 import type { Scope } from "./QuickPanel";
 
+function sameLook(a: Look, b: Look): boolean {
+  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page;
+}
+
 /**
  * The reading look for one open book: resolves the layered settings, keeps
  * the page in step with every change, and saves changes to the scope the
@@ -27,6 +31,8 @@ export function useLook(library: Library, bookId: string | null, reading: boolea
     const before = sent.current;
     sent.current = settings;
     if (before === settings) return;
+    // The dimmer and warmth are veils over the page; they never restyle the book.
+    if (before && sameLook(lookFor(before), look)) return;
     post({ type: "look", id: bookId, look, relayout: before ? needsRelayout(before, settings) : false });
   }, [reading, bookId, settings, look, post]);
 
@@ -48,8 +54,8 @@ export function useLook(library: Library, bookId: string | null, reading: boolea
   );
 
   const reset = useCallback(() => {
-    if (scope === "book" && bookId) void resetBookGroups(bookId, ["typography", "page", "theme"]);
-    else void resetGlobalGroups(["typography", "page", "theme"]);
+    if (scope === "book" && bookId) void resetBookGroups(bookId, ["typography", "page", "theme", "light"]);
+    else void resetGlobalGroups(["typography", "page", "theme", "light"]);
   }, [scope, bookId]);
 
   return {

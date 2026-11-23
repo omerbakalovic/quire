@@ -64,6 +64,8 @@ test("setting a value equal to the layers below clears the override", () => {
 test("only layout settings ask for a relayout", () => {
   const base = defaults();
   assert.equal(needsRelayout(base, { ...base, "theme.id": "dark" }), false);
+  assert.equal(needsRelayout(base, { ...base, "light.dimmer": 0.5 }), false);
+  assert.equal(readingCss({ ...base, "light.dimmer": 0.5, "light.warmth": 0.3 }, THEMES.light), readingCss(base, THEMES.light), "veils never restyle the book");
   assert.equal(needsRelayout(base, { ...base, "type.fontSize": 120 }), true);
 });
 

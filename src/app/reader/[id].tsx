@@ -18,6 +18,8 @@ import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webvi
 import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
 import { BottomBar } from "@/reader/BottomBar";
+import { LightVeil } from "@/reader/LightVeil";
+import { useBrightness } from "@/reader/useBrightness";
 import { QuickPanel } from "@/reader/QuickPanel";
 import { chromeFor, ChromeProvider } from "@/reader/chrome";
 import { TocPanel } from "@/reader/TocPanel";
@@ -85,6 +87,7 @@ export default function BookScreen() {
     webRef.current?.postMessage(JSON.stringify(message));
   }, []);
   const reader = useLook(library, id ?? null, phase === "reading", post);
+  useBrightness(reader.settings["light.brightness"], phase === "reading");
 
   const flush = useCallback(() => {
     const next = pending.current;
@@ -415,7 +418,8 @@ export default function BookScreen() {
             javaScriptEnabled
           />
         ) : null}
-        {phase === "starting" || phase === "opening" ? (
+        {phase === "reading" ? <LightVeil dimmer={reader.settings["light.dimmer"]} warmth={reader.settings["light.warmth"]} /> : null}
+      {phase === "starting" || phase === "opening" ? (
           <View style={styles.overlay} pointerEvents="none">
             <ActivityIndicator size="large" />
             <Text style={styles.overlayText}>{strings.opening}</Text>

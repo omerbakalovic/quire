@@ -51,6 +51,12 @@ export const AMBIENT_SLOTS = [
   "layout.footer.right",
 ] as const;
 const NONE: readonly string[] = [];
+/**
+ * Controls for the bars that appear on a tap in the middle of the page (3.3).
+ * Bookmarks, search, annotations and profile switching join as they are built.
+ */
+export const CONTROLS = ["back", "title", "contents", "look", "flow", "prevChapter", "slider", "nextChapter", "percent"] as const;
+export const CONTROL_SLOTS = ["layout.topBar", "layout.quickRow", "layout.bottomBar"] as const;
 
 export const SETTINGS = [
   { key: "type.fontSize", type: "number", default: 100, min: 60, max: 300, step: 5, group: "typography", scopes: ALL, relayout: true, depth: "quick" },
@@ -78,6 +84,11 @@ export const SETTINGS = [
   { key: "layout.footer.left", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "layout.footer.center", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "layout.footer.right", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
+  // The bars on a middle tap. The defaults are the bars Quire had before they were configurable.
+  // They float over the text, so changing them never repaginates.
+  { key: "layout.topBar", type: "elements", default: ["back", "title"], catalog: CONTROLS, max: 5, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
+  { key: "layout.quickRow", type: "elements", default: ["prevChapter", "slider", "nextChapter", "percent"], catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
+  { key: "layout.bottomBar", type: "elements", default: ["contents", "look", "flow"], catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "turn.style", type: "choice", default: "none", choices: TURN_STYLES, group: "turns", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "turn.followReduceMotion", type: "boolean", default: true, group: "turns", scopes: ["global"], relayout: false, depth: "advanced" },
 ] as const satisfies readonly Setting[];

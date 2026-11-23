@@ -10,7 +10,7 @@ import { formatNumber, sectionsFor, stepValue, type Row } from "@/settings/custo
 import { fontLabel } from "@/settings/fonts";
 import { resolve } from "@/settings/layers";
 import { LAYOUT_PRESETS, presetOf, presetValues } from "@/settings/layout";
-import type { SettingKey } from "@/settings/registry";
+import { CONTROL_SLOTS, type SettingKey } from "@/settings/registry";
 
 const ACCENT = "#1F3A5F";
 
@@ -126,7 +126,8 @@ export default function CustomizeScreen() {
           <View style={styles.chips}>
             {row.catalog.map((element) => {
               const at = row.value.indexOf(element);
-              const text = `${at >= 0 && row.value.length > 1 ? `${at + 1}. ` : ""}${strings.elements[element] ?? element}`;
+              const names = (CONTROL_SLOTS as readonly string[]).includes(row.key) ? strings.controls : strings.elements;
+              const text = `${at >= 0 && row.value.length > 1 ? `${at + 1}. ` : ""}${names[element] ?? element}`;
               return chip(element, text, at >= 0, () => toggle(element));
             })}
           </View>

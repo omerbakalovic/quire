@@ -70,12 +70,14 @@ function el(tag, attrs = {}, text) {
 }
 
 /**
- * A section read in the background, parsed by its own media type. foliate's
- * createDocument parses XHTML as XML, so <a id="n1"/> stays an empty anchor.
- * Parsing XHTML as text/html would open an <a> there that swallows the note.
+ * A section read in the background. section.load() is foliate's loaded copy:
+ * image and link URLs are rewritten to blobs, and the XHTML was re-serialized
+ * by XMLSerializer, which writes <a id="n1"></a>, so a text/html parse keeps
+ * empty anchors empty. (createDocument() would give the raw source, whose
+ * relative image URLs the popup cannot show.) A response served as XHTML is
+ * parsed as XML, with text/html as the fallback when it does not parse.
  */
 export async function readSection(section) {
-  if (section?.createDocument) return section.createDocument();
   const url = await section.load();
   const response = await fetch(url);
   const text = await response.text();

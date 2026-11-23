@@ -111,21 +111,29 @@ test("the popup copy of an empty-anchor note keeps its text and nothing executab
   assert.equal(holder.querySelector("a")?.getAttribute("data-href"), null);
 });
 
-// Notes in another file are read in the background. Read as text/html, <a id="n1"/>
-// opens an <a> that swallows what follows, and the wrong note came back.
+// Notes in another file are read in the background from foliate's loaded copy.
+// Read raw as text/html, <a id="n1"/> would open an <a> that swallows what
+// follows. foliate re-serializes XHTML with XMLSerializer first, which writes
+// <a id="n1"></a>, so the text/html copy keeps the anchor empty.
 const selfClosing = xhtml(`<div><a id="n1"/><p>Note one.</p><p>More of one.</p><a id="n2"/><p>Note two.</p></div>`);
 
-test("parsing XHTML as text/html breaks self-closed anchors (why readSection exists)", () => {
+test("raw XHTML parsed as text/html breaks self-closed anchors", () => {
   assert.notEqual(noteText(parse(selfClosing, "text/html"), "n1"), "Note one. | More of one.");
 });
 
-test("readSection uses the section's own parser when foliate gives one", async () => {
-  const section = { createDocument: async () => parse(selfClosing), load: () => assert.fail("load is not used") };
-  const doc = await readSection(section);
-  assert.equal(noteText(doc, "n1"), "Note one. | More of one.");
+test("foliate's serialized copy keeps empty anchors empty when read as text/html", async () => {
+  const serialized = new window.XMLSerializer().serializeToString(parse(selfClosing));
+  const restore = globals.fetch;
+  globals.fetch = async () => new Response(serialized, { headers: { "content-type": "text/html" } });
+  try {
+    const doc = await readSection({ load: async () => "blob:section", createDocument: () => assert.fail("raw source is not used") });
+    assert.equal(noteText(doc, "n1"), "Note one. | More of one.");
+  } finally {
+    globals.fetch = restore;
+  }
 });
 
-test("readSection without createDocument parses an XHTML response as XML", async () => {
+test("readSection parses a response served as XHTML as XML", async () => {
   const restore = globals.fetch;
   globals.fetch = async () => new Response(selfClosing, { headers: { "content-type": "application/xhtml+xml" } });
   try {

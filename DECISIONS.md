@@ -189,7 +189,7 @@ On the same origin, still through range reads: the scripted book showed `SCRIPTE
 
 ## Notes are Quire's own code
 
-foliate's `FootnoteHandler` is not bundled. It opened a hidden `<foliate-view>` per note, which raised the M1a `doc is null` errors when those views were removed, and it extracted empty-anchor notes wrong. `src/reader-page/notes.js` classifies and extracts notes, and `note-popup.js` shows the sanitized copy in a bottom sheet over the page. Sections read in the background are parsed by their own media type through `section.createDocument()`, never forced to text/html, so a self-closed empty anchor stays empty. The note tests use jsdom, a dev dependency only.
+foliate's `FootnoteHandler` is not bundled. It opened a hidden `<foliate-view>` per note, which raised the M1a `doc is null` errors when those views were removed, and it extracted empty-anchor notes wrong. `src/reader-page/notes.js` classifies and extracts notes, and `note-popup.js` shows the sanitized copy in a bottom sheet over the page. Sections read in the background come from `section.load()`, so images keep their blob URLs. foliate has already re-serialized that copy with `XMLSerializer`, so a self-closed empty anchor stays empty even when the copy is parsed as text/html. The note tests use jsdom, a dev dependency only.
 
 ## Known limits
 

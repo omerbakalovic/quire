@@ -14,7 +14,7 @@
  * arm64-v8a, which every current phone uses, and builds much faster.
  */
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -39,12 +39,19 @@ function run(command, commandArgs, cwd = root) {
 const identity = JSON.parse(readFileSync(join(root, "src/config/identity.json"), "utf8"));
 
 run("node", ["scripts/bundle-reader.mjs"]);
-// Writes android/ from app.config.ts and the plugins. An existing android/ keeps local.properties.
+// Writes android/ from app.config.ts and the plugins. Prebuild may clear android/ first,
+// so local.properties (sdk.dir, and on Windows cmake.dir for long paths) is kept aside
+// and put back afterwards.
+const localProperties = join(root, "android", "local.properties");
+const savedProperties = existsSync(localProperties) ? readFileSync(localProperties) : null;
 run("npx", ["expo", "prebuild", "--platform", "android", "--no-install"]);
+if (savedProperties) writeFileSync(localProperties, savedProperties);
 
 const gradleArgs = ["assembleRelease"];
 if (!flag("--all-abis")) gradleArgs.push("-PreactNativeArchitectures=arm64-v8a");
-run(windows ? "gradlew.bat" : "./gradlew", gradleArgs, join(root, "android"));
+// An absolute path: cmd.exe does not find gradlew.bat in the working directory when spawned this way.
+const gradlew = join(root, "android", windows ? "gradlew.bat" : "gradlew");
+run(windows ? `"${gradlew}"` : gradlew, gradleArgs, join(root, "android"));
 
 const built = join(root, "android/app/build/outputs/apk/release/app-release.apk");
 if (!existsSync(built)) {

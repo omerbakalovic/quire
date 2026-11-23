@@ -90,7 +90,10 @@ export async function importFiles(files: { uri: string; name: string | null }[])
       const outcome = decideImport(await importBook(file.uri));
       if (outcome.kind === "added" || outcome.kind === "duplicate") {
         await commit(upsertBook(library, outcome.facts, file.name, Date.now()));
-        if (outcome.kind === "added" && file.name) await changeLook((look) => setFileName(look, outcome.facts.id, file.name));
+        // A re-import fills in the file name for books added before names were kept.
+        if (file.name && (outcome.kind === "added" || !library.look.fileNames[outcome.facts.id])) {
+          await changeLook((look) => setFileName(look, outcome.facts.id, file.name));
+        }
         await measureCover(outcome.facts.id, outcome.facts.coverUri);
       } else if (outcome.kind === "drm" && outcome.removeFile) {
         await deleteBook(outcome.id);

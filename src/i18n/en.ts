@@ -2,7 +2,7 @@
 export const en = {
   library: {
     title: "Library",
-    import: "Import",
+    import: "Add books",
     importing: "Importing…",
     empty: "Your library is empty. Add EPUB books from your phone to start reading.",
     welcomeTitle: "Welcome to Quire",

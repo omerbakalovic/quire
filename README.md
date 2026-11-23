@@ -13,7 +13,7 @@ Quire runs on its own once installed. No computer, cable or Metro server is need
 
 Then open **Quire** from the app drawer and tap **Add books**, or open an `.epub` from Files, a browser download, or any app's Share menu and pick Quire. Tap a book to read; Settings is in the library's header.
 
-The release app is `app.quire.reader`. Debug builds (`npm run android`, used by the phone matrix) install beside it as **Quire Dev** (`app.quire.reader.dev`) with their own library, so test runs never touch your books.
+The release app is `app.quire.reader`. Debug builds (`npm run android`, used by the phone matrix) install beside it as **Quire Dev** (`app.quire.reader.dev`) with their own library, so test runs never touch your books. On Xiaomi/HyperOS, the first USB install of each package (Quire and Quire Dev) waits for an "Install via USB" confirmation on the phone; without it adb reports `INSTALL_FAILED_USER_RESTRICTED`.
 
 ## Development
 

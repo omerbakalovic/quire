@@ -333,3 +333,7 @@ Fonts reach the book as blob: URLs the reader page makes from its own fetch of t
 `expo-brightness` 58.0.3 (MIT, maintained by Expo, matched to SDK 58) sets the reader window's brightness. It never writes the system setting, so it needs no permission, and "restore the previous brightness" holds by construction: leaving the reader, closing the app or going to the background hands the window back to the system value (`restoreSystemBrightnessAsync`). It is a native module, so the APK has to be rebuilt once. The hook loads it lazily and does nothing on an older APK.
 
 The software dimmer and the warm filter are two veils in React Native over the WebView, under the controls. They take no touches and never restyle the book, so moving them costs no relayout.
+
+## Header and footer lines, Milestone 4
+
+The header and footer lines are drawn by the app over the page, not by foliate's own per-column header and footer cells. foliate drops those cells in scroll mode and rebuilds them on every layout, and the app already has the theme, the clock and the book's metadata. The page only makes room: the host sends a `band` with the look, and the page adds it to the margin it already sizes for the system bars. In scroll mode the text runs under the lines, so they get the page colour behind them. Fixed-layout books show no lines. The clock is 24-hour for now; battery needs a native module and time left needs reading speed (Milestone 7), so both wait.

@@ -32,8 +32,20 @@ export function readingCss(settings: Resolved, theme: ThemeTokens, userFonts: re
     );
   }
 
+  // Text size. With the book's styles on, the page measures the book's own html and body
+  // sizes and sets these variables to them times the scale (src/reader-page/font-scale.js),
+  // so px and pt books grow too. With them off, Quire's size wins everywhere: the root
+  // follows the setting and running text is brought back to it.
   const size = settings["type.fontSize"];
-  if (size !== 100) rules.push(`html { font-size: ${size}% !important; }`);
+  if (force) {
+    if (size !== 100) rules.push(`html { font-size: ${size}% !important; }`);
+    rules.push("body { font-size: 1rem !important; }", "p, li, blockquote, dd, dt, td, th { font-size: 1rem !important; }");
+  } else {
+    rules.push(
+      "html[data-quire-size] { font-size: var(--quire-html-size) !important; }",
+      "html[data-quire-size] body { font-size: var(--quire-body-size) !important; }",
+    );
+  }
 
   // Code keeps a monospace face whatever the reading font is.
   const family = fontStack(settings["type.fontFamily"], userFonts);

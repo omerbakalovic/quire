@@ -1,4 +1,4 @@
-import { cleanValue, defaults, settingFor, SETTINGS, type Layer, type Resolved, type SettingKey, type Value } from "./registry.ts";
+import { cleanValue, defaults, sameValue, settingFor, SETTINGS, type Layer, type Resolved, type SettingKey, type Value } from "./registry.ts";
 
 /**
  * Layered settings (docs/customization.md, section 2.2). The value in use is
@@ -62,7 +62,7 @@ export function setValue(layers: LayerValues, layer: Layer, key: SettingKey, val
   const clean = value === null ? null : cleanValue(key, value);
   if (value !== null && clean === null) return layers;
   const below = resolve(layersBelow(layers, layer))[key];
-  if (clean === null || clean === below) delete current[key];
+  if (clean === null || sameValue(clean, below)) delete current[key];
   else current[key] = clean;
   return { ...layers, [layer]: current };
 }
@@ -76,7 +76,7 @@ function layersBelow(layers: LayerValues, layer: Layer): LayerValues {
 
 /** Whether a change between two resolved sets needs the book re-laid out. */
 export function needsRelayout(before: Resolved, after: Resolved): boolean {
-  return SETTINGS.some((setting) => setting.relayout && before[setting.key] !== after[setting.key]);
+  return SETTINGS.some((setting) => setting.relayout && !sameValue(before[setting.key], after[setting.key]));
 }
 
 /** Reset one group in one layer (the per-group reset button). */

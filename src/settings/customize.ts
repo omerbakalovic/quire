@@ -34,12 +34,13 @@ export function stepValue(key: SettingKey, current: number, dir: 1 | -1): number
 export type Row =
   | { key: SettingKey; kind: "number"; value: number; set: boolean; source: Source }
   | { key: SettingKey; kind: "choice"; value: string; options: readonly string[]; set: boolean; source: Source }
-  | { key: SettingKey; kind: "boolean"; value: boolean; set: boolean; source: Source };
+  | { key: SettingKey; kind: "boolean"; value: boolean; set: boolean; source: Source }
+  | { key: SettingKey; kind: "elements"; value: readonly string[]; catalog: readonly string[]; max: number; set: boolean; source: Source };
 
 export type Section = { group: Group; rows: Row[] };
 
 // Page turns join the screen with the animation work; until then nothing honours them.
-const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "behaviour"];
+const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "behaviour"];
 
 /**
  * The rows for editing one layer. `set` is true when that layer holds the
@@ -59,7 +60,9 @@ export function sectionsFor(layers: LayerValues, layer: Exclude<Layer, "session"
       const value = resolved[key];
       if (setting.type === "number") rows.push({ key, kind: "number", value: value as number, set, source });
       else if (setting.type === "boolean") rows.push({ key, kind: "boolean", value: value as boolean, set, source });
-      else if (setting.type === "font") {
+      else if (setting.type === "elements") {
+        rows.push({ key, kind: "elements", value: value as readonly string[], catalog: setting.catalog, max: setting.max, set, source });
+      } else if (setting.type === "font") {
         rows.push({ key, kind: "choice", value: value as string, options: [...FONT_CHOICES, ...userFonts.map((f) => f.id)], set, source });
       } else rows.push({ key, kind: "choice", value: value as string, options: setting.choices, set, source });
     }

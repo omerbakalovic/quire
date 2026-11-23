@@ -30,6 +30,9 @@ export type ReaderToHost =
       sectionFraction: number | null;
       /** Book fraction where the visible page starts; `fraction` is where it ends. */
       startFraction: number | null;
+      /** Page in the section, 1-based, and its page count. Null in scroll mode. */
+      page: number | null;
+      pages: number | null;
       sectionCount: number | null;
       sinceTapMs: number | null;
       canGoBack: boolean;
@@ -108,6 +111,8 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       sectionIndex: optNumber(message.sectionIndex),
       sectionFraction: optNumber(message.sectionFraction),
       startFraction: optNumber(message.startFraction),
+      page: optNumber(message.page),
+      pages: optNumber(message.pages),
       sectionCount: optNumber(message.sectionCount),
       sinceTapMs: optNumber(message.sinceTapMs),
       canGoBack: message.canGoBack === true,

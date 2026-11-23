@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { Library } from "@/domain/library";
-import { resetBookGroups, saveSetting, resetGlobalGroups } from "@/library/store";
+import { resetBookGroups, resetGlobalGroups, resetProfileGroups, saveSetting, saveSettingsIn } from "@/library/store";
 import { layersFor, resolvedFor } from "@/settings/customization";
 import { needsRelayout } from "@/settings/layers";
+import { presetValues, type LayoutPreset } from "@/settings/layout";
 import type { Resolved, SettingKey } from "@/settings/registry";
 import { themeFor } from "@/settings/themes";
 
@@ -11,13 +12,15 @@ import { lookFor, type Look } from "./look";
 import type { Scope } from "./QuickPanel";
 
 function sameLook(a: Look, b: Look): boolean {
-  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page && a.ink === b.ink && a.link === b.link && a.chrome === b.chrome && a.fonts.map((f) => f.file).join() === b.fonts.map((f) => f.file).join();
+  return a.css === b.css && a.gap === b.gap && a.maxInlineSize === b.maxInlineSize && a.page === b.page && a.band === b.band && a.fontScale === b.fontScale && a.ink === b.ink && a.link === b.link && a.chrome === b.chrome && a.fonts.map((f) => f.file).join() === b.fonts.map((f) => f.file).join();
 }
 
 /**
  * The reading look for one open book: resolves the layered settings, keeps
  * the page in step with every change, and saves changes to the scope the
- * reader picked (all books, or only this one).
+ * reader picked (all books, or only this one). While a reading profile is
+ * active, "all books" edits that profile: it sits above the global values,
+ * so a global edit would not show.
  */
 export function useLook(library: Library, bookId: string | null, reading: boolean, post: (message: object) => void) {
   const [scope, setScope] = useState<Scope>(() => (bookId && library.custom.books[bookId] ? "book" : "global"));
@@ -42,6 +45,9 @@ export function useLook(library: Library, bookId: string | null, reading: boolea
     sent.current = settings;
   }, [settings]);
 
+  const profile = library.custom.profiles.find((p) => p.id === library.custom.activeProfile) ?? null;
+  const layer = scope === "book" && bookId ? "book" : profile ? "profile" : "global";
+
   const overridden = useMemo(
     () => new Set(Object.keys(bookId ? (library.custom.books[bookId] ?? {}) : {}) as SettingKey[]),
     [library.custom.books, bookId],
@@ -49,24 +55,37 @@ export function useLook(library: Library, bookId: string | null, reading: boolea
 
   const change = useCallback(
     (key: SettingKey, value: number | string | boolean) => {
-      void saveSetting(scope, key, value, bookId);
+      void saveSetting(layer, key, value, bookId);
     },
-    [scope, bookId],
+    [layer, bookId],
+  );
+
+  const layout = useCallback(
+    (preset: LayoutPreset) => {
+      void saveSettingsIn(layer, presetValues(preset), bookId);
+    },
+    [layer, bookId],
   );
 
   const reset = useCallback(() => {
-    if (scope === "book" && bookId) void resetBookGroups(bookId, ["typography", "page", "theme", "light"]);
-    else void resetGlobalGroups(["typography", "page", "theme", "light"]);
-  }, [scope, bookId]);
+    const groups = ["typography", "page", "theme", "light", "layout"];
+    if (layer === "book" && bookId) void resetBookGroups(bookId, groups);
+    else if (layer === "profile") void resetProfileGroups(groups);
+    else void resetGlobalGroups(groups);
+  }, [layer, bookId]);
 
   return {
     settings,
     look: look as Look,
     chrome: themeFor(settings["theme.id"]),
+    theme: themeFor(settings["theme.id"]),
     scope,
     setScope,
+    /** The active reading profile's name, which "all books" edits while it is on. */
+    profileName: profile?.name ?? null,
     overridden,
     change,
+    layout,
     reset,
     opened,
     layers: layersFor(library.custom, bookId),

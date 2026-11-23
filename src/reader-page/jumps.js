@@ -115,6 +115,24 @@ export function sectionStartOf(renderer) {
 }
 
 /**
+ * The visible page in its section, 1-based, and the section's page count, for
+ * the header and footer ("3 of 12"). foliate's paginator keeps a blank page at
+ * each end of a section, so those two do not count. Null in scroll mode and
+ * for fixed-layout books.
+ */
+export function pageOf(renderer) {
+  try {
+    if (!renderer || renderer.scrolled) return { page: null, pages: null };
+    const { page, pages } = renderer;
+    if (typeof page !== "number" || typeof pages !== "number" || pages <= 2) return { page: null, pages: null };
+    const count = pages - 2;
+    return { page: Math.min(count, Math.max(1, page)), pages: count };
+  } catch {
+    return { page: null, pages: null };
+  }
+}
+
+/**
  * The position parts of a relocate: foliate's book fraction (end of the page,
  * shown as the percentage), the section, the offset where the page starts
  * inside it, and the book fraction of that start (used for chapter logic).

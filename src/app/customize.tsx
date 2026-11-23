@@ -3,11 +3,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 
 import { t } from "@/i18n";
-import { chooseProfile, loadLibrary, removeProfile, saveProfile, saveSetting, useLibrary } from "@/library/store";
+import { chooseProfile, loadLibrary, removeProfile, saveProfile, saveSetting, saveSettingsIn, useLibrary } from "@/library/store";
 import { confirmRemoveFont, pickFont } from "@/reader/font-import";
 import { layersFor } from "@/settings/customization";
 import { formatNumber, sectionsFor, stepValue, type Row } from "@/settings/customize";
 import { fontLabel } from "@/settings/fonts";
+import { resolve } from "@/settings/layers";
+import { LAYOUT_PRESETS, presetOf, presetValues } from "@/settings/layout";
 import type { SettingKey } from "@/settings/registry";
 
 const ACCENT = "#1F3A5F";
@@ -27,12 +29,13 @@ export default function CustomizeScreen() {
   const layers = useMemo(() => layersFor(custom, null), [custom]);
   const sections = useMemo(() => sectionsFor(layers, layer, custom.fonts), [layers, layer, custom.fonts]);
   const [name, setName] = useState("");
+  const presetNow = presetOf(resolve(layers));
 
   useEffect(() => {
     void loadLibrary();
   }, []);
 
-  const change = (key: SettingKey, value: number | string | boolean | null) => void saveSetting(layer, key, value, null);
+  const change = (key: SettingKey, value: number | string | boolean | readonly string[] | null) => void saveSetting(layer, key, value, null);
 
   const choiceName = (key: SettingKey, option: string): string => {
     if (key === "type.fontFamily") return fontLabel(option, book.fonts, custom.fonts);
@@ -111,6 +114,25 @@ export default function CustomizeScreen() {
         </View>
       );
     }
+    if (row.kind === "elements") {
+      // Tap to add at the end or remove; the order is the order of taps.
+      const toggle = (element: string) => {
+        const next = row.value.includes(element) ? row.value.filter((e) => e !== element) : [...row.value, element];
+        if (next.length <= row.max) change(row.key, next);
+      };
+      return (
+        <View key={row.key} style={styles.block}>
+          {label(row)}
+          <View style={styles.chips}>
+            {row.catalog.map((element) => {
+              const at = row.value.indexOf(element);
+              const text = `${at >= 0 && row.value.length > 1 ? `${at + 1}. ` : ""}${strings.elements[element] ?? element}`;
+              return chip(element, text, at >= 0, () => toggle(element));
+            })}
+          </View>
+        </View>
+      );
+    }
     const fonts = row.key === "type.fontFamily";
     return (
       <View key={row.key} style={styles.block}>
@@ -156,6 +178,17 @@ export default function CustomizeScreen() {
       {sections.map((section) => (
         <View key={section.group} style={styles.group}>
           <Text style={styles.section}>{strings.groups[section.group] ?? section.group}</Text>
+          {section.group === "layout" ? (
+            <>
+              <Text style={styles.help}>{strings.layoutHelp}</Text>
+              <View style={styles.chips}>
+                {LAYOUT_PRESETS.map((preset) =>
+                  chip(preset, strings.layoutPresets[preset] ?? preset, presetNow === preset, () => void saveSettingsIn(layer, presetValues(preset), null)),
+                )}
+                {presetNow === null ? chip("custom", strings.layoutCustom, true, () => undefined) : null}
+              </View>
+            </>
+          ) : null}
           {section.rows.map(draw)}
         </View>
       ))}

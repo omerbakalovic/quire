@@ -1,4 +1,4 @@
-import { createJumps, navEntries, positionOf } from "./jumps.js";
+import { createJumps, navEntries, pageOf, positionOf } from "./jumps.js";
 import { NotePopup } from "./note-popup.js";
 import { linkFromEvent } from "./notes.js";
 import { applyLookTo, openBook } from "./open-book.js";
@@ -19,6 +19,13 @@ let tapAt = null;
 let settings = { tapZones: "reading" };
 
 let insets = { top: 0, bottom: 0, left: 0, right: 0 };
+// Extra margin for the host's header and footer line (layout slots), 0 when both are empty.
+let band = 0;
+
+function bandOf(look) {
+  const value = look?.band;
+  return typeof value === "number" && Number.isFinite(value) ? Math.min(Math.max(0, Math.round(value)), 64) : 0;
+}
 
 /**
  * The system bars' insets, from the host. The note sheet and the Back to text
@@ -32,10 +39,11 @@ export function applyInsets(message) {
   applyMargin(current?.view);
 }
 
-// foliate's default header and footer band is 48 px; it grows when a system bar is taller.
+// foliate's default header and footer band is 48 px; it grows when a system bar is taller,
+// and again when the host draws a header or footer line in it.
 function applyMargin(view) {
   if (!view || view.isFixedLayout) return;
-  const margin = Math.max(48, Math.round(Math.max(insets.top, insets.bottom) + 12));
+  const margin = Math.max(48, Math.round(Math.max(insets.top, insets.bottom) + 12 + band));
   view.renderer?.setAttribute?.("margin", `${margin}px`);
 }
 
@@ -121,6 +129,7 @@ export async function openForReading(message, reply, askDecision) {
   const { id, url } = message;
   const flow = flowOf(message.flow);
   applySettings(message.settings ?? {});
+  band = bandOf(message.look);
   applyInsets(message.insets ?? insets);
   paintPage(message.look);
   if (current?.view) {
@@ -158,6 +167,7 @@ export async function openForReading(message, reply, askDecision) {
           id,
           cfi: detail.cfi ?? null,
           ...positionOf(view, detail),
+          ...pageOf(view.renderer),
           tocLabel: detail.tocItem?.label ?? null,
           tocHref: detail.tocItem?.href ?? null,
           sectionCount: detail.section?.total ?? null,
@@ -325,6 +335,8 @@ export async function setLook(message) {
   const { view } = current;
   if (view.isFixedLayout) return true;
   const cfi = message.relayout ? anchorCfi(view) : null;
+  band = bandOf(message.look);
+  applyMargin(view);
   await applyLookTo(view, message.look);
   if (!cfi) return true;
   await nextFrame();

@@ -15,6 +15,7 @@ import { appendNote, bookUrl, ensureLoopback, isServing, readerUrl, registerBook
 import { decideOpen } from "@/renderer/open-decision";
 import { parseReaderMessage } from "@/renderer/protocol";
 import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webview-allow";
+import { AmbientBands } from "@/reader/AmbientBands";
 import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
 import { BottomBar } from "@/reader/BottomBar";
@@ -58,6 +59,8 @@ export default function BookScreen() {
   const [fraction, setFraction] = useState<number | null>(book?.fraction ?? null);
   // Where the visible page starts; `fraction` is where it ends. Chapter logic needs the start.
   const [startFraction, setStartFraction] = useState<number | null>(null);
+  // Page in the chapter and the chapter's page count, for the header and footer. Null in scroll mode.
+  const [pageInChapter, setPageInChapter] = useState<{ page: number | null; pages: number | null }>({ page: null, pages: null });
   const [scrubbing, setScrubbing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [toc, setToc] = useState<NavEntry[]>([]);
@@ -228,6 +231,7 @@ export default function BookScreen() {
         setStartFraction(message.startFraction);
         setChapter(message.tocLabel);
         setTocHref(message.tocHref);
+        setPageInChapter((was) => (was.page === message.page && was.pages === message.pages ? was : { page: message.page, pages: message.pages }));
         pending.current = report;
         if (Date.now() - lastSaved.current > SAVE_EVERY_MS) flush();
         return;
@@ -424,6 +428,22 @@ export default function BookScreen() {
             javaScriptEnabled
           />
         ) : null}
+        {phase === "reading" && !fixedLayout ? (
+          <AmbientBands
+            settings={reader.settings}
+            theme={reader.theme}
+            insets={insets}
+            scrolled={flow === "scrolled"}
+            info={{
+              title: book?.title ?? null,
+              author: book?.authors?.[0] ?? null,
+              chapter,
+              page: pageInChapter.page,
+              pages: pageInChapter.pages,
+              fraction,
+            }}
+          />
+        ) : null}
         {phase === "reading" ? <LightVeil dimmer={reader.settings["light.dimmer"]} warmth={reader.settings["light.warmth"]} /> : null}
       {phase === "starting" || phase === "opening" ? (
           <View style={styles.overlay} pointerEvents="none">
@@ -485,6 +505,7 @@ export default function BookScreen() {
             settings={reader.settings}
             chrome={reader.chrome}
             scope={reader.scope}
+            profileName={reader.profileName}
             overridden={reader.overridden}
             bottomInset={insets.bottom}
             userFonts={library.custom.fonts}
@@ -492,6 +513,7 @@ export default function BookScreen() {
             onRemoveFont={confirmRemoveFont}
             onScope={reader.setScope}
             onChange={reader.change}
+            onLayout={reader.layout}
             onReset={reader.reset}
             onClose={() => showLook(false)}
           />

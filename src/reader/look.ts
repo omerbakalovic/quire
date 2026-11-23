@@ -1,4 +1,5 @@
 import { fontFaces, type FontFace, type UserFont } from "@/settings/fonts";
+import { BAND_PX, bandsOf } from "@/settings/layout";
 import { readingCss, layoutAttributes } from "@/settings/reading-css";
 import type { Resolved } from "@/settings/registry";
 import { themeFor } from "@/settings/themes";
@@ -16,10 +17,15 @@ export type Look = {
   chrome: string;
   chromeInk: string;
   fonts: FontFace[];
+  /** Extra page margin for the header and footer line; 0 when both bands are empty. */
+  band: number;
+  /** Text size against the book's own, measured by the page. 1 when the book's styles are off (the CSS sizes text then). */
+  fontScale: number;
 };
 
 export function lookFor(settings: Resolved, userFonts: readonly UserFont[] = []): Look {
   const theme = themeFor(settings["theme.id"]);
+  const bands = bandsOf(settings);
   return {
     css: readingCss(settings, theme, userFonts),
     ...layoutAttributes(settings),
@@ -30,5 +36,7 @@ export function lookFor(settings: Resolved, userFonts: readonly UserFont[] = [])
     chrome: theme.chrome,
     chromeInk: theme.chromeInk,
     fonts: fontFaces(settings["type.fontFamily"], userFonts),
+    band: bands.top || bands.bottom ? BAND_PX : 0,
+    fontScale: settings["type.publisherStyles"] ? settings["type.fontSize"] / 100 : 1,
   };
 }

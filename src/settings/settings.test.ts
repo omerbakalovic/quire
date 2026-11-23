@@ -11,7 +11,7 @@ test("every registry entry's default passes its own validation", () => {
   for (const setting of SETTINGS) {
     assert.ok(!seen.has(setting.key), `duplicate ${setting.key}`);
     seen.add(setting.key);
-    assert.equal(cleanValue(setting.key, setting.default), setting.default, setting.key);
+    assert.deepEqual(cleanValue(setting.key, setting.default), setting.default, setting.key);
   }
 });
 
@@ -88,7 +88,8 @@ test("built-in themes are readable; Night is dim on purpose", () => {
 test("defaults leave the book's typography alone but apply the theme", () => {
   const css = readingCss(defaults(), THEMES.light);
   assert.match(css, /background: #fdfdfb !important/);
-  assert.doesNotMatch(css, /font-size/);
+  assert.doesNotMatch(css, /^(html|body|p)[ ,][^\n]*font-size/m, "only the page-measured size rule, which waits for its attribute");
+  assert.match(css, /html\[data-quire-size\] \{ font-size: var\(--quire-html-size\) !important; \}/);
   assert.doesNotMatch(css, /font-family/);
   assert.doesNotMatch(css, /line-height/);
   assert.doesNotMatch(css, /text-align/);
@@ -102,7 +103,8 @@ test("chosen typography is forced, with a glyph fallback chain", () => {
     { ...defaults(), "type.fontSize": 130, "type.fontFamily": "serif", "type.lineHeight": 1.6, "type.paragraphSpacing": 0.5, "type.alignment": "justify", "type.hyphenation": true },
     THEMES.dark,
   );
-  assert.match(css, /html \{ font-size: 130% !important; \}/);
+  assert.doesNotMatch(css, /html \{ font-size/, "with the book's styles on, the page scales the book's own size");
+  assert.match(css, /html\[data-quire-size\] body \{ font-size: var\(--quire-body-size\) !important; \}/);
   assert.match(css, /font-family: Georgia.*"Noto Sans CJK SC".*!important/);
   assert.match(css, /line-height: 1.6 !important/);
   assert.match(css, /margin-bottom: 0.5em !important/);
@@ -115,6 +117,10 @@ test("publisher styles off makes Quire's values win everywhere", () => {
   const css = readingCss({ ...defaults(), "type.publisherStyles": false, "type.alignment": "start" }, THEMES.light);
   assert.match(css, /text-align: start !important/);
   assert.match(css, /letter-spacing: normal !important/);
+  const sized = readingCss({ ...defaults(), "type.publisherStyles": false, "type.fontSize": 130 }, THEMES.light);
+  assert.match(sized, /html \{ font-size: 130% !important; \}/);
+  assert.match(sized, /p, li, blockquote, dd, dt, td, th \{ font-size: 1rem !important; \}/, "running text follows the setting, not the book's px or pt");
+  assert.doesNotMatch(sized, /data-quire-size/);
 });
 
 test("page settings map to foliate's paginator attributes", () => {

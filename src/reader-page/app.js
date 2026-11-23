@@ -188,6 +188,8 @@ export async function openForReading(message, reply, askDecision) {
     return;
   }
   current = { id, view: opened.view, popup, jumps };
+  const view = opened.view;
+  view.renderer?.addEventListener?.("relocate", (event) => noteRelocate(view, event.detail?.reason));
   applyMargin(opened.view);
   const book = opened.view.book;
   reply({
@@ -218,32 +220,63 @@ export async function setFlow(message) {
   if (view.isFixedLayout) return false;
   const next = flowOf(message.flow);
   if (view.renderer.getAttribute("flow") === next) return true;
-  const cfi = anchorCfi(view);
-  view.renderer.setAttribute("flow", next);
-  if (!cfi) return true;
-  await nextFrame();
-  await nextFrame();
-  await returnTo(view, cfi, "flow change");
-  await remember(view, cfi);
-  return true;
+  return relayout(async () => {
+    const cfi = anchorCfi(view);
+    view.renderer.setAttribute("flow", next);
+    if (!cfi) return true;
+    await nextFrame();
+    await nextFrame();
+    await returnTo(view, cfi, "flow change");
+    await remember();
+    return true;
+  });
 }
 
 /**
- * The CFI to keep across a relayout. Scroll mode shows a little of the text
- * above the anchor, so its visible range starts earlier than the page the
- * reader came from; Pages, Scroll, Pages then landed a page early. While the
- * reader has not moved since the last relayout, keep that relayout's anchor.
+ * The CFI to keep across a relayout. Each relayout lands on a page that holds
+ * the anchor but starts before it, so anchoring the next relayout on that
+ * page's start walked the place backwards a little more each time (phone run
+ * 9: five Aa changes went from offset 734 to the chapter before). Scroll mode
+ * shows a little of the text above the anchor too (run 7b). So the first
+ * relayout's anchor is kept until the reader moves: a page turn, a swipe, a
+ * scroll or a jump. foliate's own re-anchoring (reason "anchor", after a font
+ * loads or a section grows) and our own return are not moves.
  */
 let kept = null;
+let quietUntil = 0;
+const MOVES = new Set(["page", "snap", "scroll", "navigation", "selection"]);
+
+/** The anchor for a relayout, kept from the moment it is chosen, so a quick second change finds it too. */
 function anchorCfi(view) {
-  const here = view.lastLocation?.cfi ?? null;
-  if (kept && kept.view === view && kept.landed === here) return kept.cfi;
-  return here;
+  if (kept && kept.view === view) return kept.cfi;
+  const cfi = view.lastLocation?.cfi ?? null;
+  if (cfi) kept = { view, cfi };
+  return cfi;
 }
 
-async function remember(view, cfi) {
+async function remember() {
   await nextFrame();
-  kept = { view, cfi, landed: view.lastLocation?.cfi ?? null };
+  // A scroll-mode return settles in debounced scroll events after it resolves.
+  quietUntil = performance.now() + 400;
+}
+
+/** A relocate from the renderer: forget the kept anchor when the reader moved. */
+export function noteRelocate(view, reason, now = performance.now()) {
+  if (!kept || kept.view !== view || !MOVES.has(reason)) return;
+  // A turn or a swipe is always the reader's. A scroll or a jump may be our own return settling.
+  const ours = relayingOut > 0 || (reason === "scroll" && now < quietUntil);
+  if (reason === "page" || reason === "snap" || !ours) kept = null;
+}
+
+
+let relayingOut = 0;
+async function relayout(work) {
+  relayingOut += 1;
+  try {
+    return await work();
+  } finally {
+    relayingOut -= 1;
+  }
 }
 
 /**
@@ -325,6 +358,19 @@ function paintPage(look) {
 }
 
 /**
+ * Wait, at most a second and a half, for the shown sections' fonts to finish
+ * loading, so a return measures the final layout. True when any were loading.
+ */
+async function fontsSettled(view) {
+  const sets = (view.renderer?.getContents?.() ?? []).map((content) => content?.doc?.fonts).filter(Boolean);
+  const loading = sets.filter((set) => set.status === "loading");
+  if (loading.length === 0) return false;
+  await Promise.race([Promise.all(loading.map((set) => set.ready)), new Promise((resolve) => setTimeout(resolve, 1500))]);
+  await nextFrame();
+  return true;
+}
+
+/**
  * A new look from the host. Colours only: restyle in place. Typography or
  * margins: restyle, let the layout settle, then go back to the same text, as
  * a flow change does (foliate re-anchors on rects measured too early).
@@ -334,17 +380,22 @@ export async function setLook(message) {
   if (!current || current.id !== message.id) return false;
   const { view } = current;
   if (view.isFixedLayout) return true;
-  const cfi = message.relayout ? anchorCfi(view) : null;
-  band = bandOf(message.look);
-  applyMargin(view);
-  await applyLookTo(view, message.look);
-  if (!cfi) return true;
-  await nextFrame();
-  await nextFrame();
-  await returnTo(view, cfi, "style change");
-  // Stepping the size up and back keeps the original anchor, so the page does not drift.
-  await remember(view, cfi);
-  return true;
+  return relayout(async () => {
+    const cfi = message.relayout ? anchorCfi(view) : null;
+    band = bandOf(message.look);
+    applyMargin(view);
+    await applyLookTo(view, message.look);
+    if (!cfi) return true;
+    await nextFrame();
+    await nextFrame();
+    await fontsSettled(view);
+    await returnTo(view, cfi, "style change");
+    // A face that finished loading after the return reflows the text under it; go back once more.
+    if (await fontsSettled(view)) await returnTo(view, cfi, "font load");
+    // Every later relayout goes back to this same text until the reader moves.
+    await remember();
+    return true;
+  });
 }
 
 /**

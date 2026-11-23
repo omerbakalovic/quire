@@ -9,10 +9,17 @@ export type MatrixCommand =
   | { seq: number; cmd: "library" }
   | { seq: number; cmd: "settings"; tapZones: "reading" | "screen" }
   | { seq: number; cmd: "drain-imports" }
+  | { seq: number; cmd: "add-font"; path: string }
   | { seq: number; cmd: "reader"; action: string; args: Record<string, unknown> };
 
 const BOOK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const ACTION = /^[a-z][a-z-]{0,39}$/;
+/**
+ * A font the host copied into the app's own files/quire-cmd-fonts/ with run-as.
+ * The system picker can't be driven by the matrix's taps, so this stands in
+ * for picking the file; the import after it is the real one.
+ */
+const FONT_PATH = /^\/data\/(?:user\/\d{1,4}|data)\/[A-Za-z0-9_.]{1,120}\/files\/quire-cmd-fonts\/[A-Za-z0-9_-]{1,60}\.(?:ttf|otf|woff2?|ttc|bin)$/;
 
 export function parseMatrixCommand(raw: string): MatrixCommand | null {
   let value: unknown;
@@ -30,6 +37,8 @@ export function parseMatrixCommand(raw: string): MatrixCommand | null {
     case "library":
     case "drain-imports":
       return { seq, cmd: command.cmd };
+    case "add-font":
+      return typeof command.path === "string" && FONT_PATH.test(command.path) ? { seq, cmd: "add-font", path: command.path } : null;
     case "open":
       return typeof command.id === "string" && BOOK_ID.test(command.id) ? { seq, cmd: "open", id: command.id } : null;
     case "settings":

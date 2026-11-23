@@ -62,3 +62,21 @@ test("page in chapter leaves out the paginator's blank end pages", () => {
   assert.deepEqual(pageOf({ scrolled: false, page: 0, pages: 2 }), { page: null, pages: null });
   assert.deepEqual(pageOf(null), { page: null, pages: null });
 });
+
+test("the bars' defaults are the bars Quire had before, and presets leave them alone", () => {
+  const d = defaults();
+  assert.deepEqual(d["layout.topBar"], ["back", "title"]);
+  assert.deepEqual(d["layout.quickRow"], ["prevChapter", "slider", "nextChapter", "percent"]);
+  assert.deepEqual(d["layout.bottomBar"], ["contents", "look", "flow"]);
+  const custom = resolve({ global: { "layout.bottomBar": ["contents"], ...presetValues("classic") } });
+  assert.equal(presetOf(custom), "classic", "a preset is about the header and footer lines");
+  assert.deepEqual(custom["layout.bottomBar"], ["contents"]);
+  assert.equal(needsRelayout(d, custom) , true, "the header and footer changed");
+  assert.equal(needsRelayout(d, resolve({ global: { "layout.topBar": [] } })), false, "bars float over the text");
+});
+
+test("bar slots take controls only, and an empty bar is allowed", () => {
+  assert.deepEqual(cleanValue("layout.topBar", ["title", "clock", "back"]), ["title", "back"]);
+  assert.deepEqual(cleanValue("layout.topBar", []), []);
+  assert.deepEqual(cleanValue("layout.quickRow", ["slider", "slider", "percent"]), ["slider", "percent"]);
+});

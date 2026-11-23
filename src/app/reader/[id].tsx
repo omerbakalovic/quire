@@ -18,7 +18,7 @@ import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webvi
 import { AmbientBands } from "@/reader/AmbientBands";
 import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
-import { BottomBar } from "@/reader/BottomBar";
+import { ControlBars } from "@/reader/ControlBars";
 import { confirmRemoveFont, pickFont } from "@/reader/font-import";
 import { LightVeil } from "@/reader/LightVeil";
 import { useBrightness } from "@/reader/useBrightness";
@@ -62,6 +62,8 @@ export default function BookScreen() {
   // Page in the chapter and the chapter's page count, for the header and footer. Null in scroll mode.
   const [pageInChapter, setPageInChapter] = useState<{ page: number | null; pages: number | null }>({ page: null, pages: null });
   const [scrubbing, setScrubbing] = useState(false);
+  // Height of the bottom control bars (layout slots), so the Back pill and notices sit above them.
+  const [bottomHeight, setBottomHeight] = useState(0);
   const [notice, setNotice] = useState<string | null>(null);
   const [toc, setToc] = useState<NavEntry[]>([]);
   const [tocHref, setTocHref] = useState<string | null>(null);
@@ -460,42 +462,30 @@ export default function BookScreen() {
           </View>
         ) : null}
         {controls && phase === "reading" ? (
-          <>
-            <View style={[styles.bar, styles.top, { paddingTop: insets.top + 6, backgroundColor: chrome.bar }]}>
-              <Pressable onPress={() => router.back()} accessibilityRole="button" hitSlop={10}>
-                <Text style={[styles.barButton, { color: chrome.ink }]}>‹ {strings.back}</Text>
-              </Pressable>
-              <View style={styles.titleBox}>
-                <Text style={[styles.barTitle, { color: chrome.ink }]} numberOfLines={1}>
-                  {book?.title ?? ""}
-                </Text>
-                {chapter ? (
-                  <Text style={[styles.barSub, { color: chrome.muted }]} numberOfLines={1}>
-                    {chapter}
-                  </Text>
-                ) : null}
-              </View>
-            </View>
-            <BottomBar
-              bottomInset={insets.bottom}
-              fraction={fraction}
-              toc={toc}
-              flow={flow}
-              fixedLayout={fixedLayout}
-              onFlow={switchFlow}
-              onContents={() => showToc(true)}
-              onChapter={stepChapter}
-              onSeek={(value) => jumpTo({ fraction: value })}
-              onScrub={setScrubbing}
-              onLook={() => showLook(true)}
-            />
-          </>
+          <ControlBars
+            settings={reader.settings}
+            insets={insets}
+            title={book?.title ?? ""}
+            chapter={chapter}
+            fraction={fraction}
+            toc={toc}
+            flow={flow}
+            fixedLayout={fixedLayout}
+            onBack={() => router.back()}
+            onFlow={switchFlow}
+            onContents={() => showToc(true)}
+            onChapter={stepChapter}
+            onSeek={(value) => jumpTo({ fraction: value })}
+            onScrub={setScrubbing}
+            onLook={() => showLook(true)}
+            onBottomHeight={setBottomHeight}
+          />
         ) : null}
         {phase === "reading" && !tocOpen && !lookOpen && !scrubbing ? (
           <BackPill
             depth={backStack.depth}
             label={backStack.label}
-            bottom={insets.bottom + (controls ? 132 : 24)}
+            bottom={controls ? Math.max(bottomHeight, insets.bottom) + 8 : insets.bottom + 24}
             onBack={() => post({ type: "back", id })}
             onDismiss={() => post({ type: "back", id, clear: true })}
           />
@@ -532,7 +522,7 @@ export default function BookScreen() {
           />
         ) : null}
         {notice ? (
-          <Pressable style={[styles.notice, { bottom: insets.bottom + (controls ? 132 : 72) }]} onPress={() => setNotice(null)}>
+          <Pressable style={[styles.notice, { bottom: controls ? Math.max(bottomHeight, insets.bottom) + 8 : insets.bottom + 72 }]} onPress={() => setNotice(null)}>
             <Text style={styles.noticeText}>{notice}</Text>
           </Pressable>
         ) : null}
@@ -555,21 +545,6 @@ const styles = StyleSheet.create({
   overlayText: { color: "#eee", fontSize: 16, textAlign: "center" },
   button: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, backgroundColor: "#333" },
   buttonText: { color: "#fff", fontSize: 16 },
-  bar: {
-    position: "absolute",
-    left: 0,
-    right: 0,
-    paddingHorizontal: 16,
-    backgroundColor: "#1c1c1ef2",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-  },
-  top: { top: 0, paddingBottom: 10 },
-  titleBox: { flex: 1 },
-  barTitle: { color: "#fff", fontSize: 16, fontWeight: "600" },
-  barSub: { color: "#bbb", fontSize: 13 },
-  barButton: { color: "#fff", fontSize: 18, paddingVertical: 6 },
   notice: {
     position: "absolute",
     left: 16,

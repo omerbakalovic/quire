@@ -1032,7 +1032,9 @@ async function closeNote(how, st) {
   const from = log.mark();
   if (how === "button") await reader("popup-click", { name: "close" });
   else if (how === "back key") await shell(`${INPUT} keyevent 4`);
-  else await tap(toPx(st, st.viewport.width / 2, st.viewport.height * 0.06));
+  // The shade above the sheet (the sheet is at most 62% of the height). Never the top
+  // of the screen: a notification banner can drop in there and take the tap.
+  else await tap(toPx(st, st.viewport.width / 2, st.viewport.height * 0.25));
   await waitNote(from, false, 2000);
   await sleep(150);
 }

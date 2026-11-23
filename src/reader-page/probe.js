@@ -379,7 +379,8 @@ export async function noterefs(view, options) {
       if (!rect) continue;
       const x = frameRect.left + (rect.left + rect.width / 2) * scale;
       const y = frameRect.top + (rect.top + rect.height / 2) * scale;
-      if (x < 4 || x > width - 4 || y < 4 || y > height - 4) continue;
+      // Not in the top 15%, where a notification banner can drop in over the page and take the tap.
+      if (x < 4 || x > width - 4 || y < height * 0.15 || y > height - 4) continue;
       out.push({
         index,
         id: a.id || null,

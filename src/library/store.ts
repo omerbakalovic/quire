@@ -2,6 +2,15 @@ import { useSyncExternalStore } from "react";
 
 import { decideImport, type ImportOutcome } from "@/domain/import-outcome";
 import {
+  forgetBook,
+  setBookColor,
+  setCoverColor,
+  setFileName,
+  updateLook,
+  type LibraryLook,
+  type LookOptions,
+} from "@/domain/library-look";
+import {
   emptyLibrary,
   parseLibrary,
   recordPosition,
@@ -16,8 +25,8 @@ import {
   type PositionReport,
   type Settings,
 } from "@/domain/library";
-import { deleteBook, importBook, readLibrary, writeLibrary } from "@/renderer/book-url";
-import { changeSetting, forgetBook, setActiveProfile, saveProfile as saveProfileTo } from "@/settings/customization";
+import { averageColor, deleteBook, importBook, readLibrary, writeLibrary } from "@/renderer/book-url";
+import { changeSetting, forgetBook as forgetBookSettings, setActiveProfile, saveProfile as saveProfileTo } from "@/settings/customization";
 import { resetGroup } from "@/settings/layers";
 import type { Values } from "@/settings/layers";
 import type { Layer, SettingKey } from "@/settings/registry";
@@ -86,6 +95,11 @@ export async function importFiles(files: { uri: string; name: string | null }[])
       const outcome = decideImport(await importBook(file.uri));
       if (outcome.kind === "added" || outcome.kind === "duplicate") {
         await commit(upsertBook(library, outcome.facts, file.name, Date.now()));
+        // A re-import fills in the file name for books added before names were kept.
+        if (file.name && (outcome.kind === "added" || !library.look.fileNames[outcome.facts.id])) {
+          await changeLook((look) => setFileName(look, outcome.facts.id, file.name));
+        }
+        await measureCover(outcome.facts.id, outcome.facts.coverUri);
       } else if (outcome.kind === "drm" && outcome.removeFile) {
         await deleteBook(outcome.id);
       }
@@ -98,7 +112,8 @@ export async function importFiles(files: { uri: string; name: string | null }[])
 }
 
 export async function removeFromLibrary(id: string): Promise<void> {
-  await commit({ ...removeBook(library, id), custom: forgetBook(library.custom, id) });
+  await commit({ ...removeBook(library, id), custom: forgetBookSettings(library.custom, id) });
+  await changeLook((look) => forgetBook(look, id));
   await deleteBook(id);
 }
 
@@ -152,4 +167,31 @@ export function chooseProfile(id: string | null): Promise<void> {
 /** Resolves once every write queued so far is on disk. */
 export function flushLibrary(): Promise<void> {
   return writing;
+}
+
+function changeLook(change: (look: LibraryLook) => LibraryLook): Promise<void> {
+  const look = change(library.look);
+  return look === library.look ? writing : commit({ ...library, look });
+}
+
+/** The pill colour comes from the cover. A failed measurement leaves the neutral pill. */
+async function measureCover(id: string, coverUri: string | null): Promise<void> {
+  if (!coverUri || library.look.coverColors[id]) return;
+  const color = await averageColor(coverUri).catch(() => null);
+  if (color) await changeLook((look) => setCoverColor(look, id, color));
+}
+
+/** Books imported before pills existed get their cover colour measured once. */
+export async function measureMissingCovers(): Promise<void> {
+  await loadLibrary();
+  for (const book of library.books) await measureCover(book.id, book.coverUri);
+}
+
+export function saveLook(patch: Partial<LookOptions>): Promise<void> {
+  return changeLook((look) => updateLook(look, patch));
+}
+
+/** null goes back to the cover's colour. */
+export function saveBookColor(id: string, color: string | null): Promise<void> {
+  return changeLook((look) => setBookColor(look, id, color));
 }

@@ -2,6 +2,7 @@ import { createJumps, navEntries, positionOf } from "./jumps.js";
 import { NotePopup } from "./note-popup.js";
 import { linkFromEvent } from "./notes.js";
 import { applyLookTo, openBook } from "./open-book.js";
+import { pageErrors } from "./page-errors.js";
 import * as probe from "./probe.js";
 import { tapZone } from "./tap-zones.js";
 
@@ -393,6 +394,8 @@ export async function debug(message) {
     case "close-note":
       current.popup?.close();
       return { ok: true };
+    case "page-errors":
+      return pageErrors({ reset: message.reset === true });
     default:
       return { error: `unknown action ${String(message.action)}` };
   }

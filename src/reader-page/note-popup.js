@@ -69,6 +69,23 @@ function el(tag, attrs = {}, text) {
   return node;
 }
 
+/**
+ * A section read in the background. section.load() is foliate's loaded copy:
+ * image and link URLs are rewritten to blobs, and the XHTML was re-serialized
+ * by XMLSerializer, which writes <a id="n1"></a>, so a text/html parse keeps
+ * empty anchors empty. (createDocument() would give the raw source, whose
+ * relative image URLs the popup cannot show.) A response served as XHTML is
+ * parsed as XML, with text/html as the fallback when it does not parse.
+ */
+export async function readSection(section) {
+  const url = await section.load();
+  const response = await fetch(url);
+  const text = await response.text();
+  const type = /xhtml|xml/i.test(response.headers.get("content-type") ?? "") ? "application/xhtml+xml" : "text/html";
+  const doc = new DOMParser().parseFromString(text, type);
+  return doc.querySelector("parsererror") ? new DOMParser().parseFromString(text, "text/html") : doc;
+}
+
 export class NotePopup {
   #view;
   #reply;
@@ -181,11 +198,7 @@ export class NotePopup {
     if (live?.defaultView) return Promise.resolve(live);
     let parsed = this.#parsedDocs.get(index);
     if (!parsed) {
-      parsed = (async () => {
-        const url = await this.#section(index).load();
-        const html = await (await fetch(url)).text();
-        return new DOMParser().parseFromString(html, "text/html");
-      })();
+      parsed = readSection(this.#section(index));
       parsed.catch(() => this.#parsedDocs.delete(index));
       this.#parsedDocs.set(index, parsed);
     }

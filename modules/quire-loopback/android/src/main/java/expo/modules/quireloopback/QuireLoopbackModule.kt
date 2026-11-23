@@ -1,10 +1,13 @@
 package expo.modules.quireloopback
 
 import android.content.Context
+import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
+import android.os.Build
+import android.provider.OpenableColumns
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.io.File
@@ -17,9 +20,29 @@ class QuireLoopbackModule : Module() {
   private var token: String = ""
   private var port: Int = 0
   private var staticDir: File? = null
+  private val incoming = mutableListOf<Map<String, String?>>()
+  private var launchIntentRead = false
 
   override fun definition() = ModuleDefinition {
     Name("QuireLoopback")
+
+    Events("onIncomingBooks")
+
+    // "Open with" or "Share" while Quire is already running delivers a new intent.
+    OnNewIntent { intent ->
+      val books = booksIn(intent)
+      if (books.isEmpty()) return@OnNewIntent
+      synchronized(incoming) { incoming.addAll(books) }
+      sendEvent("onIncomingBooks", mapOf("count" to books.size))
+    }
+
+    AsyncFunction("averageColor") { uri: String ->
+      averageColor(uri)
+    }
+
+    Function("takeIncomingBooks") {
+      takeIncomingBooks()
+    }
 
     AsyncFunction("start") {
       startServer()
@@ -164,6 +187,106 @@ class QuireLoopbackModule : Module() {
     }
   }
 
+  /**
+   * EPUBs handed to Quire by another app: the intent that launched the activity
+   * (read once) and any that arrived later through OnNewIntent. Each entry is
+   * {uri, name}; the library screen imports them as if they were picked.
+   */
+  private fun takeIncomingBooks(): List<Map<String, String?>> {
+    val out = mutableListOf<Map<String, String?>>()
+    if (!launchIntentRead) {
+      launchIntentRead = true
+      val intent = appContext.currentActivity?.intent
+      // Reopening from Recents replays the old intent; that book is already in the library.
+      if (intent != null && intent.flags and Intent.FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY == 0) {
+        out.addAll(booksIn(intent))
+      }
+    }
+    synchronized(incoming) {
+      out.addAll(incoming)
+      incoming.clear()
+    }
+    return out.distinctBy { it["uri"] }
+  }
+
+  private fun booksIn(intent: Intent): List<Map<String, String?>> {
+    val uris: List<Uri> = when (intent.action) {
+      Intent.ACTION_VIEW -> listOfNotNull(intent.data)
+      Intent.ACTION_SEND -> listOfNotNull(streamExtra(intent))
+      Intent.ACTION_SEND_MULTIPLE -> streamListExtra(intent)
+      else -> emptyList()
+    }
+    return uris
+      .filter { it.scheme == "content" || it.scheme == "file" }
+      .map { uri -> mapOf("uri" to uri.toString(), "name" to displayName(uri)) }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun streamExtra(intent: Intent): Uri? {
+    return if (Build.VERSION.SDK_INT >= 33) {
+      intent.getParcelableExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+      intent.getParcelableExtra(Intent.EXTRA_STREAM) as? Uri
+    }
+  }
+
+  @Suppress("DEPRECATION")
+  private fun streamListExtra(intent: Intent): List<Uri> {
+    val list = if (Build.VERSION.SDK_INT >= 33) {
+      intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM, Uri::class.java)
+    } else {
+      intent.getParcelableArrayListExtra<Uri>(Intent.EXTRA_STREAM)
+    }
+    return list?.filterNotNull() ?: emptyList()
+  }
+
+  private fun displayName(uri: Uri): String? {
+    if (uri.scheme == "file") return uri.lastPathSegment
+    return try {
+      context().contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME), null, null, null)?.use { cursor ->
+        if (cursor.moveToFirst()) cursor.getString(0) else null
+      }
+    } catch (error: Exception) {
+      null
+    } ?: uri.lastPathSegment
+  }
+
+  /**
+   * The average colour of a stored cover, as #RRGGBB, for the library's pill
+   * background. Only covers inside app storage are read.
+   */
+  private fun averageColor(source: String): String? {
+    val uri = Uri.parse(source)
+    if (uri.scheme != "file") return null
+    val file = File(uri.path ?: return null).canonicalFile
+    val covers = store().coversDir.canonicalFile
+    if (!file.path.startsWith(covers.path + File.separator) || !file.isFile) return null
+    val bitmap = BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = 8 }) ?: return null
+    try {
+      var red = 0L
+      var green = 0L
+      var blue = 0L
+      var count = 0L
+      val pixels = IntArray(bitmap.width * bitmap.height)
+      bitmap.getPixels(pixels, 0, bitmap.width, 0, 0, bitmap.width, bitmap.height)
+      for (pixel in pixels) {
+        if ((pixel ushr 24) < 128) continue
+        red += (pixel shr 16) and 0xFF
+        green += (pixel shr 8) and 0xFF
+        blue += pixel and 0xFF
+        count++
+      }
+      if (count == 0L) return null
+      return "#%02X%02X%02X".format(red / count, green / count, blue / count)
+    } finally {
+      bitmap.recycle()
+    }
+  }
+
+  private fun debuggable(context: Context): Boolean {
+    return context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+  }
+
   private fun registerBook(id: String): Boolean {
     val file = store().bookFile(id) ?: return false
     if (!file.isFile) return false
@@ -290,6 +413,7 @@ class QuireLoopbackModule : Module() {
   }
 
   private fun launchCheck(): String? {
+    if (!debuggable(context())) return null
     val extra = appContext.currentActivity?.intent?.getStringExtra("quireCheck")
     if (!extra.isNullOrBlank()) return extra
     val file = File(context().filesDir, CHECK)
@@ -314,7 +438,9 @@ class QuireLoopbackModule : Module() {
     reportFile(context).writeText("")
   }
 
+  /** The report is a phone-matrix aid. A release build keeps no log of what was read. */
   private fun appendReport(body: String) {
+    if (!debuggable(context())) return
     val clean = body.replace("\r", " ").replace("\n", " ").take(256 * 1024)
     val file = reportFile(context())
     synchronized(file) {

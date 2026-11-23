@@ -7,6 +7,7 @@ import "../../vendor/foliate-js/view.js";
 import { applyInsets, applySettings, back, closeNote, debug, goTo, historyBack, openForReading, setFlow, setLook, turn } from "./app.js";
 import { chapterFacts, liveDoc, timeTurns } from "./measure.js";
 import { openPrepared } from "./open-book.js";
+import { installPageErrors } from "./page-errors.js";
 import { cspOf, installBookCspParser } from "./security.js";
 
 const bundled = {
@@ -33,6 +34,7 @@ globalThis.__quireImport = (spec) => {
 };
 
 installBookCspParser();
+installPageErrors(window);
 
 const pending = new Map();
 const pendingContinue = new Map();

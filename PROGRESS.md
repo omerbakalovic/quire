@@ -52,6 +52,21 @@ Desktop Firefox medians for this book were about 35 ms to open and 101 ms per tu
 
 A second full run, after the table was widened to 4000 px, passed the same five checks. The large book fetched in 2098 ms and opened in 124 ms. Its turn wall times were 185, 101, 102, 103, and 115 ms, and the move before the 100 ms wait was 0, 1, 1, 3, and 15 ms.
 
+## Milestone 4, started (branch `m4-customization`, off the Milestone 2 branch)
+
+Follows `docs/customization.md` (PR #4). First slice, cloud only, not yet on the phone:
+
+- Settings registry (`src/settings/registry.ts`): typed entries for font size, font family (book's, serif, sans, mono), line height, paragraph spacing, alignment, hyphenation, the publisher-styles switch, side margin, max line width, theme, and page-turn style. Each declares its layers and whether it repaginates. Unknown keys and bad values are dropped.
+- Layers (`src/settings/layers.ts`): session, this book, active profile, global, default. Setting a value equal to the layers below clears the override, so no stray per-book values pile up. `sourceOf` says where a value comes from.
+- Saved customization (`src/settings/customization.ts`), stored in the library index as `custom`: global values, named profiles with one active, per-book overrides. Removing a book forgets its overrides.
+- Themes (`src/settings/themes.ts`): Light, Paper, Gray, Dark, Black, Night, High contrast as tokens, with WCAG contrast checks. All pass 4.5:1 except Night, which is deliberately dim and passes 3:1.
+- Reading CSS (`src/settings/reading-css.ts`): only settings moved off "book's" are forced; publisher styles off forces Quire's values everywhere. Dark themes override every element's colour; light themes keep a book's coloured callouts. Chosen families carry a CJK, Arabic, Hebrew and symbol fallback chain.
+- Reader page: `look` message restyles live; a typography change returns to the same CFI after two frames, as a flow change does. The page behind the book follows the theme.
+- Quick panel (Aa in the bottom bar): size, font, theme swatches, line spacing, margins, alignment, hyphenation, publisher styles, "All books / This book" scope with a dot on overridden settings, and reset.
+- `npm test`: 97 tests, 93 pass, 4 skipped. `tsc --noEmit` passes. Desktop Chromium: a look sent at open and a live change to Dark, serif, 150%, 1.8 line height, justified, 10% margins applied inside the book frame (24 px, Georgia, rgb(222,220,214) on rgb(31,31,33), justify), and the reader stayed at the start of chapter 2.
+
+Still to do for M4: the reader bars, contents panel and note sheet in theme colours; bundled OFL fonts and custom font import; brightness slider with restore and the software dimmer; profile switching UI and a Customize screen generated from the registry; reader layout slots; and the Skia spike before page-turn styles.
+
 ## Milestone 2, in progress (branch `claude/project-thread-xehbd9`, off `m1b-import-reading`)
 
 Android only; iOS is out of scope. Footnotes and `note-popup.js` are left alone (a separate fix is in flight).

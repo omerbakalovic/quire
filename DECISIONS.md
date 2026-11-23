@@ -280,3 +280,9 @@ The script also copes with the two things that wasted run 3 and the first try at
 
 For a blank page, the scan names what starts on it and what runs across it, and the script takes a screenshot of that page.
 
+
+## Customization storage, Milestone 4
+
+The saved reading look (global values, profiles, per-book overrides) lives in the library index as `custom`, beside the books, so it is written in the same single ordered write as everything else. It moves to SQLite (`settings` and `book_settings`) with the rest of the index. Two sentinel values stand for "leave it to the book": line height 0 and paragraph spacing -1. They keep every setting a plain number in the registry instead of adding a nullable type for two entries.
+
+Font families in this slice are the phone's own (serif, sans, mono, plus the book's). Bundled OFL fonts need their files and recorded licences, and come with custom font import.

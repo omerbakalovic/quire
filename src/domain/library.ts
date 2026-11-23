@@ -3,6 +3,7 @@
  * SQLite replaces it in Milestone 2, when saved positions get their own table.
  * Parsing never throws: a damaged index keeps the rows it can read.
  */
+import { emptyCustomization, parseCustomization, type Customization } from "../settings/customization.ts";
 import { cleanPosition } from "./position.ts";
 
 export type Flow = "paginated" | "scrolled";
@@ -38,6 +39,8 @@ export type Library = {
   version: 1;
   flow: Flow;
   settings: Settings;
+  /** Reading look: global values, profiles, per-book overrides (src/settings). */
+  custom: Customization;
   books: LibraryBook[];
 };
 
@@ -46,7 +49,7 @@ export const DEFAULT_SETTINGS: Settings = { tapZones: "reading" };
 const BOOK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 
 export function emptyLibrary(): Library {
-  return { version: 1, flow: "paginated", settings: { ...DEFAULT_SETTINGS }, books: [] };
+  return { version: 1, flow: "paginated", settings: { ...DEFAULT_SETTINGS }, custom: emptyCustomization(), books: [] };
 }
 
 function str(value: unknown): string | null {
@@ -97,7 +100,7 @@ export function parseLibrary(json: string | null | undefined): Library {
     return emptyLibrary();
   }
   if (!value || typeof value !== "object") return emptyLibrary();
-  const raw = value as { flow?: unknown; books?: unknown; settings?: unknown };
+  const raw = value as { flow?: unknown; books?: unknown; settings?: unknown; custom?: unknown };
   const books: LibraryBook[] = [];
   const seen = new Set<string>();
   for (const item of Array.isArray(raw.books) ? raw.books : []) {
@@ -106,7 +109,7 @@ export function parseLibrary(json: string | null | undefined): Library {
     seen.add(book.id);
     books.push(book);
   }
-  return { version: 1, flow: raw.flow === "scrolled" ? "scrolled" : "paginated", settings: parseSettings(raw.settings), books };
+  return { version: 1, flow: raw.flow === "scrolled" ? "scrolled" : "paginated", settings: parseSettings(raw.settings), custom: parseCustomization(raw.custom), books };
 }
 
 function parseSettings(value: unknown): Settings {

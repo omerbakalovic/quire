@@ -17,6 +17,10 @@ import {
   type Settings,
 } from "@/domain/library";
 import { deleteBook, importBook, readLibrary, writeLibrary } from "@/renderer/book-url";
+import { changeSetting, forgetBook, setActiveProfile, saveProfile as saveProfileTo } from "@/settings/customization";
+import { resetGroup } from "@/settings/layers";
+import type { Values } from "@/settings/layers";
+import type { Layer, SettingKey } from "@/settings/registry";
 
 /**
  * One library for the process. Every change is written whole by the native
@@ -94,7 +98,7 @@ export async function importFiles(files: { uri: string; name: string | null }[])
 }
 
 export async function removeFromLibrary(id: string): Promise<void> {
-  await commit(removeBook(library, id));
+  await commit({ ...removeBook(library, id), custom: forgetBook(library.custom, id) });
   await deleteBook(id);
 }
 
@@ -112,6 +116,37 @@ export function saveFlow(flow: Flow): Promise<void> {
 
 export function saveSettings(patch: Partial<Settings>): Promise<void> {
   return commit(updateSettings(library, patch));
+}
+
+/** One reading-look setting, in the global, profile, or this-book layer. `null` clears it. */
+export function saveSetting(layer: Exclude<Layer, "session">, key: SettingKey, value: unknown, bookId: string | null): Promise<void> {
+  const custom = changeSetting(library.custom, layer, key, value, bookId);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+/** Reset buttons: clear some groups from one book's overrides, or from the global values. */
+export function resetBookGroups(bookId: string, groups: string[]): Promise<void> {
+  let values = { book: library.custom.books[bookId] ?? {} };
+  for (const group of groups) values = { book: resetGroup(values, "book", group).book ?? {} };
+  const books = { ...library.custom.books };
+  if (Object.keys(values.book).length > 0) books[bookId] = values.book;
+  else delete books[bookId];
+  return commit({ ...library, custom: { ...library.custom, books } });
+}
+
+export function resetGlobalGroups(groups: string[]): Promise<void> {
+  let values = { global: library.custom.global };
+  for (const group of groups) values = { global: resetGroup(values, "global", group).global ?? {} };
+  return commit({ ...library, custom: { ...library.custom, global: values.global } });
+}
+
+export function saveProfile(id: string, name: string, values: Values): Promise<void> {
+  return commit({ ...library, custom: saveProfileTo(library.custom, id, name, values) });
+}
+
+export function chooseProfile(id: string | null): Promise<void> {
+  const custom = setActiveProfile(library.custom, id);
+  return custom === library.custom ? writing : commit({ ...library, custom });
 }
 
 /** Resolves once every write queued so far is on disk. */

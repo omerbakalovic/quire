@@ -1,7 +1,7 @@
 import { createJumps, navEntries, positionOf } from "./jumps.js";
 import { NotePopup } from "./note-popup.js";
 import { linkFromEvent } from "./notes.js";
-import { openBook } from "./open-book.js";
+import { applyLookTo, openBook } from "./open-book.js";
 import * as probe from "./probe.js";
 import { tapZone } from "./tap-zones.js";
 
@@ -121,6 +121,7 @@ export async function openForReading(message, reply, askDecision) {
   const flow = flowOf(message.flow);
   applySettings(message.settings ?? {});
   applyInsets(message.insets ?? insets);
+  paintPage(message.look);
   if (current?.view) {
     try {
       current.view.close();
@@ -135,6 +136,7 @@ export async function openForReading(message, reply, askDecision) {
     flow,
     lastLocation: typeof message.cfi === "string" ? message.cfi : null,
     position: message.position && typeof message.position === "object" ? message.position : null,
+    look: message.look ?? null,
     onView(view) {
       popup = new NotePopup(view, reply, id);
       jumps = createJumps(view, reply, id);
@@ -223,6 +225,38 @@ export async function turn(message) {
   if (!current || current.id !== message.id) return false;
   if (message.dir === "prev") await current.view.prev();
   else await current.view.next();
+  return true;
+}
+
+/** The page behind and around the book follows the theme too. */
+function paintPage(look) {
+  const page = typeof look?.page === "string" && /^#[0-9a-f]{6}$/i.test(look.page) ? look.page : null;
+  if (!page) return;
+  document.documentElement.style.setProperty("--quire-page", page);
+  document.body.style.background = page;
+}
+
+/**
+ * A new look from the host. Colours only: restyle in place. Typography or
+ * margins: restyle, let the layout settle, then go back to the same text, as
+ * a flow change does (foliate re-anchors on rects measured too early).
+ */
+export async function setLook(message) {
+  paintPage(message.look);
+  if (!current || current.id !== message.id) return false;
+  const { view } = current;
+  if (view.isFixedLayout) return true;
+  const cfi = message.relayout ? (view.lastLocation?.cfi ?? null) : null;
+  applyLookTo(view, message.look);
+  if (!cfi) return true;
+  await nextFrame();
+  await nextFrame();
+  try {
+    const resolved = view.resolveNavigation(cfi);
+    if (resolved) await view.renderer.goTo(resolved);
+  } catch (error) {
+    console.error("could not return to the location after a style change", error);
+  }
   return true;
 }
 

@@ -17,7 +17,9 @@ import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webvi
 import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
 import { BottomBar } from "@/reader/BottomBar";
+import { QuickPanel } from "@/reader/QuickPanel";
 import { TocPanel } from "@/reader/TocPanel";
+import { useLook } from "@/reader/useLook";
 
 type ReaderWebView = WebView<object>;
 type Phase = "starting" | "opening" | "reading" | "missing" | "drm" | "failed";
@@ -56,6 +58,8 @@ export default function BookScreen() {
   const [toc, setToc] = useState<NavEntry[]>([]);
   const [tocHref, setTocHref] = useState<string | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
+  const [lookOpen, setLookOpen] = useState(false);
+  const lookOpenRef = useRef(false);
   const [backStack, setBackStack] = useState<{ depth: number; label: string | null }>({ depth: 0, label: null });
   const answered = useRef(false);
   const lastSaved = useRef(0);
@@ -78,6 +82,7 @@ export default function BookScreen() {
   const post = useCallback((message: object) => {
     webRef.current?.postMessage(JSON.stringify(message));
   }, []);
+  const reader = useLook(library, id ?? null, phase === "reading", post);
 
   const flush = useCallback(() => {
     const next = pending.current;
@@ -155,6 +160,7 @@ export default function BookScreen() {
         // The page starts a new back stack with every open.
         backDepth.current = 0;
         setBackStack({ depth: 0, label: null });
+        reader.opened();
         post({
           type: "open",
           id,
@@ -162,6 +168,7 @@ export default function BookScreen() {
           flow: getLibrary().flow,
           cfi: position?.cfi ?? null,
           position,
+          look: reader.look,
           settings: getLibrary().settings,
           insets: { top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right },
         });
@@ -276,6 +283,11 @@ export default function BookScreen() {
         setTocOpen(false);
         return true;
       }
+      if (lookOpenRef.current) {
+        lookOpenRef.current = false;
+        setLookOpen(false);
+        return true;
+      }
       if (backDepth.current > 0) {
         post({ type: "back", id });
         return true;
@@ -306,6 +318,11 @@ export default function BookScreen() {
 
   const at = startFraction ?? fraction;
   const current = currentEntry(toc, tocHref, at);
+
+  function showLook(open: boolean) {
+    lookOpenRef.current = open;
+    setLookOpen(open);
+  }
 
   function showToc(open: boolean) {
     tocOpenRef.current = open;
@@ -378,7 +395,7 @@ export default function BookScreen() {
         <WebView<object>
           key={mount}
           ref={webRef}
-          style={styles.web}
+          style={[styles.web, { backgroundColor: reader.look.page }]}
           originWhitelist={READER_ORIGIN_WHITELIST}
           source={{ uri: pageUrl }}
           onLoadEnd={() => post({ type: "ping", id: PING_ID })}
@@ -435,16 +452,30 @@ export default function BookScreen() {
             onChapter={stepChapter}
             onSeek={(value) => jumpTo({ fraction: value })}
             onScrub={setScrubbing}
+            onLook={() => showLook(true)}
           />
         </>
       ) : null}
-      {phase === "reading" && !tocOpen && !scrubbing ? (
+      {phase === "reading" && !tocOpen && !lookOpen && !scrubbing ? (
         <BackPill
           depth={backStack.depth}
           label={backStack.label}
           bottom={insets.bottom + (controls ? 132 : 24)}
           onBack={() => post({ type: "back", id })}
           onDismiss={() => post({ type: "back", id, clear: true })}
+        />
+      ) : null}
+      {lookOpen ? (
+        <QuickPanel
+          settings={reader.settings}
+          chrome={reader.chrome}
+          scope={reader.scope}
+          overridden={reader.overridden}
+          bottomInset={insets.bottom}
+          onScope={reader.setScope}
+          onChange={reader.change}
+          onReset={reader.reset}
+          onClose={() => showLook(false)}
         />
       ) : null}
       {tocOpen ? (

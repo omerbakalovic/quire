@@ -17,10 +17,14 @@
 - The large-book timings below are the phone run. The desktop Firefox numbers in `DECISIONS.md` only compare engines. Foliate's turn time includes its internal 100 ms wait, which is not a setting.
 - The fixture table is 4000 px wide so it overflows this phone. A 1200 px table fit inside the 1232 px page and did not scroll.
 
-## Milestone 3, not this step
+## Footnote bugs, pulled forward from Milestone 3 (2026-11-22)
 
-- Our own note extractor has to handle the empty-anchor case: take the nearest enclosing `li`, `p`, `aside`, or `div`, and stop at the next note boundary. Do not trust foliate's output for that case. With detection off, the semantic empty anchor came back empty. With detection on, the plain empty anchor came back as the rest of the endnotes file.
-- Find the cause of the 67 `doc is null` errors when opening notes, so they do not hide a real error later. The running theory is that the footnote popup builds a detached view and calls `goTo` before layout, or that removing the popup on render races the paginator. Not investigated in this step.
+Both parked bugs are fixed in code and covered by `src/reader-page/notes.test.ts` (18 tests, jsdom). The phone check is still to do: `npm run phone-matrix` now ends each notes run with "opening notes raised no page errors".
+
+- Empty anchors. An id on an empty anchor marks where its note starts, not a block. `noteBlock` now reads from that place: the anchor's own note `div` when nothing comes before it there, else the block that holds the first text after the anchor (its paragraph, a heading label, or the paragraph after an empty wrapper), running on through plain paragraphs until the next id. It returns nothing when the only text after the anchor is someone else's heading. The fixture's `en-empty` now gives exactly "This paragraph follows an empty anchor." for both the semantic and the `<sup>` link.
+- A second empty-anchor bug was in the popup, not the extractor. Notes in another file were read in the background with `DOMParser(..., "text/html")`. In HTML parsing `<a id="n1"/>` is not self-closed: it opens an `<a>` that swallows what follows, so the wrong note came back (the test shows "Note two." for `n1`). `readSection` now uses foliate's `section.createDocument()`, which parses XHTML as XML, and falls back to the response type, then to text/html on a parse error. The live section is safe: foliate serializes it with `XMLSerializer`, which writes `<a id="n1"></a>`.
+- The 67 `doc is null` errors. Reproduced in headless Chromium with the pinned foliate and its `footnotes.js` (Chromium's wording is "Cannot read properties of null"): opening the nine fixture noterefs the way the M1a spike did raised no errors until the hidden popup views were removed, then 131. Each note opened a hidden `<foliate-view>`. Removing it without `close()` left its paginator's ResizeObserver, `fonts.ready` and layout callbacks running against the removed iframe, whose `contentDocument` is null. Calling `close()` first cut that to 2. The app no longer builds those views: `NotePopup` reads the note's HTML itself and shows it in a sheet. In the same harness, 64 note opens through `NotePopup` (eight rounds of the eight note links) raised no errors. The spike still uses `FootnoteHandler`; its numbers are history, not app behaviour.
+- Seen while testing, not a note bug: about one in six headless opens of the fixture raised one `Cannot destructure property 'style' of 'el'` from `paginator.js` during the first `goTo`, before any note was touched. Watch for it on the phone.
 
 ## On-device results, Xiaomi 15T, 2026-11-19
 
@@ -54,11 +58,11 @@ A second full run, after the table was widened to 4000 px, passed the same five 
 
 ## Next
 
-M1a is proven on the Xiaomi 15T and recorded below. Do not start M1b until that work is asked for. M1b is import, flow modes, taps, the paginator patch, the book matrix, the lifecycle test, and the IDPF sample downloads. Empty-anchor notes and the 67 `doc is null` errors stay Milestone 3.
+M1a is proven on the Xiaomi 15T and recorded below. Do not start M1b until that work is asked for. M1b is import, flow modes, taps, the paginator patch, the book matrix, the lifecycle test, and the IDPF sample downloads. Empty-anchor notes and the 67 `doc is null` errors were later fixed on `claude/project-thread-q5b6uf`; see the footnote section above.
 
 ## Milestone 1 split
 
-M1a is the loopback module, the `bookUrl` seam, a range-versus-blob comparison on the phone, and CSP plus DRM on that open path. M1b is import, flow modes, taps, the paginator patch, the book matrix, and the lifecycle test. IDPF sample downloads are M1b. Empty-anchor notes and the 67 `doc is null` errors stay Milestone 3.
+M1a is the loopback module, the `bookUrl` seam, a range-versus-blob comparison on the phone, and CSP plus DRM on that open path. M1b is import, flow modes, taps, the paginator patch, the book matrix, and the lifecycle test. IDPF sample downloads are M1b. Empty-anchor notes and the 67 `doc is null` errors were later fixed on `claude/project-thread-q5b6uf`; see the footnote section above.
 
 `test-books/mine/` exists for 1 to 3 personal EPUBs. The books are gitignored. `.gitkeep` is tracked. M1a does not read that folder. M1b waits for the files instead of dropping the row.
 

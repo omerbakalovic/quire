@@ -1043,6 +1043,7 @@ async function runNotes(entry, index) {
   const opened = await openBook(entry);
   if (!check(scope, "opens", opened?.phase === "opened", opened?.phase ?? "no opened line")) return;
   await ensurePaginated(await state());
+  await reader("page-errors", { reset: true });
   const findFrom = log.mark();
   const found = (await reader("find-notes", { min: 2 }, 90000)).page;
   if (!check(scope, "finds a chapter with note references", found?.index !== null && found?.index !== undefined, found?.refs ? `${found.refs} in ${found.href}` : "none in 80 sections")) {
@@ -1174,6 +1175,9 @@ async function runNotes(entry, index) {
       check(scope, "Back to text returns to the page", samePlace(st, returned), `${st.fraction?.toFixed(3)} → ${returned.fraction?.toFixed(3)}`);
     }
   }
+  // M1a's foliate footnote views raised 67 "doc is null" errors here; the popup must raise none.
+  const errors = (await reader("page-errors")).page ?? {};
+  check(scope, "opening notes raised no page errors", errors.count === 0, errors.count ? `${errors.count}: ${errors.samples?.[0] ?? ""}` : "none");
   await send("library");
 }
 

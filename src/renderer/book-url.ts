@@ -9,6 +9,9 @@ export {
   registerBook,
   takeCommands,
   takePendingImports,
+  takeIncomingBooks,
+  averageColor,
+  onIncomingBooks,
   writeLibrary,
   hasGo,
   hasTurns,
@@ -19,4 +22,4 @@ export {
   registerIfPresent,
   startLoopback,
 } from "../../modules/quire-loopback/src/index.ts";
-export type { NativeImport } from "../../modules/quire-loopback/src/index.ts";
+export type { IncomingBook, NativeImport } from "../../modules/quire-loopback/src/index.ts";

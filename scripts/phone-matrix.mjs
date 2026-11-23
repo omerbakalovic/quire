@@ -37,6 +37,7 @@
  * stall, or something only a person can fix that stays for --wait-you-s, ends
  * the run with "STALLED" and "NEEDS YOU" / "NEEDS PC" lines and exit code 3.
  * Report those lines to the person at once.
+ * While it runs the PC is kept awake (no power settings change).
  */
 import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile, spawn } from "node:child_process";
@@ -47,7 +48,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
-import { autoFix, classifyFocus, describe, diagnose, adbRunner, findAdb as sdkAdb, needs } from "./phone-health.mjs";
+import { autoFix, classifyFocus, describe, diagnose, adbRunner, findAdb as sdkAdb, keepAwake, needs } from "./phone-health.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -1989,10 +1990,16 @@ process.on("SIGINT", () => {
   void restoreRotation().finally(() => process.exit(130));
 });
 
+// The PC must not sleep in the middle of a run (it did once, for two hours).
+const releaseAwake = keepAwake();
+
 main()
   .catch(async (error) => {
     console.error(error.message);
     await restoreRotation();
     process.exitCode = 2;
   })
-  .finally(closeShells);
+  .finally(() => {
+    closeShells();
+    releaseAwake();
+  });

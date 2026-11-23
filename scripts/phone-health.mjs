@@ -14,7 +14,7 @@
  * The phone matrix's stall watchdog and `npm run phone-watch` use the same
  * checks (diagnose and autoFix below).
  */
-import { execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -54,6 +54,45 @@ export function adbRunner(adbPath, serial) {
         } else done(String(stdout));
       });
     });
+}
+
+/**
+ * Keeps the computer from going to sleep until the returned function is called
+ * or this process ends. Nothing in the power settings changes: on Windows a
+ * hidden PowerShell holds SetThreadExecutionState(ES_CONTINUOUS |
+ * ES_SYSTEM_REQUIRED) and exits, which ends the hold, when its stdin closes.
+ * The screen may still turn off. On macOS it uses caffeinate; elsewhere it does nothing.
+ */
+export function keepAwake() {
+  let child = null;
+  try {
+    if (process.platform === "win32") {
+      const script = [
+        '$t = Add-Type -Name Power -Namespace QuireAwake -PassThru -MemberDefinition \'[DllImport("kernel32.dll")] public static extern uint SetThreadExecutionState(uint esFlags);\'',
+        "[void]$t::SetThreadExecutionState([uint32]2147483649)",
+        "[void][Console]::In.ReadToEnd()",
+      ].join("; ");
+      child = spawn("powershell.exe", ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], {
+        stdio: ["pipe", "ignore", "ignore"],
+        windowsHide: true,
+      });
+    } else if (process.platform === "darwin") {
+      child = spawn("caffeinate", ["-i", "-w", String(process.pid)], { stdio: ["pipe", "ignore", "ignore"] });
+    }
+    child?.on("error", () => {});
+    child?.stdin?.on("error", () => {});
+  } catch {
+    child = null;
+  }
+  return () => {
+    try {
+      child?.stdin?.end();
+      child?.kill();
+    } catch {
+      // already gone
+    }
+    child = null;
+  };
 }
 
 const problem = (id, who, what, fix) => ({ id, who, what, fix });

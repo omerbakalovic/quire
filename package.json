@@ -44,6 +44,7 @@
     "fixtures": "node scripts/build-fixtures.mjs",
     "books": "node scripts/download-test-books.mjs",
     "phone-matrix": "node scripts/phone-matrix.mjs",
-    "phone-doctor": "node scripts/phone-health.mjs"
+    "phone-doctor": "node scripts/phone-health.mjs",
+    "awake": "node scripts/awake.mjs"
   }
 }

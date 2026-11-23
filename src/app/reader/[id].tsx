@@ -65,6 +65,8 @@ export default function BookScreen() {
   const tocOpenRef = useRef(false);
   const backDepth = useRef(0);
   const noteOpen = useRef(false);
+  const canGoBack = useRef(false);
+  const [fixedLayout, setFixedLayout] = useState(false);
   const tapZones = library.settings.tapZones;
   const screenRef = useRef<ComponentRef<typeof View>>(null);
   const debugWaiters = useRef(new Map<string, (result: unknown) => void>());
@@ -158,6 +160,7 @@ export default function BookScreen() {
           cfi: position?.cfi ?? null,
           position,
           settings: getLibrary().settings,
+          insets: { top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right },
         });
         return;
       }
@@ -179,6 +182,7 @@ export default function BookScreen() {
           flow: getLibrary().flow,
         });
         setToc(message.toc);
+        setFixedLayout(message.fixedLayout);
         setPhase("reading");
         setNotice(null);
         return;
@@ -199,6 +203,7 @@ export default function BookScreen() {
           sectionFraction: message.sectionFraction,
         };
         latest.current = report;
+        canGoBack.current = message.canGoBack;
         setFraction(message.fraction);
         setChapter(message.tocLabel);
         setTocHref(message.tocHref);
@@ -247,7 +252,13 @@ export default function BookScreen() {
     if (id && phase === "reading") post({ type: "settings", id, tapZones });
   }, [id, phase, tapZones, post]);
 
-  // Android back closes an open note, then the contents, then steps back through jumps, then leaves the book.
+  // The system bars can change, for example on rotation. The page keeps its sheet and text clear of them.
+  useEffect(() => {
+    if (id && phase === "reading") post({ type: "insets", id, top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right });
+  }, [id, phase, insets.top, insets.bottom, insets.left, insets.right, post]);
+
+  // Android back closes an open note, then the contents, then steps back through jumps,
+  // then returns from a note's "Go to note", then leaves the book.
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
       if (!id) return false;
@@ -263,6 +274,11 @@ export default function BookScreen() {
       }
       if (backDepth.current > 0) {
         post({ type: "back", id });
+        return true;
+      }
+      if (canGoBack.current) {
+        post({ type: "history-back", id });
+        canGoBack.current = false;
         return true;
       }
       return false;
@@ -408,6 +424,7 @@ export default function BookScreen() {
             fraction={fraction}
             toc={toc}
             flow={flow}
+            fixedLayout={fixedLayout}
             onFlow={switchFlow}
             onContents={() => showToc(true)}
             onChapter={stepChapter}

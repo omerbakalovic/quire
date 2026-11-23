@@ -25,19 +25,23 @@ function fakeView(opts: { cfiIndex?: Record<string, number>; fail?: Set<string> 
       },
     },
     getSectionFractions: () => fractions.map((x) => x + Number.EPSILON),
-    resolveNavigation(target: string) {
-      const index = opts.cfiIndex?.[target];
-      return index === undefined ? undefined : { index };
-    },
-    async goTo(target: string) {
+    resolveNavigation(target: string | { fraction: number }) {
+      if (typeof target === "object") return { index: 1, fraction: target.fraction };
       if (opts.fail?.has(target)) return undefined;
-      view.went.push(target);
-      view.lastLocation = { cfi: `epubcfi(/6/99!/${view.went.length})`, tocItem: { label: String(target) } };
-      return { index: 1 };
+      const index = opts.cfiIndex?.[target];
+      if (index !== undefined) return { index };
+      return target.startsWith("epubcfi(") || target.endsWith(".xhtml") ? { index: 1, target } : undefined;
     },
-    async goToFraction(fraction: number) {
-      view.went.push({ fraction });
-      view.lastLocation = { cfi: `epubcfi(/6/98!/${view.went.length})` };
+    historyPushes: 0,
+    renderer: {
+      async goTo(resolved: { target?: string; fraction?: number }) {
+        const target = resolved.target ?? { fraction: resolved.fraction };
+        view.went.push(target);
+        view.lastLocation = { cfi: `epubcfi(/6/99!/${view.went.length})`, tocItem: { label: String(resolved.target) } };
+      },
+    },
+    async goTo() {
+      view.historyPushes++;
     },
   };
   return view;
@@ -55,6 +59,7 @@ test("a jump pushes where the reader was, and back returns there", async () => {
   assert.equal(view.went.at(-1), "epubcfi(/6/99!/1)", "back goes to where the second jump started");
   await jumps.back();
   assert.equal(view.went.at(-1), "epubcfi(/6/4!/4/2)");
+  assert.equal(view.historyPushes, 0, "jumps leave foliate's history alone");
   assert.equal(await jumps.back(), false);
   assert.deepEqual(replies.at(-1), { type: "back-stack", id: "b1", depth: 0, label: null });
 });
@@ -98,7 +103,7 @@ test("restore uses the CFI when it resolves, else the saved section", () => {
   const cfi = "epubcfi(/6/6!/4/2)";
   const saved = { cfi, fraction: 0.6, sectionIndex: 2, sectionFraction: 0.5 };
   assert.deepEqual(restoreTarget(fakeView({ cfiIndex: { [cfi]: 2 } }), saved).target, cfi);
-  const fallback = restoreTarget(fakeView(), saved);
+  const fallback = restoreTarget(fakeView({ fail: new Set([cfi]) }), saved);
   assert.equal(fallback.plan.kind, "fraction");
   const target = fallback.target as { fraction: number };
   assert.ok(Math.abs(target.fraction - 0.625) < 1e-9);

@@ -23,6 +23,7 @@ const POPUP_CSS = `
 #quire-note.open { display: block; }
 #quire-note .shade { position: absolute; inset: 0; background: rgba(0,0,0,.28); }
 #quire-note .sheet { position: absolute; left: 0; right: 0; bottom: 0; max-height: 62vh; display: flex;
+  padding: 0 var(--quire-inset-right, 0px) var(--quire-inset-bottom, 0px) var(--quire-inset-left, 0px);
   flex-direction: column; background: #fdfdfb; color: #1a1a1a; border-radius: 14px 14px 0 0;
   box-shadow: 0 -4px 24px rgba(0,0,0,.25); font: 17px/1.5 Georgia, "Noto Serif", serif; }
 #quire-note .bar { display: flex; align-items: center; gap: 4px; padding: 6px 8px; border-bottom: 1px solid #e3e1da;
@@ -39,7 +40,7 @@ const POPUP_CSS = `
 #quire-note .body .quire-sc { font-variant: small-caps; }
 #quire-note .actions { display: flex; justify-content: space-between; gap: 4px; padding: 4px 8px 10px;
   border-top: 1px solid #e3e1da; }
-#quire-back { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); z-index: 40; display: none;
+#quire-back { position: fixed; left: 50%; bottom: calc(18px + var(--quire-inset-bottom, 0px)); transform: translateX(-50%); z-index: 40; display: none;
   min-height: 44px; padding: 0 18px; border: 0; border-radius: 22px; background: #1c1c1e; color: #fff;
   font: 15px system-ui, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.3); }
 #quire-back.show { display: block; }
@@ -252,7 +253,8 @@ export class NotePopup {
         continue;
       }
       if (++checked > MAX_CONFIRM) {
-        kept.push(a);
+        // Past the cap, a superscript or [1] still counts; a plain id'd link does not.
+        if (kind === "maybe") kept.push(a);
         continue;
       }
       try {

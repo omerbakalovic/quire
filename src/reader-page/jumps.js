@@ -14,6 +14,18 @@ export function createJumps(view, reply, id) {
   };
   const announce = () => reply({ type: "back-stack", id, ...stack.summary() });
 
+  /**
+   * Move without touching foliate's history. That history is left to the note
+   * popup's "Go to note" and the Android back after it, so the two stacks never
+   * replay each other's entries.
+   */
+  async function move(target) {
+    const resolved = view.resolveNavigation(target);
+    if (!resolved) return false;
+    await view.renderer.goTo(resolved);
+    return true;
+  }
+
   async function jump(go) {
     const from = here();
     const ok = await go();
@@ -28,23 +40,19 @@ export function createJumps(view, reply, id) {
       const href = event.detail?.href;
       if (!href) return;
       event.preventDefault();
-      void jump(() => view.goTo(href)).catch((error) => console.error("link failed", error));
+      void jump(() => move(href)).catch((error) => console.error("link failed", error));
     },
     goToHref(href) {
-      return jump(() => view.goTo(href));
+      return jump(() => move(href));
     },
     goToFraction(fraction) {
-      return jump(async () => {
-        await view.goToFraction(Math.min(1, Math.max(0, fraction)));
-        return true;
-      });
+      return jump(() => move({ fraction: Math.min(1, Math.max(0, fraction)) }));
     },
     async back() {
       const entry = stack.pop();
       announce();
       if (!entry) return false;
-      await view.goTo(entry.cfi);
-      return true;
+      return move(entry.cfi);
     },
     clear() {
       stack.clear();

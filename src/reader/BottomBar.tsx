@@ -11,6 +11,8 @@ type Props = {
   fraction: number | null;
   toc: NavEntry[];
   flow: Flow;
+  /** Fixed-layout pages have no scroll mode; the switch keeps its space so the other controls do not move. */
+  fixedLayout: boolean;
   onFlow: (flow: Flow) => void;
   onContents: () => void;
   onChapter: (dir: "prev" | "next") => void;
@@ -18,7 +20,7 @@ type Props = {
 };
 
 /** Reader controls: chapter buttons around the progress slider, then contents and the flow switch. */
-export function BottomBar({ bottomInset, fraction, toc, flow, onFlow, onContents, onChapter, onSeek }: Props) {
+export function BottomBar({ bottomInset, fraction, toc, flow, fixedLayout, onFlow, onContents, onChapter, onSeek }: Props) {
   const strings = t().book;
   const percent = fraction === null ? null : Math.round(fraction * 100);
   return (
@@ -37,7 +39,7 @@ export function BottomBar({ bottomInset, fraction, toc, flow, onFlow, onContents
         <Pressable onPress={onContents} accessibilityRole="button" style={styles.contents} hitSlop={6}>
           <Text style={styles.button}>☰ {strings.contents}</Text>
         </Pressable>
-        <View style={styles.segment}>
+        <View style={[styles.segment, fixedLayout && styles.hidden]}>
           {(["paginated", "scrolled"] as const).map((option) => (
             <Pressable
               key={option}
@@ -75,6 +77,7 @@ const styles = StyleSheet.create({
   contents: { minHeight: 44, justifyContent: "center" },
   percent: { color: "#ccc", fontSize: 14, minWidth: 44, textAlign: "center" },
   segment: { flexDirection: "row", borderRadius: 8, borderWidth: 1, borderColor: "#555", overflow: "hidden" },
+  hidden: { opacity: 0, pointerEvents: "none" },
   segmentItem: { paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, justifyContent: "center" },
   segmentOn: { backgroundColor: "#eee" },
   segmentText: { color: "#eee", fontSize: 14 },

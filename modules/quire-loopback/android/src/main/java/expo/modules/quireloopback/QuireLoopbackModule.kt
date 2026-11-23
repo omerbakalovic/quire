@@ -260,10 +260,14 @@ class QuireLoopbackModule : Module() {
   private fun materialize(context: Context): File {
     val dir = File(context.filesDir, "quire-static")
     dir.mkdirs()
-    for ((asset, name) in listOf("quire-reader/reader.html" to "reader.html", "quire-reader/reader.js" to "reader.js")) {
-      context.assets.open(asset).use { input ->
-        File(dir, name).outputStream().use { output -> input.copyTo(output) }
-      }
+    // Debug builds only: a reader page the phone matrix pushed to files/quire-dev/ replaces
+    // the APK's copy, so a reader-page change reaches the phone without a rebuild.
+    val debuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+    val dev = File(context.filesDir, DEV_READER_DIR)
+    val pushed = debuggable && READER_FILES.all { (_, name) -> File(dev, name).isFile }
+    for ((asset, name) in READER_FILES) {
+      val source = if (pushed) File(dev, name).inputStream() else context.assets.open(asset)
+      source.use { input -> File(dir, name).outputStream().use { output -> input.copyTo(output) } }
     }
     return dir
   }
@@ -335,5 +339,7 @@ class QuireLoopbackModule : Module() {
     const val COMMAND_DIR = "quire-cmd"
     const val MAX_COMMANDS = 20
     const val MAX_COMMAND_BYTES = 65536L
+    const val DEV_READER_DIR = "quire-dev"
+    val READER_FILES = listOf("quire-reader/reader.html" to "reader.html", "quire-reader/reader.js" to "reader.js")
   }
 }

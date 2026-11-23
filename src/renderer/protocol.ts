@@ -17,6 +17,7 @@ export type ReaderToHost =
       rangeRequests: number | null;
       restored: boolean;
       restoredFrom: "cfi" | "section" | "book" | "start" | null;
+      fixedLayout: boolean;
     }
   | {
       type: "relocate";
@@ -29,6 +30,7 @@ export type ReaderToHost =
       sectionFraction: number | null;
       sectionCount: number | null;
       sinceTapMs: number | null;
+      canGoBack: boolean;
     }
   | { type: "tap"; id: string; zone: "center" }
   | { type: "back-stack"; id: string; depth: number; label: string | null }
@@ -88,6 +90,7 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       restoredFrom: RESTORED_FROM.has(message.restoredFrom as string)
         ? (message.restoredFrom as "cfi" | "section" | "book" | "start")
         : null,
+      fixedLayout: message.fixedLayout === true,
     };
   }
   if (message.type === "relocate") {
@@ -104,6 +107,7 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       sectionFraction: optNumber(message.sectionFraction),
       sectionCount: optNumber(message.sectionCount),
       sinceTapMs: optNumber(message.sinceTapMs),
+      canGoBack: message.canGoBack === true,
     };
   }
   if (message.type === "back-stack") {

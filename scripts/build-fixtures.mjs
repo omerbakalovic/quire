@@ -78,6 +78,7 @@ ${foot}`;
 const noterefChapter2 = `${head("Chapter 2")}
 <h1>Chapter 2</h1>
 <p>CHAPTER-TWO-START</p>
+<p>A hyperlink-edition note on <a id="c002_src0001" class="class_source" href="chapter-2.xhtml#c002_ref0001">Ishmael</a>, marked only by its back-link, and a plain cross-reference <a id="ref-crossref" href="#item-3">to item 3</a>.</p>
 <h2 id="item-3">Item 3</h2>
 <p>This numbered section is the target of a numeric link and must not be treated as a note.</p>
 <svg xmlns="http://www.w3.org/2000/svg" width="40" height="40" role="img" aria-label="Blue circle"><circle cx="20" cy="20" r="16" fill="blue"/></svg>
@@ -87,6 +88,9 @@ const noterefChapter2 = `${head("Chapter 2")}
 </table>
 ${padding("Chapter two", 8)}
 <p>CHAPTER-TWO-END</p>
+<div class="class_ch_footers">
+  <p id="c002_ref0001"><a class="class_footnote" href="chapter-2.xhtml#c002_src0001">◄</a> Ishmael: a hyperlink-style note, found because it links back to its reference.</p>
+</div>
 ${foot}`;
 
 const noterefChapter3 = `${head("Chapter 3")}

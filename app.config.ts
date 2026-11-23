@@ -31,7 +31,7 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   android: {
     package: appIdentity.androidPackage,
     adaptiveIcon: {
-      backgroundColor: "#E6F4FE",
+      backgroundColor: "#1F3A5F",
       foregroundImage: "./assets/images/android-icon-foreground.png",
       backgroundImage: "./assets/images/android-icon-background.png",
       monochromeImage: "./assets/images/android-icon-monochrome.png",
@@ -45,13 +45,15 @@ export default ({ config }: ConfigContext): ExpoConfig => ({
   plugins: [
     "./plugins/withLocalCleartext",
     "./plugins/withReaderAssets",
+    "./plugins/withOpenBooks",
+    "./plugins/withDevVariant",
     "expo-router",
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#208AEF",
+        backgroundColor: "#1F3A5F",
         image: "./assets/images/splash-icon.png",
-        imageWidth: 76,
+        imageWidth: 160,
       },
     ],
   ],

@@ -191,6 +191,10 @@ A block cache is not added. The open counts were 14 and 17, and the busiest turn
 
 On the same origin, still through range reads: the scripted book showed `SCRIPTED-BOOK-TEXT` with `scriptRan` false and `script-src 'none'`. DRM was refused before open (`kind` `drm`). The font-obfuscation book opened with `secureContext` and `crypto.subtle` true, and the chapter text contained `FONT-OBFUSCATION-TEXT`.
 
+## Notes are Quire's own code
+
+foliate's `FootnoteHandler` is not bundled. It opened a hidden `<foliate-view>` per note, which raised the M1a `doc is null` errors when those views were removed, and it extracted empty-anchor notes wrong. `src/reader-page/notes.js` classifies and extracts notes, and `note-popup.js` shows the sanitized copy in a bottom sheet over the page. Sections read in the background come from `section.load()`, so images keep their blob URLs. foliate has already re-serialized that copy with `XMLSerializer`, so a self-closed empty anchor stays empty even when the copy is parsed as text/html. The note tests use jsdom, a dev dependency only.
+
 ## Known limits
 
 Size caps, when import arrives in M1b, use the sizes a zip declares. A hostile zip can forge those numbers. The WebView read path has no byte cap of its own.
@@ -280,3 +284,16 @@ The script also copes with the two things that wasted run 3 and the first try at
 
 For a blank page, the scan names what starts on it and what runs across it, and the script takes a screenshot of that page.
 
+
+## Everyday app and dev build
+
+- The everyday app is a release APK (`npm run apk`, or the `Android APK` GitHub workflow) with the JS bundle and reader page inside, so it opens from the launcher with no Metro. It is signed with the Expo template's debug key: fine for sideloading, to be replaced before any store upload.
+- Debug builds get `applicationIdSuffix ".dev"` and the name "Quire Dev" (`plugins/withDevVariant.js`). Both apps install side by side, and the phone matrix (`PKG = app.quire.reader.dev`) never imports test books into, or clears, the reader's own library. `npm run android` passes `--app-id app.quire.reader.dev` so Expo launches the right package.
+- Release builds ignore `files/quire-check` and the `quireCheck` extra, and write no `quire-report.jsonl`. The phone checks and matrix stay debug-only.
+- "Open with" and Share for `application/epub+zip` (`plugins/withOpenBooks.js`): VIEW, SEND and SEND_MULTIPLE filters on MainActivity. `takeIncomingBooks()` returns the launch intent's books once (not when reopened from Recents) plus any from `OnNewIntent`, which also fires `onIncomingBooks`. The library imports them through the same path as the picker; a single book opens in the reader right away. `src/app/+native-intent.tsx` sends the content:// URL to the library so the router never shows "unmatched route".
+
+## Library look
+
+- The shelf's look lives in `library.look` (`src/domain/library-look.ts`), apart from the book rows, so the wider customization work can extend it without touching reading data. Unknown or damaged values fall back to the defaults.
+- Default is **Minimal**: plain text rows, title with author and progress, each of which can be switched off. **Pills** are rounded cards; their background is the colour the reader picked (long-press a book), else the average colour of the cover (measured natively once, `averageColor`), else a neutral grey. Text is black or white by WCAG luminance. Covers on pills are optional and off by default.
+- The two Power Moby-Dick entries were two different files (the footnote and the link edition from the phone matrix), not a failed dedupe: import dedupes by content hash. Books that share a title and authors now show the imported file name (else publisher, else "Copy N") so editions are told apart. The matrix now imports into Quire Dev, so the everyday library only holds what the reader adds.

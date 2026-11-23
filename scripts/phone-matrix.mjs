@@ -1846,13 +1846,15 @@ async function main() {
   if (!serial) await pickDevice();
   healthAdb = adbRunner(ADB, serial);
   if (!(await preflight())) return;
+  // Before the open shells: one of them runs as the app, which needs the app installed.
+  // `pm path` exits 1 for a package that is not there.
+  const installed = (await adb(["shell", `pm path ${PKG}`]).catch(() => "")).includes("package:");
+  if (opts.install || (!installed && serial.startsWith("emulator-"))) await installDebug();
+  else if (!installed) throw new Error(`${PKG} (Quire Dev) is not installed on ${serial}. Debug builds install under that id now; run \`npm run android\` once, or pass --install.`);
   await openShells();
   const device = `${(await shell("getprop ro.product.model")).trim()}, Android ${(await shell("getprop ro.build.version.release")).trim()} (${serial})`;
   const meta = { started, device, commit: await gitCommit(), mode: opts.quick ? "quick" : opts.only ? `only ${opts.only}` : "full" };
   say(device);
-  const installed = (await shell(`pm path ${PKG}`)).includes("package:");
-  if (opts.install || (!installed && serial.startsWith("emulator-"))) await installDebug();
-  else if (!installed) throw new Error(`${PKG} (Quire Dev) is not installed. Debug builds install under that id now; run \`npm run android\` once, or pass --install.`);
   await adb(["reverse", "tcp:8081", "tcp:8081"]);
   await pickInput();
   startWatchdog();

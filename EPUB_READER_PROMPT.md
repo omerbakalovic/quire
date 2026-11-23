@@ -108,8 +108,8 @@ The goal is that annotated books (classics with scholarly notes, translations, t
 - **P0:** Layout controls: line height, paragraph spacing, page margins (horizontal/vertical), text alignment (left / justified / publisher default), hyphenation on/off (language-aware).
 - **P1:** Letter spacing, word spacing, font weight boost, first-line indent override, max line width in scroll mode, multi-column text on tablets.
 - **P0:** **"Use publisher styles" master switch**, with granular overrides (font, size, colors, alignment, spacing). Many books have hard-coded styles that fight user settings; the user must always be able to win.
-- **P1:** **Reading profiles/presets:** save a named bundle of settings (font, size, spacing, theme, brightness) and switch between them in one tap, for example "Day", "Night", "Commute".
-- **P1:** Per-book overrides: any setting can be global or saved for just this book.
+- **P0:** **Reading profiles/presets:** save a named bundle of settings (font, size, spacing, theme, brightness, layout, page-turn style) and switch between them in one tap, for example "Day", "Night", "Commute". Raised from P1; see `docs/customization.md`.
+- **P0:** Per-book overrides: any setting can be global or saved for just this book. Raised from P1.
 - A live **preview** while changing settings, and a one-tap **reset to defaults**.
 
 ### E. Themes, night reading, and brightness
@@ -131,6 +131,8 @@ The goal is that annotated books (classics with scholarly notes, translations, t
 - **P0:** Page-turn animation with an on/off toggle (off means an instant turn). Styles: none, slide, fade. Respect the system "reduce motion" setting, which forces none unless the reader opts back in.
 - **P1:** **Choosable page-turn styles** in the customization settings, with a live preview: simple (slide, fade), pretty (realistic page curl, book-like flip), and flashy (for example pages burning away). Styles are self-contained, so new ones can be added later without touching the reader. Each style must keep page turns feeling instant (the turn itself still lands under about 100 ms; the effect plays over it) and must not drop frames in scroll mode, where only none and fade apply. Can be saved in reading profiles and per book.
 - **P0:** Clean top bar (book title, chapter) and a bottom bar (progress). Both fully hideable for immersive reading.
+- **P0:** **Adjustable reader layout** (`docs/customization.md`, section 3): the default is bare (only the text while reading; a few controls on a center tap). Header and footer slots hold optional information (title, chapter, page, percent, clock, battery, time left), and the top bar, quick row and bottom bar hold controls picked from a catalog. Edited on the live reader, with a list editor too, and saved as layout presets. Gestures map to the same actions.
+- **P1:** **User-made page-turn animations** as turn packs (a manifest of parameters plus one SkSL shader, the same format as the built-in styles), importable and shareable. Anyone can tune a style's parameters and share the result as a preset. See `docs/customization.md`, section 5.
 - **P1:** Volume-key page turning (Android).
 - **P1:** Optional haptic feedback on page turns and actions.
 - **P1:** Tablet layout: side-docked TOC/notes panel instead of sheets.
@@ -254,9 +256,10 @@ Everything in section 4C marked P0, plus the P1 notes-in-chapter panel.
 **Milestone 4: Typography, themes, brightness.**
 Font size, bundled and custom fonts, layout controls, publisher-styles switch, all built-in themes, custom theme editor, brightness slider with restore, software dimmer, page-turn animation toggle and choosable styles (section 4F).
 *Done when:* every setting applies live without losing position, custom fonts load in the reader, and brightness is correctly restored on exit/background.
+*Also in this milestone, as the customization foundation* (`docs/customization.md`, section 7): the settings registry with layered values (defaults, global, profile, this book, session), reading profiles and per-book overrides, theme tokens shared by the book, popups, bars and library, the reader layout slots with Edit layout mode and the Bare, Classic and Informative presets, gestures mapped to actions, and the turn-pack engine (snapshot overlay plus SkSL) with the built-in styles' tunable parameters saved as presets. It starts with a spike on capturing the reader view for the overlay.
 
 **Milestone 5: Library and folders.**
-Full library UI, directory import, duplicate detection, metadata editing, nested folders, sort/filter, reading status.
+Full library UI (minimal pills tinted from the cover by default, with fields and looks set through the settings registry), tags seeded from `dc:subject` for genre groupings, directory import, duplicate detection, metadata editing, nested folders, sort/filter, reading status.
 *Done when:* a folder of 200+ EPUBs imports smoothly, and folder operations are safe and tested.
 
 **Milestone 6: Bookmarks, highlights, and quotes.**
@@ -264,15 +267,15 @@ Section 4G and 4H.
 *Done when:* annotations survive font/layout changes and app restarts, quotes work across books, and Markdown export is correct.
 
 **Milestone 7: Search, stats, backup.**
-In-book search, library search, reading stats, full backup/restore.
+In-book search, library search, reading stats, full backup/restore, export and import of presets, profiles and themes as `.quire` files.
 *Done when:* a backup restored onto a fresh install reproduces the library, annotations, positions, and settings.
 
 **Milestone 8: Polish and hardening.**
-Accessibility pass, tablet layout, performance tuning on large books, edge-case EPUB fixes, gesture options, reading profiles, per-book overrides.
+Accessibility pass, tablet layout, performance tuning on large books, edge-case EPUB fixes, the 3×3 tap grid and left-handed layout, turn-pack import with its guards and `docs/turn-packs.md`. (Reading profiles and per-book overrides moved to Milestone 4.)
 *Done when:* the performance targets in section 6 are met and a manual accessibility checklist passes.
 
 **Milestone 9 (stretch):**
-Pick from the P2 items in order of value: TTS with sleep timer, footnote tray, OPDS browsing, quote image cards if not done earlier, two-page spreads, reading ruler.
+Pick from the P2 items in order of value: in-app turn-pack editor, book CSS snippet, TTS with sleep timer, footnote tray, OPDS browsing, quote image cards if not done earlier, two-page spreads, reading ruler.
 
 ---
 

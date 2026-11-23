@@ -128,7 +128,8 @@ The goal is that annotated books (classics with scholarly notes, translations, t
 ### F. Reader UI and gestures
 
 - **P0:** Tap center to show/hide controls; tap left/right zones to turn pages; swipe to turn pages. **P1:** configurable tap zones (and a left-handed layout).
-- **P0:** Page-turn animations: slide, fade, none. **P2:** page curl. Respect the system "reduce motion" setting.
+- **P0:** Page-turn animation with an on/off toggle (off means an instant turn). Styles: none, slide, fade. Respect the system "reduce motion" setting, which forces none unless the reader opts back in.
+- **P1:** **Choosable page-turn styles** in the customization settings, with a live preview: simple (slide, fade), pretty (realistic page curl, book-like flip), and flashy (for example pages burning away). Styles are self-contained, so new ones can be added later without touching the reader. Each style must keep page turns feeling instant (the turn itself still lands under about 100 ms; the effect plays over it) and must not drop frames in scroll mode, where only none and fade apply. Can be saved in reading profiles and per book.
 - **P0:** Clean top bar (book title, chapter) and a bottom bar (progress). Both fully hideable for immersive reading.
 - **P1:** Volume-key page turning (Android).
 - **P1:** Optional haptic feedback on page turns and actions.
@@ -251,7 +252,7 @@ Everything in section 4C marked P0, plus the P1 notes-in-chapter panel.
 *Done when:* the noteref test EPUB passes every case (see section 8) and real annotated books show correct popups, including cross-file notes.
 
 **Milestone 4: Typography, themes, brightness.**
-Font size, bundled and custom fonts, layout controls, publisher-styles switch, all built-in themes, custom theme editor, brightness slider with restore, software dimmer.
+Font size, bundled and custom fonts, layout controls, publisher-styles switch, all built-in themes, custom theme editor, brightness slider with restore, software dimmer, page-turn animation toggle and choosable styles (section 4F).
 *Done when:* every setting applies live without losing position, custom fonts load in the reader, and brightness is correctly restored on exit/background.
 
 **Milestone 5: Library and folders.**

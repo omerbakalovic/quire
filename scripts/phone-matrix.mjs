@@ -911,8 +911,10 @@ async function swipeForward(st) {
     const [right] = toPx(st, st.viewport.width * 0.8, st.viewport.height * 0.5);
     await shell(`${INPUT} swipe ${left} ${y} ${right} ${y} 350`);
   } else {
+    // Start above the bottom quarter, where the reader's own controls (the slider, the
+    // Back pill) sit and would take the touch, and end below the top fifth (banners).
     const [x, top] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.25);
-    const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.75);
+    const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.6);
     await shell(`${INPUT} swipe ${x} ${bottom} ${x} ${top} 350`);
   }
   // A fling keeps scrolling after the finger lifts, and foliate reports the place

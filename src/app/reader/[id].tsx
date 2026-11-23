@@ -50,6 +50,8 @@ export default function BookScreen() {
   const pending = useRef<{ cfi: string; fraction: number | null } | null>(null);
   const latestCfi = useRef<string | null>(book?.cfi ?? null);
   const noteOpen = useRef(false);
+  const canGoBack = useRef(false);
+  const [fixedLayout, setFixedLayout] = useState(false);
   const tapZones = library.settings.tapZones;
   const screenRef = useRef<ComponentRef<typeof View>>(null);
   const debugWaiters = useRef(new Map<string, (result: unknown) => void>());
@@ -135,6 +137,7 @@ export default function BookScreen() {
           flow: getLibrary().flow,
           cfi: latestCfi.current ?? findBook(getLibrary(), id)?.cfi ?? null,
           settings: getLibrary().settings,
+          insets: { top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right },
         });
         return;
       }
@@ -154,6 +157,7 @@ export default function BookScreen() {
           restored: message.restored,
           flow: getLibrary().flow,
         });
+        setFixedLayout(message.fixedLayout);
         setPhase("reading");
         setNotice(null);
         return;
@@ -167,6 +171,7 @@ export default function BookScreen() {
           sinceTapMs: message.sinceTapMs,
         });
         latestCfi.current = message.cfi;
+        canGoBack.current = message.canGoBack;
         setFraction(message.fraction);
         setChapter(message.tocLabel);
         pending.current = { cfi: message.cfi, fraction: message.fraction };
@@ -208,13 +213,26 @@ export default function BookScreen() {
     if (id && phase === "reading") post({ type: "settings", id, tapZones });
   }, [id, phase, tapZones, post]);
 
-  // Android back closes an open note before it leaves the book.
+  // The system bars can change, for example on rotation. The page keeps its sheet and text clear of them.
+  useEffect(() => {
+    if (id && phase === "reading") post({ type: "insets", id, top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right });
+  }, [id, phase, insets.top, insets.bottom, insets.left, insets.right, post]);
+
+  // Android back closes an open note, then returns from a followed link, then leaves the book.
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!noteOpen.current || !id) return false;
-      post({ type: "close-note", id });
-      noteOpen.current = false;
-      return true;
+      if (!id) return false;
+      if (noteOpen.current) {
+        post({ type: "close-note", id });
+        noteOpen.current = false;
+        return true;
+      }
+      if (canGoBack.current) {
+        post({ type: "history-back", id });
+        canGoBack.current = false;
+        return true;
+      }
+      return false;
     });
     return () => subscription.remove();
   }, [id, post]);
@@ -335,7 +353,7 @@ export default function BookScreen() {
             </View>
           </View>
           <View style={[styles.bar, styles.bottom, { paddingBottom: insets.bottom + 8 }]}>
-            <View style={styles.segment}>
+            <View style={[styles.segment, fixedLayout && styles.hidden]}>
               {(["paginated", "scrolled"] as const).map((option) => (
                 <Pressable
                   key={option}
@@ -412,6 +430,8 @@ const styles = StyleSheet.create({
   barSub: { color: "#bbb", fontSize: 13 },
   barButton: { color: "#fff", fontSize: 18, paddingVertical: 6 },
   segment: { flexDirection: "row", borderRadius: 8, borderWidth: 1, borderColor: "#555", overflow: "hidden" },
+  // Fixed-layout pages have no scroll mode; the space stays so the other controls do not move.
+  hidden: { opacity: 0, pointerEvents: "none" },
   segmentItem: { paddingHorizontal: 14, paddingVertical: 10, minHeight: 44, justifyContent: "center" },
   segmentOn: { backgroundColor: "#eee" },
   segmentText: { color: "#eee", fontSize: 14 },

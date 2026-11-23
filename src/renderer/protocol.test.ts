@@ -59,8 +59,14 @@ test("accepts the reading messages and cleans their fields", () => {
       sectionIndex: null,
       sectionCount: 38,
       sinceTapMs: null,
+      canGoBack: false,
     },
   );
+  const linked = parseReaderMessage('{"type":"relocate","id":"b1","cfi":"epubcfi(/6/2)","canGoBack":true}');
+  assert.equal(linked?.type === "relocate" && linked.canGoBack, true);
+  const debug = parseReaderMessage('{"type":"debug","id":"b1","reqId":"debug-1","result":{"ok":true}}');
+  assert.deepEqual(debug, { type: "debug", id: "b1", reqId: "debug-1", result: { ok: true } });
+  assert.equal(parseReaderMessage('{"type":"debug","id":"b1","result":1}'), null);
   assert.equal(parseReaderMessage('{"type":"relocate","id":"b1","cfi":""}'), null);
   assert.deepEqual(parseReaderMessage('{"type":"tap","id":"b1","zone":"center"}'), {
     type: "tap",
@@ -80,6 +86,7 @@ test("accepts the reading messages and cleans their fields", () => {
     openMs: null,
     rangeRequests: null,
     restored: false,
+    fixedLayout: false,
   });
   assert.deepEqual(parseReaderMessage('{"type":"failed","id":"b1"}'), {
     type: "failed",

@@ -8,7 +8,7 @@ import { appendNote, takeCommands, takePendingImports } from "@/renderer/book-ur
 
 import { parseMatrixCommand, readerDebug, type MatrixCommand } from "./matrix-command";
 
-const POLL_MS = 250;
+const POLL_MS = 100;
 const READER_TIMEOUT_MS = 20000;
 
 function answer(command: { seq: number; cmd: string }, outcome: { ok: true; result: unknown } | { ok: false; error: string }) {
@@ -36,6 +36,15 @@ function withTimeout<T>(promise: Promise<T>, ms: number, what: string): Promise<
 }
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+function channelTimeout(command: MatrixCommand): number {
+  if (command.cmd === "drain-imports") return 30 * 60000;
+  if (command.cmd === "reader") {
+    const requested = command.args.timeoutMs;
+    return (typeof requested === "number" && requested > 0 ? Math.min(requested, 180000) : READER_TIMEOUT_MS) + 2000;
+  }
+  return 20000;
+}
 
 /**
  * Debug builds only: runs the phone matrix's commands (scripts/phone-matrix.mjs).
@@ -120,7 +129,8 @@ export function MatrixChannel() {
               continue;
             }
             try {
-              answer(command, { ok: true, result: await run(command) });
+              // Nothing may hold the channel for good: a stuck step answers with an error and the next command runs.
+              answer(command, { ok: true, result: await withTimeout(run(command), channelTimeout(command), command.cmd) });
             } catch (error) {
               answer(command, { ok: false, error: error instanceof Error ? error.message : String(error) });
             }

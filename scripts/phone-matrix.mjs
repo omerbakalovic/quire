@@ -1874,6 +1874,7 @@ async function main() {
         }
         // A cold start, so the app runs Metro's current code and the reader page pushed below.
         await shell(`am force-stop ${PKG}`);
+        if (serial.startsWith("emulator-")) await pointAtMetro();
         await runAs(`rm -rf ${COMMANDS}`).catch(() => {});
         await pushReader();
         log.reset();
@@ -2047,6 +2048,19 @@ async function startEmulator() {
     await sleep(2000);
   }
   throw new Error(`the emulator did not finish booting within 6 minutes; see ${logFile}`);
+}
+
+/**
+ * An emulator reaches Metro on the computer at 10.0.2.2; adb reverse to its
+ * localhost did not work on the API 36 image. React Native reads the bundler
+ * host from "debug_http_host" in the app's default preferences, so it is set
+ * there while the app is stopped. Debug builds allow cleartext to 10.0.2.2
+ * (plugins/withLocalCleartext.js).
+ */
+async function pointAtMetro() {
+  const xml = `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <string name="debug_http_host">10.0.2.2:8081</string>\n</map>\n`;
+  await runAs(`mkdir -p shared_prefs && echo ${b64(xml)} | base64 -d > shared_prefs/${PKG}_preferences.xml`);
+  say("emulator: the app loads its code from Metro at 10.0.2.2:8081");
 }
 
 /** Puts this checkout's debug build on the device (an emulator gets it without asking). */

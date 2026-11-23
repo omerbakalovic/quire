@@ -11,14 +11,25 @@ const XML = `<?xml version="1.0" encoding="utf-8"?>
 </network-security-config>
 `;
 
-/** Dev builds load the reader from loopback. Cleartext is not opened for any other host. */
+// Debug builds only: an emulator reaches Metro on the computer through 10.0.2.2
+// (10.0.3.2 on Genymotion), because adb reverse does not always work there.
+const DEBUG_XML = XML.replace(
+  "  </domain-config>",
+  `    <domain includeSubdomains="false">10.0.2.2</domain>
+    <domain includeSubdomains="false">10.0.3.2</domain>
+  </domain-config>`,
+);
+
+/** The reader loads from loopback. Cleartext is not opened for any other host, except Metro's emulator aliases in debug builds. */
 function withLocalCleartext(config) {
   config = withDangerousMod(config, [
     "android",
     (cfg) => {
-      const dir = path.join(cfg.modRequest.platformProjectRoot, "app/src/main/res/xml");
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "network_security_config.xml"), XML);
+      for (const [variant, xml] of [["main", XML], ["debug", DEBUG_XML]]) {
+        const dir = path.join(cfg.modRequest.platformProjectRoot, `app/src/${variant}/res/xml`);
+        fs.mkdirSync(dir, { recursive: true });
+        fs.writeFileSync(path.join(dir, "network_security_config.xml"), xml);
+      }
       return cfg;
     },
   ]);

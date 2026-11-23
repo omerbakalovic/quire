@@ -218,6 +218,10 @@ export function state(view, settings) {
     pages: view.renderer.scrolled ? null : (view.renderer.pages ?? null),
     atStart: Boolean(view.renderer.atStart),
     atEnd: Boolean(view.renderer.atEnd),
+    // The last screen of this chapter, where a scroll has nowhere to go until the next one loads.
+    sectionEnd: view.isFixedLayout ? null : view.renderer.scrolled ? view.renderer.end >= view.renderer.viewSize - 4 : (view.renderer.page ?? 0) >= (view.renderer.pages ?? 0) - 2,
+    // foliate's empty page before or after a chapter's text. A turn passes through it while the next chapter loads.
+    paddingPage: !view.isFixedLayout && !view.renderer.scrolled && view.renderer.pages > 2 && (view.renderer.page === 0 || view.renderer.page >= view.renderer.pages - 1),
     // A chapter shorter than about a screen and a half: scrolling past its end shows blank paper.
     shortSection: view.renderer.scrolled ? view.renderer.viewSize < view.renderer.size * 1.5 : (view.renderer.pages ?? 3) <= 3,
     links: {
@@ -375,7 +379,8 @@ export async function noterefs(view, options) {
       if (!rect) continue;
       const x = frameRect.left + (rect.left + rect.width / 2) * scale;
       const y = frameRect.top + (rect.top + rect.height / 2) * scale;
-      if (x < 4 || x > width - 4 || y < 4 || y > height - 4) continue;
+      // Not in the top 15%, where a notification banner can drop in over the page and take the tap.
+      if (x < 4 || x > width - 4 || y < height * 0.15 || y > height - 4) continue;
       out.push({
         index,
         id: a.id || null,

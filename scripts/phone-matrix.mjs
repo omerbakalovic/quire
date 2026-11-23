@@ -721,7 +721,8 @@ async function turnOnce(direction) {
   const button = async () => {
     const from = log.mark();
     await reader("turn", { dir: direction === "forward" ? "next" : "prev" });
-    return result("button", await settle(from, { timeout: 3000, quietMs: 150, cfi: st.cfi }));
+    await waitRelocate(from, 3000, st.cfi);
+    return result("button", await afterTurn(from, st.cfi));
   };
   // A tap where no link is, as a person would aim; the › control when links fill the zone.
   const point = st.tapPoints?.[zone] ?? (st.links?.[zone] ? null : { x: st.viewport.width * (zone === "left" ? 0.15 : 0.85), y: st.viewport.height / 2 });
@@ -737,7 +738,23 @@ async function turnOnce(direction) {
     return { ...(await button()), method: "button", note: true };
   }
   if (!first) return result("tap");
-  return result("tap", await settle(from, { timeout: 100, quietMs: 150, cfi: st.cfi }));
+  return result("tap", await afterTurn(from, st.cfi));
+}
+
+/**
+ * A turn into another chapter passes through foliate's empty padding page while
+ * that chapter loads; a heavy one (scanned pages) can take a second. Wait until
+ * the reader rests on a real page, so the next check does not judge the gap.
+ */
+async function afterTurn(from, cfi) {
+  let moved = await settle(from, { timeout: 100, quietMs: 150, cfi });
+  for (let i = 0; i < 3; i++) {
+    const now = await state();
+    if (!now.paddingPage) break;
+    const mark = log.mark();
+    moved = (await settle(mark, { timeout: 2000, quietMs: 200 })) ?? moved;
+  }
+  return moved;
 }
 
 function localPath(entry) {
@@ -894,8 +911,10 @@ async function swipeForward(st) {
     const [right] = toPx(st, st.viewport.width * 0.8, st.viewport.height * 0.5);
     await shell(`${INPUT} swipe ${left} ${y} ${right} ${y} 350`);
   } else {
+    // Start above the bottom quarter, where the reader's own controls (the slider, the
+    // Back pill) sit and would take the touch, and end below the top fifth (banners).
     const [x, top] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.25);
-    const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.75);
+    const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.6);
     await shell(`${INPUT} swipe ${x} ${bottom} ${x} ${top} 350`);
   }
   // A fling keeps scrolling after the finger lifts, and foliate reports the place
@@ -1000,7 +1019,8 @@ async function runBook(entry, index) {
     const swiped = await state();
     row.shots.push(await shot(dir, "04-scrolled.png"));
     const swipeMoved = swiped.cfi !== scrolled.cfi;
-    check(scope, "a swipe scrolls", !swipeMoved && scrolled.atEnd ? null : swipeMoved, !swipeMoved && scrolled.atEnd ? "already at the end of the chapter" : `${scrolled.fraction?.toFixed(3)}→${swiped.fraction?.toFixed(3)}`);
+    const nowhere = !swipeMoved && (scrolled.atEnd || scrolled.sectionEnd);
+    check(scope, "a swipe scrolls", nowhere ? null : swipeMoved, nowhere ? "Scroll opened on the last screen of the chapter" : `${scrolled.fraction?.toFixed(3)}→${swiped.fraction?.toFixed(3)}`);
     check(scope, "after scrolling, shows text or an image", short && !hasContent(swiped) ? null : hasContent(swiped), short && !hasContent(swiped) ? "short chapter, scrolled past its end" : swiped.text?.slice(0, 50));
     const paged = await setFlow("paginated");
     row.shots.push(await shot(dir, "05-pages.png"));
@@ -1014,7 +1034,9 @@ async function closeNote(how, st) {
   const from = log.mark();
   if (how === "button") await reader("popup-click", { name: "close" });
   else if (how === "back key") await shell(`${INPUT} keyevent 4`);
-  else await tap(toPx(st, st.viewport.width / 2, st.viewport.height * 0.06));
+  // The shade above the sheet (the sheet is at most 62% of the height). Never the top
+  // of the screen: a notification banner can drop in there and take the tap.
+  else await tap(toPx(st, st.viewport.width / 2, st.viewport.height * 0.25));
   await waitNote(from, false, 2000);
   await sleep(150);
 }

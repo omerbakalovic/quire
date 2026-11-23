@@ -47,23 +47,15 @@ export function chapterAt(toc: NavEntry[], fraction: number): string | null {
 }
 
 /**
- * Tick marks for the slider: where chapters start. Many books put chapters one
- * level down, under parts or volumes, so the depth is the shallowest one that
- * gives at least `want` ticks (or as many as the whole TOC has).
- * Sorted, without duplicates, without 0 (the slider's own start), and capped so
- * a book with hundreds of entries does not draw a solid bar.
+ * Tick marks for the slider: where every chapter starts, at any depth. Books
+ * nest chapters under parts or volumes, and their front and back matter fill
+ * the top level, so any depth rule hid the chapters (phone run 7b, Frankenstein).
+ * Sorted, without duplicates, without 0 (the slider's own start), and sampled
+ * evenly past `limit` so a book with hundreds of entries does not draw a solid bar.
  */
-export function chapterTicks(toc: NavEntry[], want = 8, limit = 120): number[] {
+export function chapterTicks(toc: NavEntry[], limit = 120): number[] {
   const maxDepth = toc.reduce((deepest, entry) => Math.max(deepest, entry.depth), 0);
-  const all = ticksTo(toc, maxDepth);
-  let sorted = all;
-  for (let depth = 0; depth < maxDepth; depth++) {
-    const ticks = ticksTo(toc, depth);
-    if (ticks.length >= Math.min(want, all.length)) {
-      sorted = ticks;
-      break;
-    }
-  }
+  const sorted = ticksTo(toc, maxDepth);
   if (sorted.length <= limit) return sorted;
   const step = sorted.length / limit;
   return Array.from({ length: limit }, (_, i) => sorted[Math.floor(i * step)]);

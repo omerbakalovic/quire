@@ -207,18 +207,87 @@ export async function setFlow(message) {
   if (view.isFixedLayout) return false;
   const next = flowOf(message.flow);
   if (view.renderer.getAttribute("flow") === next) return true;
-  const cfi = view.lastLocation?.cfi ?? null;
+  const cfi = anchorCfi(view);
   view.renderer.setAttribute("flow", next);
   if (!cfi) return true;
   await nextFrame();
   await nextFrame();
+  await returnTo(view, cfi, "flow change");
+  await remember(view, cfi);
+  return true;
+}
+
+/**
+ * The CFI to keep across a relayout. Scroll mode shows a little of the text
+ * above the anchor, so its visible range starts earlier than the page the
+ * reader came from; Pages, Scroll, Pages then landed a page early. While the
+ * reader has not moved since the last relayout, keep that relayout's anchor.
+ */
+let kept = null;
+function anchorCfi(view) {
+  const here = view.lastLocation?.cfi ?? null;
+  if (kept && kept.view === view && kept.landed === here) return kept.cfi;
+  return here;
+}
+
+async function remember(view, cfi) {
+  await nextFrame();
+  kept = { view, cfi, landed: view.lastLocation?.cfi ?? null };
+}
+
+/**
+ * Go back to the text a CFI names after a relayout. The visible range's start
+ * often sits exactly on a page boundary, where its first rect can belong to
+ * the previous column, so landing on the collapsed start showed the page
+ * before (phone run 7b: Pages, Scroll, Pages went one page early). Anchor on
+ * the first visible character after the start instead.
+ */
+export async function returnTo(view, cfi, why) {
   try {
     const resolved = view.resolveNavigation(cfi);
-    if (resolved) await view.renderer.goTo(resolved);
+    if (!resolved) return;
+    const { anchor } = resolved;
+    await view.renderer.goTo({
+      ...resolved,
+      anchor: typeof anchor === "function" ? (doc) => firstCharacter(anchor(doc)) : anchor,
+    });
   } catch (error) {
-    console.error("could not return to the location after a flow change", error);
+    console.error(`could not return to the location after a ${why}`, error);
   }
-  return true;
+}
+
+/** A one-character range at the first non-space character from a range's start, or the range itself. */
+export function firstCharacter(range) {
+  if (!range || typeof range.cloneRange !== "function") return range;
+  const doc = range.startContainer?.ownerDocument;
+  if (!doc) return range;
+  // 4 is NodeFilter.SHOW_TEXT.
+  const walker = doc.createTreeWalker(doc.body ?? doc.documentElement, 4);
+  let node = range.startContainer;
+  let offset = range.startOffset;
+  if (node.nodeType !== 3) {
+    // An element boundary: start at the first text node at or after that child.
+    const child = node.childNodes?.[offset] ?? null;
+    walker.currentNode = child ?? node;
+    node = child && child.nodeType === 3 ? child : walker.nextNode();
+    offset = 0;
+  } else {
+    walker.currentNode = node;
+  }
+  for (let steps = 0; node && steps < 200; steps++) {
+    const text = node.data ?? "";
+    for (let i = offset; i < text.length; i++) {
+      if (!/\s/.test(text[i])) {
+        const out = doc.createRange();
+        out.setStart(node, i);
+        out.setEnd(node, i + 1);
+        return out;
+      }
+    }
+    node = walker.nextNode();
+    offset = 0;
+  }
+  return range;
 }
 
 export async function turn(message) {

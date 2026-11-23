@@ -109,8 +109,13 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
       >
         <View style={styles.track}>
           <View style={[styles.fill, { width: `${shown * 100}%` }]} />
+        </View>
+        {/* Ticks sit in their own layer: Android clips children to a rounded view, which hid all
+            but a sliver of each tick inside the 4 px track (phone run 7b). Dark on the filled
+            part, light on the rest, so they show on both. */}
+        <View style={styles.ticks} pointerEvents="none">
           {ticks.map((tick) => (
-            <View key={tick} style={[styles.tick, { left: `${tick * 100}%` }]} />
+            <View key={tick} style={[styles.tick, { left: `${tick * 100}%` }, tick <= shown ? styles.tickDone : styles.tickAhead]} />
           ))}
         </View>
         <View style={[styles.thumb, { left: `${shown * 100}%` }]} />
@@ -122,9 +127,12 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
 const styles = StyleSheet.create({
   wrap: { flex: 1, justifyContent: "center" },
   hit: { height: 44, justifyContent: "center" },
-  track: { height: 4, borderRadius: 2, backgroundColor: "#555", overflow: "visible" },
+  track: { height: 4, borderRadius: 2, backgroundColor: "#555", overflow: "hidden" },
+  ticks: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },
   fill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 2, backgroundColor: "#ddd" },
-  tick: { position: "absolute", top: -3, width: 2, height: 10, marginLeft: -1, backgroundColor: "#999" },
+  tick: { position: "absolute", top: 16, width: 2, height: 12, marginLeft: -1, borderRadius: 1 },
+  tickDone: { backgroundColor: "#1c1c1e" },
+  tickAhead: { backgroundColor: "#d0d0d0" },
   thumb: {
     position: "absolute",
     width: 18,

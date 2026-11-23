@@ -10,9 +10,15 @@
  *     [--skip-books] [--skip-notes] [--skip-taps] [--skip-lifecycle]
  *     [--background-s 90] [--apk-reader] [--serial SERIAL] [--adb PATH] [--out DIR]
  *     [--package ID] [--stall-s 90] [--wait-you-s 300]
+ *     [--phone] [--avd quire] [--keep-emulator] [--install]
  *
- * Before it: the debug APK is installed, Metro runs (`npx expo start`), and the
+ * Before it: the debug APK is built, Metro runs (`npx expo start`), and the
  * books are downloaded (`npm run books`).
+ *
+ * It drives an emulator by default, so the person's phone stays free: a running
+ * one, or the "quire" AVD started without a window and stopped at the end. On
+ * an emulator a missing Quire Dev is installed from android/app/build (--install
+ * reinstalls it anywhere). --phone drives the phone on USB, for a short final pass.
  *
  * --quick checks a fix in a few minutes: five books that cover the usual
  * breakage, notes in two of them, the tap setting, no lifecycle. Run the full
@@ -42,7 +48,7 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, statSync } from "node:fs";
 import * as zlib from "node:zlib";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
@@ -66,6 +72,10 @@ const { values: opts } = parseArgs({
     "stall-s": { type: "string", default: "90" },
     "wait-you-s": { type: "string", default: "300" },
     package: { type: "string", default: "app.quire.reader.dev" },
+    phone: { type: "boolean", default: false },
+    avd: { type: "string", default: "quire" },
+    "keep-emulator": { type: "boolean", default: false },
+    install: { type: "boolean", default: false },
     serial: { type: "string" },
     adb: { type: "string" },
     out: { type: "string" },
@@ -1833,22 +1843,16 @@ async function main() {
   say(`adb: ${ADB}`);
   say(`output: ${OUT}`);
 
-  if (!serial) {
-    const devices = (await adb(["devices"]))
-      .split("\n")
-      .slice(1)
-      .map((line) => line.trim().split(/\s+/))
-      .filter((parts) => parts[1] === "device");
-    if (devices.length !== 1) throw new Error(`found ${devices.length} devices; pass --serial`);
-    serial = devices[0][0];
-  }
+  if (!serial) await pickDevice();
   healthAdb = adbRunner(ADB, serial);
   if (!(await preflight())) return;
   await openShells();
   const device = `${(await shell("getprop ro.product.model")).trim()}, Android ${(await shell("getprop ro.build.version.release")).trim()} (${serial})`;
   const meta = { started, device, commit: await gitCommit(), mode: opts.quick ? "quick" : opts.only ? `only ${opts.only}` : "full" };
   say(device);
-  if (!(await shell(`pm path ${PKG}`)).includes("package:")) throw new Error(`${PKG} (Quire Dev) is not installed. Debug builds install under that id now; run \`npm run android\` once.`);
+  const installed = (await shell(`pm path ${PKG}`)).includes("package:");
+  if (opts.install || (!installed && serial.startsWith("emulator-"))) await installDebug();
+  else if (!installed) throw new Error(`${PKG} (Quire Dev) is not installed. Debug builds install under that id now; run \`npm run android\` once, or pass --install.`);
   await adb(["reverse", "tcp:8081", "tcp:8081"]);
   await pickInput();
   startWatchdog();
@@ -1962,6 +1966,102 @@ async function main() {
   process.exitCode = watch.stalled ? 3 : failed ? 1 : 0;
 }
 
+const EMULATOR_PORT = 5584;
+let startedEmulator = null;
+
+function sdkRoot() {
+  if (/[\\/]platform-tools[\\/]adb(\.exe)?$/i.test(ADB)) return dirname(dirname(ADB));
+  return process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT ?? (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "Android", "Sdk") : join(process.env.HOME ?? "", "Android", "Sdk"));
+}
+
+/**
+ * Which device to drive. By default the emulator, so runs never need the
+ * person's phone: a running emulator if there is one, else the --avd (quire)
+ * started without a window. --phone drives the phone on USB instead; --serial
+ * names a device outright.
+ */
+async function pickDevice() {
+  const ready = (await adb(["devices"]))
+    .split("\n")
+    .slice(1)
+    .map((line) => line.trim().split(/\s+/))
+    .filter((parts) => parts[1] === "device")
+    .map((parts) => parts[0]);
+  if (opts.phone) {
+    const phones = ready.filter((id) => !id.startsWith("emulator-"));
+    if (phones.length !== 1) throw new Error(phones.length ? `found ${phones.length} phones; pass --serial` : "no phone on USB (plug it in, or leave out --phone to use the emulator)");
+    serial = phones[0];
+    say(`device: the phone on USB (${serial})`);
+    return;
+  }
+  const running = ready.find((id) => id.startsWith("emulator-"));
+  if (running) {
+    serial = running;
+    say(`device: the running emulator (${serial})`);
+    return;
+  }
+  serial = await startEmulator();
+}
+
+/** Starts the AVD without a window and waits for Android to finish booting. */
+async function startEmulator() {
+  const exe = join(sdkRoot(), "emulator", process.platform === "win32" ? "emulator.exe" : "emulator");
+  if (!existsSync(exe)) throw new Error(`no emulator at ${exe}. Install it once: sdkmanager "emulator" and a system image, then create the "${opts.avd}" AVD (DECISIONS.md, phone tests). Or pass --phone.`);
+  const target = `emulator-${EMULATOR_PORT}`;
+  const logFile = join(OUT, "emulator.log");
+  const fd = openSync(logFile, "a");
+  say(`starting the "${opts.avd}" emulator without a window (${target}); its log is ${logFile}`);
+  const child = spawn(exe, ["-avd", opts.avd, "-port", String(EMULATOR_PORT), "-no-window", "-no-audio", "-no-boot-anim"], {
+    detached: true,
+    stdio: ["ignore", fd, fd],
+    windowsHide: true,
+  });
+  closeSync(fd);
+  let exited = null;
+  child.on("exit", (code) => (exited = code));
+  child.on("error", (error) => (exited = error.message));
+  child.unref();
+  startedEmulator = target;
+  const at = adbRunner(ADB, target);
+  const start = Date.now();
+  let said = start;
+  while (Date.now() - start < 6 * 60000) {
+    const booted = (await at(["shell", "getprop sys.boot_completed"], { timeout: 5000 }).catch(() => "")).trim();
+    if (booted === "1") {
+      say(`the emulator booted in ${Math.round((Date.now() - start) / 1000)} s`);
+      // Taps and screenshots expect a screen that stays on.
+      await at(["shell", "svc power stayon true"], { timeout: 10000 }).catch(() => {});
+      await at(["shell", "input keyevent KEYCODE_WAKEUP"], { timeout: 10000 }).catch(() => {});
+      return target;
+    }
+    if (exited !== null) {
+      const tail = readFileSync(logFile, "utf8").split("\n").filter(Boolean).slice(-6).join(" | ");
+      throw new Error(`the emulator stopped while booting (exit ${exited}): ${tail.slice(0, 600)}`);
+    }
+    if (Date.now() - said >= 20000) {
+      say(`waiting for the emulator to boot (${Math.round((Date.now() - start) / 1000)} s)`);
+      said = Date.now();
+    }
+    await sleep(2000);
+  }
+  throw new Error(`the emulator did not finish booting within 6 minutes; see ${logFile}`);
+}
+
+/** Puts this checkout's debug build on the device (an emulator gets it without asking). */
+async function installDebug() {
+  const apk = join(ROOT, "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+  if (!existsSync(apk)) throw new Error(`${PKG} is not on ${serial} and there is no debug APK at ${apk}; build it first (gradlew assembleDebug).`);
+  say(`installing the debug build (${Math.round(statSync(apk).size / 1e6)} MB) on ${serial}`);
+  await quietly(5 * 60000, "installing the debug build", () => adb(["install", "-r", apk], { timeout: 5 * 60000 }));
+}
+
+/** The emulator this run started goes again at the end (its quick-boot snapshot makes the next start fast). */
+async function stopEmulator() {
+  if (!startedEmulator || opts["keep-emulator"]) return;
+  say(`stopping the emulator (${startedEmulator}); --keep-emulator leaves it running`);
+  await adbRunner(ADB, startedEmulator)(["emu", "kill"], { timeout: 30000 }).catch(() => {});
+}
+
 /**
  * Before anything runs: is the phone there, awake, unlocked and free of
  * prompts, and is Metro up? What a script can fix it fixes; what needs a
@@ -1999,7 +2099,10 @@ main()
     await restoreRotation();
     process.exitCode = 2;
   })
-  .finally(() => {
+  .finally(async () => {
+    clearInterval(watch.timer);
+    stopFrontWatch();
     closeShells();
+    await stopEmulator().catch(() => {});
     releaseAwake();
   });

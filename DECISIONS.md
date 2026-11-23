@@ -280,6 +280,26 @@ The script also copes with the two things that wasted run 3 and the first try at
 
 For a blank page, the scan names what starts on it and what runs across it, and the script takes a screenshot of that page.
 
+### Stalls
+
+Runs used to sit silently when something was in the way: the notification shade, an install prompt, a sleeping PC, a phone off USB. Now the script says so at once:
+
+- It prints a heartbeat after 30 s with no output, and keeps `status.json` in the output folder current.
+- Before every tap or swipe it checks the window in front through a third open shell, so the check costs no time. While the shade, a prompt or another app is over Quire it pauses, with a `PAUSED` line. It closes the shade itself after a minute, and brings Quire back after 15 s.
+- After `--stall-s` (90 s) with no progress it runs `scripts/phone-health.mjs` (also `npm run phone-doctor`), which checks adb, the phone, the screen and lock, prompts, the app, Metro and `adb reverse`. It fixes what a script can, gives up the stuck step and goes on. That is the one retry.
+- A second stall before any check passes, a Metro problem, or a problem only a person can fix that is still there after `--wait-you-s`, ends the run. It prints `STALLED` with `NEEDS YOU` or `NEEDS PC` lines and exits with code 3.
+- The PC is kept awake while a run is going: a hidden PowerShell holds `SetThreadExecutionState`, and no power settings change. `npm run awake -- <command>` does the same for a build.
+
+### Phone tests on an emulator
+
+The matrix taps a real screen, so a run on Omer's phone keeps him off it. By default it now drives an emulator on the PC. It uses one that is already running, or starts the `quire` AVD without a window on port 5584, waits for the boot and stops it again at the end. Its quick-boot snapshot makes the next start fast, and `--keep-emulator` leaves it running. A missing Quire Dev is installed from `android/app/build`. `--phone` drives the phone on USB, which is kept for a short final pass.
+
+One-time setup with the SDK's command-line tools:
+
+- `sdkmanager "emulator" "system-images;android-36;google_apis;x86_64"`. This is Android 16, like the phone. The debug APK carries x86_64.
+- `emulator -accel-check` must report a working hypervisor (WHPX on Windows).
+- `avdmanager create avd -n quire -k "system-images;android-36;google_apis;x86_64"`. In the AVD's `config.ini`, set `hw.lcd.width`, `hw.lcd.height` and `hw.lcd.density` to the phone's `wm size` and `wm density`, `hw.ramSize=4096` and `disk.dataPartition.size=8G`.
+
 
 ## Everyday app and dev build
 

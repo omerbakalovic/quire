@@ -127,7 +127,8 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
 }
 
 const styles = StyleSheet.create({
-  wrap: { flex: 1, justifyContent: "center" },
+  // Wide enough to drag; in a crowded control row it wraps to its own line instead.
+  wrap: { flex: 1, minWidth: 120, justifyContent: "center" },
   hit: { height: 44, justifyContent: "center" },
   track: { height: 4, borderRadius: 2, backgroundColor: "#555", overflow: "hidden" },
   ticks: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },

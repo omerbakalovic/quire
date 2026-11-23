@@ -66,7 +66,12 @@ export function ControlBars(props: Props) {
   );
 }
 
-/** One row. A slider or the title takes the free space; without one, the controls spread out. */
+/**
+ * One row. A slider or the title takes the free space; without one, the
+ * controls spread out. A row with more than fits the width wraps onto a second
+ * line rather than pushing controls off the screen; the slider and the title
+ * keep a minimum width, so they move down a line instead of shrinking to nothing.
+ */
 function Row({ items, ...props }: Props & { items: readonly string[] }) {
   const grows = items.includes("slider") || items.includes("title");
   return <View style={[styles.row, !grows && styles.spread]}>{items.map((item) => <Control key={item} item={item} {...props} />)}</View>;
@@ -155,12 +160,12 @@ const styles = StyleSheet.create({
   bar: { position: "absolute", left: 0, right: 0, gap: 4 },
   top: { top: 0, paddingBottom: 10 },
   bottom: { bottom: 0, paddingTop: 4 },
-  row: { flexDirection: "row", alignItems: "center", gap: 6, minHeight: 44 },
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
   spread: { justifyContent: "space-between" },
   control: { minHeight: 44, justifyContent: "center" },
   label: { fontSize: 18, paddingVertical: 6 },
   icon: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
-  titleBox: { flex: 1, paddingHorizontal: 6 },
+  titleBox: { flex: 1, minWidth: 96, paddingHorizontal: 6 },
   title: { fontSize: 16, fontWeight: "600" },
   sub: { fontSize: 13 },
   percent: { fontSize: 14, minWidth: 44, textAlign: "center" },

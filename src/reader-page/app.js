@@ -315,17 +315,14 @@ export async function setLook(message) {
   if (!current || current.id !== message.id) return false;
   const { view } = current;
   if (view.isFixedLayout) return true;
-  const cfi = message.relayout ? (view.lastLocation?.cfi ?? null) : null;
+  const cfi = message.relayout ? anchorCfi(view) : null;
   applyLookTo(view, message.look);
   if (!cfi) return true;
   await nextFrame();
   await nextFrame();
-  try {
-    const resolved = view.resolveNavigation(cfi);
-    if (resolved) await view.renderer.goTo(resolved);
-  } catch (error) {
-    console.error("could not return to the location after a style change", error);
-  }
+  await returnTo(view, cfi, "style change");
+  // Stepping the size up and back keeps the original anchor, so the page does not drift.
+  await remember(view, cfi);
   return true;
 }
 

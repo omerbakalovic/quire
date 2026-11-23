@@ -44,14 +44,14 @@ test("scrub preview names the chapter under the thumb", () => {
 });
 
 test("ticks are top-level starts, sorted, unique, without 0", () => {
-  assert.deepEqual(chapterTicks(TOC), [0.1, 0.4, 0.7]);
-  assert.deepEqual(chapterTicks(TOC, 1), [0.1, 0.15, 0.4, 0.7]);
+  assert.deepEqual(chapterTicks(TOC, 3), [0.1, 0.4, 0.7], "enough top-level entries: top level only");
+  assert.deepEqual(chapterTicks(TOC), [0.1, 0.15, 0.4, 0.7], "too few: one level deeper");
   assert.deepEqual(chapterTicks([e("A", 0, 0.5), e("A again", 0, 0.5)]), [0.5]);
 });
 
 test("ticks are capped for huge TOCs", () => {
   const toc = Array.from({ length: 500 }, (_, i) => e(`C${i}`, 0, (i + 1) / 501));
-  const ticks = chapterTicks(toc, 0, 100);
+  const ticks = chapterTicks(toc, 8, 100);
   assert.equal(ticks.length, 100);
   assert.deepEqual([...ticks].sort((a, b) => a - b), ticks);
 });
@@ -82,4 +82,22 @@ test("the page's TOC is cleaned", () => {
     { label: "", href: null, depth: 0, section: null, fraction: null },
   ]);
   assert.deepEqual(parseNavEntries("nope"), []);
+});
+
+test("chapters under volumes get their own ticks (Frankenstein: letters, then three volumes)", () => {
+  const toc: NavEntry[] = [e("Letters", 0, 0.01)];
+  let at = 0.05;
+  for (const volume of ["I", "II", "III"]) {
+    toc.push(e(`Volume ${volume}`, 0, (at += 0.005)));
+    for (let c = 0; c < 8; c++) toc.push(e(`Chapter ${volume}.${c}`, 1, (at += 0.035)));
+  }
+  const ticks = chapterTicks(toc);
+  assert.equal(ticks.length, 28, "letters, three volume starts, and 24 chapters");
+});
+
+test("previous chapter from the first page of a chapter goes to the one before", () => {
+  // The relocate's startFraction at a chapter's first page equals the entry's own start.
+  assert.equal(adjacentChapter(TOC, 3, "prev", 0.4), 2);
+  // foliate's end-of-page fraction would read as inside; that is why the host passes startFraction.
+  assert.equal(adjacentChapter(TOC, 3, "prev", 0.4025), 3);
 });

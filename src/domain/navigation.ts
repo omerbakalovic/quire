@@ -47,27 +47,44 @@ export function chapterAt(toc: NavEntry[], fraction: number): string | null {
 }
 
 /**
- * Tick marks for the slider: where each chapter at or above `maxDepth` starts.
+ * Tick marks for the slider: where chapters start. Many books put chapters one
+ * level down, under parts or volumes, so the depth is the shallowest one that
+ * gives at least `want` ticks (or as many as the whole TOC has).
  * Sorted, without duplicates, without 0 (the slider's own start), and capped so
  * a book with hundreds of entries does not draw a solid bar.
  */
-export function chapterTicks(toc: NavEntry[], maxDepth = 0, limit = 120): number[] {
+export function chapterTicks(toc: NavEntry[], want = 8, limit = 120): number[] {
+  const maxDepth = toc.reduce((deepest, entry) => Math.max(deepest, entry.depth), 0);
+  const all = ticksTo(toc, maxDepth);
+  let sorted = all;
+  for (let depth = 0; depth < maxDepth; depth++) {
+    const ticks = ticksTo(toc, depth);
+    if (ticks.length >= Math.min(want, all.length)) {
+      sorted = ticks;
+      break;
+    }
+  }
+  if (sorted.length <= limit) return sorted;
+  const step = sorted.length / limit;
+  return Array.from({ length: limit }, (_, i) => sorted[Math.floor(i * step)]);
+}
+
+function ticksTo(toc: NavEntry[], maxDepth: number): number[] {
   const out = new Set<number>();
   for (const entry of toc) {
     if (!known(entry) || entry.depth > maxDepth) continue;
     const at = Math.round(entry.fraction * 10000) / 10000;
     if (at > 0 && at < 1) out.add(at);
   }
-  const sorted = [...out].sort((a, b) => a - b);
-  if (sorted.length <= limit) return sorted;
-  const step = sorted.length / limit;
-  return Array.from({ length: limit }, (_, i) => sorted[Math.floor(i * step)]);
+  return [...out].sort((a, b) => a - b);
 }
 
 /**
  * Previous or next chapter from the current entry. "Next" is the first later
  * entry that starts after the current one. "Previous" is the start of the
  * current chapter when the reader is inside it, else the entry before.
+ * `fraction` must be where the visible page STARTS (the relocate's
+ * `startFraction`), or the first page of a chapter already counts as inside.
  */
 export function adjacentChapter(
   toc: NavEntry[],

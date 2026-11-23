@@ -1,4 +1,4 @@
-import { planRestore, sectionFractionOf } from "../domain/position.ts";
+import { bookFractionOf, planRestore, sectionFractionOf } from "../domain/position.ts";
 import { BackStack } from "./back-stack.js";
 
 /**
@@ -93,15 +93,41 @@ export function navEntries(view) {
   return out;
 }
 
-/** The position parts of a relocate: book fraction, section, and the offset inside it. */
+/**
+ * Where the visible page starts inside its section, from the paginator itself.
+ * foliate's relocate `fraction` is the END of the visible page (it adds the
+ * page's own size), so at a chapter start it already reads one page in.
+ * Null for the fixed-layout renderer, which has no pages to count.
+ */
+export function sectionStartOf(renderer) {
+  if (!renderer) return null;
+  try {
+    if (renderer.scrolled) {
+      const size = renderer.viewSize;
+      return size > 0 ? Math.min(1, Math.max(0, renderer.start / size)) : null;
+    }
+    const { page, pages } = renderer;
+    if (typeof page !== "number" || typeof pages !== "number" || pages <= 2) return null;
+    return pages - 2 <= 1 ? 0 : Math.min(1, Math.max(0, (page - 1) / (pages - 2)));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The position parts of a relocate: foliate's book fraction (end of the page,
+ * shown as the percentage), the section, the offset where the page starts
+ * inside it, and the book fraction of that start (used for chapter logic).
+ */
 export function positionOf(view, detail) {
   const fraction = typeof detail.fraction === "number" ? detail.fraction : null;
   const sectionIndex = typeof detail.section?.current === "number" ? detail.section.current : null;
-  return {
-    fraction,
-    sectionIndex,
-    sectionFraction: sectionFractionOf(fraction, sectionIndex, sectionFractions(view)),
-  };
+  const fractions = sectionFractions(view);
+  const start = sectionStartOf(view.renderer);
+  const sectionFraction = start ?? sectionFractionOf(fraction, sectionIndex, fractions);
+  const startFraction =
+    sectionIndex !== null && sectionFraction !== null ? bookFractionOf(sectionIndex, sectionFraction, fractions) : fraction;
+  return { fraction, sectionIndex, sectionFraction, startFraction };
 }
 
 /**

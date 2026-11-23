@@ -10,6 +10,7 @@ type Props = {
   toc: NavEntry[];
   /** Called once, when the thumb is let go. The page then jumps and pushes the back stack. */
   onCommit: (fraction: number) => void;
+  onScrub?: (active: boolean) => void;
 };
 
 const STEP = 0.01;
@@ -19,7 +20,7 @@ const STEP = 0.01;
  * chapter and percentage while scrubbing. No dependency; a PanResponder over
  * a measured track.
  */
-export function ProgressSlider({ fraction, toc, onCommit }: Props) {
+export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
   const strings = t().book;
   const [width, setWidth] = useState(0);
   const [drag, setDrag] = useState<number | null>(null);
@@ -28,6 +29,8 @@ export function ProgressSlider({ fraction, toc, onCommit }: Props) {
   const trackRef = useRef<ComponentRef<typeof View>>(null);
   const commitRef = useRef(onCommit);
   commitRef.current = onCommit;
+  const scrubRef = useRef(onScrub);
+  scrubRef.current = onScrub;
 
   const at = (pageX: number) => {
     const { width: w, pageX: left } = geometry.current;
@@ -41,6 +44,7 @@ export function ProgressSlider({ fraction, toc, onCommit }: Props) {
         onMoveShouldSetPanResponder: () => true,
         onPanResponderTerminationRequest: () => false,
         onPanResponderGrant: (event) => {
+          scrubRef.current?.(true);
           const pageX = event.nativeEvent.pageX;
           trackRef.current?.measure((_x, _y, w, _h, left) => {
             geometry.current = { width: w, pageX: left };
@@ -52,9 +56,13 @@ export function ProgressSlider({ fraction, toc, onCommit }: Props) {
         onPanResponderRelease: (event) => {
           const value = at(event.nativeEvent.pageX);
           setDrag(null);
+          scrubRef.current?.(false);
           commitRef.current(value);
         },
-        onPanResponderTerminate: () => setDrag(null),
+        onPanResponderTerminate: () => {
+          setDrag(null);
+          scrubRef.current?.(false);
+        },
       }),
     [],
   );

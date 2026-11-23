@@ -17,10 +17,12 @@ type Props = {
   onContents: () => void;
   onChapter: (dir: "prev" | "next") => void;
   onSeek: (fraction: number) => void;
+  /** True while the slider is dragged, so the Back pill can step out of the preview's way. */
+  onScrub: (active: boolean) => void;
 };
 
 /** Reader controls: chapter buttons around the progress slider, then contents and the flow switch. */
-export function BottomBar({ bottomInset, fraction, toc, flow, fixedLayout, onFlow, onContents, onChapter, onSeek }: Props) {
+export function BottomBar({ bottomInset, fraction, toc, flow, fixedLayout, onFlow, onContents, onChapter, onSeek, onScrub }: Props) {
   const strings = t().book;
   const percent = fraction === null ? null : Math.round(fraction * 100);
   return (
@@ -29,7 +31,7 @@ export function BottomBar({ bottomInset, fraction, toc, flow, fixedLayout, onFlo
         <Pressable onPress={() => onChapter("prev")} accessibilityRole="button" accessibilityLabel={strings.prevChapter} style={styles.icon}>
           <Text style={styles.button}>«</Text>
         </Pressable>
-        <ProgressSlider fraction={fraction} toc={toc} onCommit={onSeek} />
+        <ProgressSlider fraction={fraction} toc={toc} onCommit={onSeek} onScrub={onScrub} />
         <Pressable onPress={() => onChapter("next")} accessibilityRole="button" accessibilityLabel={strings.nextChapter} style={styles.icon}>
           <Text style={styles.button}>»</Text>
         </Pressable>

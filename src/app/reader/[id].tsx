@@ -49,6 +49,9 @@ export default function BookScreen() {
   const [flow, setFlowState] = useState<Flow>(() => getLibrary().flow);
   const [chapter, setChapter] = useState<string | null>(null);
   const [fraction, setFraction] = useState<number | null>(book?.fraction ?? null);
+  // Where the visible page starts; `fraction` is where it ends. Chapter logic needs the start.
+  const [startFraction, setStartFraction] = useState<number | null>(null);
+  const [scrubbing, setScrubbing] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [toc, setToc] = useState<NavEntry[]>([]);
   const [tocHref, setTocHref] = useState<string | null>(null);
@@ -205,6 +208,7 @@ export default function BookScreen() {
         latest.current = report;
         canGoBack.current = message.canGoBack;
         setFraction(message.fraction);
+        setStartFraction(message.startFraction);
         setChapter(message.tocLabel);
         setTocHref(message.tocHref);
         pending.current = report;
@@ -300,7 +304,8 @@ export default function BookScreen() {
     post({ type: "flow", id, flow: next });
   }
 
-  const current = currentEntry(toc, tocHref, fraction);
+  const at = startFraction ?? fraction;
+  const current = currentEntry(toc, tocHref, at);
 
   function showToc(open: boolean) {
     tocOpenRef.current = open;
@@ -314,7 +319,7 @@ export default function BookScreen() {
   }
 
   function stepChapter(dir: "prev" | "next") {
-    const index = adjacentChapter(toc, current, dir, fraction);
+    const index = adjacentChapter(toc, current, dir, at);
     const href = index >= 0 ? toc[index].href : null;
     if (href) jumpTo({ href });
   }
@@ -429,10 +434,11 @@ export default function BookScreen() {
             onContents={() => showToc(true)}
             onChapter={stepChapter}
             onSeek={(value) => jumpTo({ fraction: value })}
+            onScrub={setScrubbing}
           />
         </>
       ) : null}
-      {phase === "reading" && !tocOpen ? (
+      {phase === "reading" && !tocOpen && !scrubbing ? (
         <BackPill
           depth={backStack.depth}
           label={backStack.label}

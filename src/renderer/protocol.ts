@@ -28,6 +28,8 @@ export type ReaderToHost =
       tocHref: string | null;
       sectionIndex: number | null;
       sectionFraction: number | null;
+      /** Book fraction where the visible page starts; `fraction` is where it ends. */
+      startFraction: number | null;
       sectionCount: number | null;
       sinceTapMs: number | null;
       canGoBack: boolean;
@@ -105,6 +107,7 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
       tocHref: optString(message.tocHref),
       sectionIndex: optNumber(message.sectionIndex),
       sectionFraction: optNumber(message.sectionFraction),
+      startFraction: optNumber(message.startFraction),
       sectionCount: optNumber(message.sectionCount),
       sinceTapMs: optNumber(message.sinceTapMs),
       canGoBack: message.canGoBack === true,

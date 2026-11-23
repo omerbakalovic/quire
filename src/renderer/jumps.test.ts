@@ -109,3 +109,23 @@ test("restore uses the CFI when it resolves, else the saved section", () => {
   assert.ok(Math.abs(target.fraction - 0.625) < 1e-9);
   assert.equal(restoreTarget(fakeView(), null).target, null);
 });
+
+test("the page start comes from the paginator, not foliate's end-of-page fraction", () => {
+  const view = fakeView() as ReturnType<typeof fakeView> & { renderer: Record<string, unknown> };
+  // Section 2 spans 0.5 to 0.75. First of 10 text pages: foliate reports the page's END.
+  Object.assign(view.renderer, { scrolled: false, page: 1, pages: 12 });
+  const first = positionOf(view, { fraction: 0.525, section: { current: 2 } });
+  assert.equal(first.sectionFraction, 0);
+  assert.equal(first.startFraction, 0.5);
+  Object.assign(view.renderer, { page: 6 });
+  const mid = positionOf(view, { fraction: 0.65, section: { current: 2 } });
+  assert.equal(mid.sectionFraction, 0.5, "foliate counts (page - 1) / (pages - 2)");
+  assert.equal(mid.startFraction, 0.625);
+  Object.assign(view.renderer, { scrolled: true, start: 300, viewSize: 1200 });
+  assert.equal(positionOf(view, { fraction: 0.6, section: { current: 2 } }).sectionFraction, 0.25);
+});
+
+test("without paginator pages (fixed layout) the offset falls back to foliate's fraction", () => {
+  const position = positionOf(fakeView(), { fraction: 0.625, section: { current: 2 } });
+  assert.ok(Math.abs((position.sectionFraction ?? -1) - 0.5) < 1e-9);
+});

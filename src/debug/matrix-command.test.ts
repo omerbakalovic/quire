@@ -27,6 +27,19 @@ test("matrix commands parse only known shapes", () => {
   });
 });
 
+test("add-font takes only a file in the app's own command font folder", () => {
+  const path = "/data/user/0/app.quire.reader.dev/files/quire-cmd-fonts/Bookerly-Regular.ttf";
+  assert.deepEqual(parseMatrixCommand(JSON.stringify({ seq: 7, cmd: "add-font", path })), { seq: 7, cmd: "add-font", path });
+  for (const bad of [
+    "/sdcard/Download/x.ttf",
+    "/data/user/0/app.quire.reader.dev/files/quire-cmd-fonts/../library.json",
+    "/data/user/0/app.quire.reader.dev/files/quire-cmd-fonts/x.exe",
+    "file:///data/user/0/app.quire.reader.dev/files/quire-cmd-fonts/x.ttf",
+  ]) {
+    assert.equal(parseMatrixCommand(JSON.stringify({ seq: 8, cmd: "add-font", path: bad })), null, bad);
+  }
+});
+
 test("only the latest reader screen receives reader commands", async () => {
   const offA = setReaderDebug("a", async () => "a");
   const offB = setReaderDebug("b", async () => "b");

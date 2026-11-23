@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { Dimensions, PixelRatio } from "react-native";
 
 import { sortedBooks } from "@/domain/library";
-import { getLibrary, importFiles, loadLibrary, saveSettings } from "@/library/store";
+import { addFont, getLibrary, importFiles, loadLibrary, saveSettings } from "@/library/store";
 import { appendNote, takeCommands, takePendingImports } from "@/renderer/book-url";
 
 import { parseMatrixCommand, readerDebug, type MatrixCommand } from "./matrix-command";
@@ -106,6 +106,12 @@ export function MatrixChannel() {
               id: "facts" in result.outcome ? result.outcome.facts.id : "id" in result.outcome ? result.outcome.id : null,
             })),
           };
+        }
+        case "add-font": {
+          // The same import "+ Add font" runs after the picker; the native side checks the file.
+          const name = command.path.split("/").pop() ?? null;
+          const added = await addFont(`file://${command.path}`, name);
+          return added.ok ? { added: added.font, fonts: getLibrary().custom.fonts.length } : { refused: added.reason };
         }
         case "reader": {
           const reader = readerDebug();

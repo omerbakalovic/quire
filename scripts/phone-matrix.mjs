@@ -9,9 +9,16 @@
  *   npm run phone-matrix -- [--quick] [--fresh] [--only frank,arabic]
  *     [--skip-books] [--skip-notes] [--skip-taps] [--skip-lifecycle]
  *     [--background-s 90] [--apk-reader] [--serial SERIAL] [--adb PATH] [--out DIR]
+ *     [--package ID] [--stall-s 90] [--wait-you-s 300]
+ *     [--phone] [--avd quire] [--keep-emulator] [--install]
  *
- * Before it: the debug APK is installed, Metro runs (`npx expo start`), and the
+ * Before it: the debug APK is built, Metro runs (`npx expo start`), and the
  * books are downloaded (`npm run books`).
+ *
+ * It drives an emulator by default, so the person's phone stays free: a running
+ * one, or the "quire" AVD started without a window and stopped at the end. On
+ * an emulator a missing Quire Dev is installed from android/app/build (--install
+ * reinstalls it anywhere). --phone drives the phone on USB, for a short final pass.
  *
  * --quick checks a fix in a few minutes: five books that cover the usual
  * breakage, notes in two of them, the tap setting, no lifecycle. Run the full
@@ -25,20 +32,61 @@
  * Output goes to ../quire-matrix/run-<time>/ unless --out says otherwise:
  * screenshots per book, summary.md, index.html, results.json and the app's
  * report.jsonl. The exit code is 1 when a check fails.
+ *
+ * Stalls: a watchdog says what is wrong instead of waiting silently. After 30 s
+ * with no output it prints a heartbeat; status.json in the output folder always
+ * says which step it is on. Before each tap or swipe it checks the window in
+ * front and pauses ("PAUSED") while the notification shade, a prompt or another
+ * app is over Quire. After --stall-s of no progress it diagnoses adb, the phone,
+ * Metro and the app (scripts/phone-health.mjs, also `npm run phone-doctor`),
+ * fixes what a script can, gives up that step and goes on ("RETRY"). A second
+ * stall, or something only a person can fix that stays for --wait-you-s, ends
+ * the run with "STALLED" and "NEEDS YOU" / "NEEDS PC" lines and exit code 3.
+ * Report those lines to the person at once.
+ * While it runs the PC is kept awake (no power settings change).
  */
+import { AsyncLocalStorage } from "node:async_hooks";
 import { execFile, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { closeSync, existsSync, openSync, readdirSync, readFileSync, statSync } from "node:fs";
 import * as zlib from "node:zlib";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, promisify } from "node:util";
+import { autoFix, classifyFocus, describe, diagnose, adbRunner, findAdb as sdkAdb, keepAwake, needs } from "./phone-health.mjs";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+const { values: opts } = parseArgs({
+  options: {
+    quick: { type: "boolean", default: false },
+    fresh: { type: "boolean", default: false },
+    "apk-reader": { type: "boolean", default: false },
+    only: { type: "string" },
+    "skip-books": { type: "boolean", default: false },
+    "skip-notes": { type: "boolean", default: false },
+    "skip-taps": { type: "boolean", default: false },
+    "skip-lifecycle": { type: "boolean", default: false },
+    "background-s": { type: "string", default: "90" },
+    "stall-s": { type: "string", default: "90" },
+    "wait-you-s": { type: "string", default: "300" },
+    package: { type: "string", default: "app.quire.reader.dev" },
+    phone: { type: "boolean", default: false },
+    avd: { type: "string", default: "quire" },
+    "keep-emulator": { type: "boolean", default: false },
+    install: { type: "boolean", default: false },
+    serial: { type: "string" },
+    adb: { type: "string" },
+    out: { type: "string" },
+    help: { type: "boolean", short: "h", default: false },
+  },
+});
+
 // Debug builds install as app.quire.reader.dev ("Quire Dev", plugins/withDevVariant.js),
 // beside the everyday release app, so a run never touches the reader's own library.
-const PKG = "app.quire.reader.dev";
+// --package app.quire.reader drives a debug build from before that split.
+const PKG = opts.package;
 const ACTIVITY = `${PKG}/app.quire.reader.MainActivity`;
 const REPORT = "files/quire-report.jsonl";
 const COMMANDS = "files/quire-cmd";
@@ -86,23 +134,6 @@ const CATALOG = [
   },
 ];
 
-const { values: opts } = parseArgs({
-  options: {
-    quick: { type: "boolean", default: false },
-    fresh: { type: "boolean", default: false },
-    "apk-reader": { type: "boolean", default: false },
-    only: { type: "string" },
-    "skip-books": { type: "boolean", default: false },
-    "skip-notes": { type: "boolean", default: false },
-    "skip-taps": { type: "boolean", default: false },
-    "skip-lifecycle": { type: "boolean", default: false },
-    "background-s": { type: "string", default: "90" },
-    serial: { type: "string" },
-    adb: { type: "string" },
-    out: { type: "string" },
-    help: { type: "boolean", short: "h", default: false },
-  },
-});
 
 if (opts.help) {
   console.log(readFileSync(fileURLToPath(import.meta.url), "utf8").split("*/")[0]);
@@ -112,29 +143,27 @@ if (opts.help) {
 const sleep = (ms) => new Promise((done) => setTimeout(done, ms));
 const stamp = () => new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
 const stem = (name) => name.replace(/\.epub$/i, "").replace(/[^A-Za-z0-9_-]+/g, "-").slice(0, 48);
-const say = (...parts) => console.log(new Date().toLocaleTimeString(), ...parts);
+let lastOutput = Date.now();
+const print = (...parts) => {
+  lastOutput = Date.now();
+  console.log(new Date().toLocaleTimeString(), ...parts);
+};
+// Code left running in a step the watchdog gave up on stays quiet.
+const say = (...parts) => {
+  if (abandoned()) return;
+  progress();
+  print(...parts);
+};
 
 function findAdb() {
-  if (opts.adb) return opts.adb;
-  if (process.env.ADB) return process.env.ADB;
-  // The SDK's adb, not a second copy: two adb servers cut each other's connection.
-  const exe = process.platform === "win32" ? "adb.exe" : "adb";
-  const sdks = [
-    process.env.ANDROID_HOME,
-    process.env.ANDROID_SDK_ROOT,
-    process.env.LOCALAPPDATA && join(process.env.LOCALAPPDATA, "Android", "Sdk"),
-    process.env.HOME && join(process.env.HOME, "Android", "Sdk"),
-  ];
-  for (const sdk of sdks) {
-    if (sdk && existsSync(join(sdk, "platform-tools", exe))) return join(sdk, "platform-tools", exe);
-  }
-  return "adb";
+  return sdkAdb(opts.adb);
 }
 
 const ADB = findAdb();
 let serial = opts.serial ?? process.env.ANDROID_SERIAL ?? null;
 
 function adb(args, { buffer = false, timeout = 60000 } = {}) {
+  alive();
   const full = serial ? ["-s", serial, ...args] : args;
   return new Promise((done, fail) => {
     execFile(
@@ -275,18 +304,39 @@ let reconnecting = null;
  */
 function deviceBack(reason) {
   reconnecting ??= (async () => {
-    const present = await adb(["get-state"], { timeout: 5000 })
+    let hung = false;
+    const present = await (healthAdb ?? adb)(["get-state"], { timeout: 8000 })
       .then((out) => out.trim() === "device")
-      .catch(() => false);
+      .catch((error) => {
+        hung = Boolean(error.timedOut);
+        return false;
+      });
     if (present) return false;
+    if (hung) {
+      // adb itself stopped answering, which is not the cable: restart its server.
+      print("adb stopped answering; restarting the adb server (a scrcpy mirror closes with it)");
+      plainShell?.close();
+      appShell?.close();
+      await autoFix([{ id: "adb-hung", who: "auto" }], { adb: healthAdb, pkg: PKG });
+      const back = await healthAdb(["get-state"], { timeout: 8000 }).catch(() => "");
+      if (back.trim() === "device") {
+        await adb(["reverse", "tcp:8081", "tcp:8081"]).catch(() => {});
+        print("adb answers again; continuing");
+        return true;
+      }
+    }
     usbDrops++;
-    say(`the phone dropped off USB (${reason.slice(0, 120)}); waiting up to 5 minutes for it`);
+    print(`the phone dropped off USB (${reason.slice(0, 120)}); waiting up to ${WAIT_YOU_MS / 1000} s for it`);
+    print("NEEDS YOU: Plug the phone back in (the cable or port is loose)");
     plainShell?.close();
     appShell?.close();
+    watch.waiting = "the phone is off USB";
     try {
-      await adb(["wait-for-device"], { timeout: 5 * 60000 });
+      await adb(["wait-for-device"], { timeout: WAIT_YOU_MS });
     } catch {
-      throw new Fatal("the phone dropped off USB and did not come back within 5 minutes");
+      throw new Fatal(`the phone dropped off USB and did not come back within ${WAIT_YOU_MS / 1000} s`);
+    } finally {
+      watch.waiting = null;
     }
     await adb(["reverse", "tcp:8081", "tcp:8081"]).catch(() => {});
     say("the phone is back; continuing");
@@ -299,6 +349,7 @@ function deviceBack(reason) {
 
 /** Run an adb step; if it failed because the phone dropped off USB, wait for it and fail only this step. */
 async function onDevice(step) {
+  alive();
   try {
     return await step();
   } catch (error) {
@@ -387,6 +438,7 @@ class Log {
     if (end < 0) return;
     const complete = chunk.subarray(0, end + 1);
     this.offset += complete.length;
+    progress();
     for (const line of complete.toString("utf8").split("\n")) {
       if (!line.trim()) continue;
       try {
@@ -426,6 +478,338 @@ class Fatal extends Error {}
 const passFatal = (error) => {
   if (error instanceof Fatal) throw error;
 };
+
+/*
+ * Stall watchdog. Every routine runs inside guard(). Every 5 s the watchdog
+ * looks at when anything last moved: a check, a console line, a line from the
+ * app. After --stall-s of nothing it looks at the phone, Metro and the app
+ * (phone-health.mjs), fixes what a script can (wake the screen, bring the app
+ * back, restart adb, restore adb reverse), abandons the stuck step and goes on.
+ * That is the one retry. A second stall before any check passes again, a
+ * problem only the PC can fix (Metro), or one only a person can fix that is
+ * still there after --wait-you-s ends the run with STALLED and NEEDS lines and
+ * exit code 3. After 30 s of silence it prints a heartbeat, and status.json in
+ * the output folder always says where the run is.
+ */
+const STALL_MS = Math.max(20, Number(opts["stall-s"]) || 90) * 1000;
+const WAIT_YOU_MS = Math.max(10, Number(opts["wait-you-s"]) || 300) * 1000;
+const frames = new AsyncLocalStorage();
+const watch = {
+  state: "running",
+  step: "starting",
+  stepSince: Date.now(),
+  last: Date.now(),
+  allow: 0,
+  allowWhy: "",
+  waiting: null,
+  frame: null,
+  stalls: 0,
+  passedSinceStall: true,
+  busy: false,
+  stalled: null,
+  timer: null,
+};
+let healthAdb = null;
+
+/** A step that stalled and was given up; the run goes on without it. */
+class StallError extends Error {
+  recovered = true;
+}
+
+/** Code that kept running inside an abandoned step. It stops at its next phone command. */
+class Abandoned extends Error {}
+
+function progress() {
+  watch.last = Date.now();
+}
+
+function abandoned() {
+  for (let frame = frames.getStore(); frame; frame = frame.parent) if (frame.dead) return frame;
+  return null;
+}
+
+function alive() {
+  const frame = abandoned();
+  if (frame) throw new Abandoned(`"${frame.label}" was abandoned after a stall`);
+}
+
+/** Runs one routine as a watched step, which the watchdog can abandon. */
+function guard(label, fn) {
+  const parent = frames.getStore() ?? null;
+  return new Promise((resolve, reject) => {
+    const frame = { label, parent, dead: false, reject };
+    watch.frame = frame;
+    watch.step = label;
+    watch.stepSince = Date.now();
+    progress();
+    frames.run(frame, () => Promise.resolve().then(fn)).then(
+      (value) => {
+        leave(frame);
+        resolve(value);
+      },
+      (error) => {
+        if (error instanceof Fatal) watch.fatalStep ??= label;
+        leave(frame);
+        reject(error);
+      },
+    );
+  });
+}
+
+function leave(frame) {
+  if (watch.frame !== frame) return;
+  watch.frame = frame.parent;
+  watch.step = frame.parent?.label ?? "finishing";
+}
+
+/** A wait that is expected to be long and silent: a first Metro bundle, a big import, the app sent to the background on purpose. */
+async function quietly(ms, why, fn) {
+  const before = [watch.allow, watch.allowWhy];
+  watch.allow = ms;
+  watch.allowWhy = why;
+  progress();
+  try {
+    return await fn();
+  } finally {
+    [watch.allow, watch.allowWhy] = before;
+    progress();
+  }
+}
+
+const secondsSince = (t) => Math.round((Date.now() - t) / 1000);
+
+async function writeStatus() {
+  if (!OUT) return;
+  const status = {
+    state: watch.state,
+    step: watch.step,
+    stepSeconds: secondsSince(watch.stepSince),
+    quietSeconds: secondsSince(watch.last),
+    waitingFor: watch.waiting,
+    checks: results.checks.length,
+    failed: results.checks.filter((c) => c.pass === false).length,
+    stalls: watch.stalls,
+    stalled: watch.stalled,
+    updated: new Date().toISOString(),
+  };
+  await writeFile(join(OUT, "status.json"), JSON.stringify(status, null, 2)).catch(() => {});
+}
+
+function startWatchdog() {
+  watch.timer = setInterval(() => void tick(), 5000);
+}
+
+function stopWatchdog(state) {
+  clearInterval(watch.timer);
+  watch.state = state;
+  return writeStatus();
+}
+
+async function tick() {
+  if (watch.busy || watch.state !== "running") return;
+  const quiet = Date.now() - watch.last;
+  if (Date.now() - lastOutput >= 30000) {
+    const what = watch.waiting ? `paused, ${watch.waiting}` : watch.allow ? watch.allowWhy : `on "${watch.step}"`;
+    print(`· still ${what}: ${secondsSince(watch.stepSince)} s in this step, ${Math.round(quiet / 1000)} s since anything moved`);
+  }
+  void writeStatus();
+  if (watch.waiting || quiet < Math.max(STALL_MS, watch.allow)) return;
+  watch.busy = true;
+  try {
+    await onStall(Math.round(quiet / 1000));
+  } catch (error) {
+    print(`the watchdog itself failed: ${error.message}`);
+  } finally {
+    watch.busy = false;
+    progress();
+  }
+}
+
+async function onStall(quietS) {
+  const frame = watch.frame;
+  const where = watch.step;
+  print(`STALL: nothing moved for ${quietS} s in "${where}". Looking at the phone, Metro and the app.`);
+  let found = await diagnose({ adb: healthAdb, pkg: PKG });
+  for (const line of describe(found.problems)) print(`  ${line}`);
+  const again = watch.stalls > 0 && !watch.passedSinceStall;
+  watch.stalls++;
+  watch.passedSinceStall = false;
+  results.stalls.push({ step: where, quietS, facts: found.facts, problems: found.problems.map((p) => `[${p.who}] ${p.what}`) });
+  if (again) return stop(where, "it stalled again before any check passed", found.problems);
+  if (found.problems.some((p) => p.who === "pc")) return stop(where, "the PC has to fix this", found.problems);
+  if (found.problems.some((p) => p.who === "you")) {
+    found = await waitForPerson(found.problems);
+    if (found.problems.some((p) => p.who !== "auto")) return stop(where, `nobody fixed it within ${WAIT_YOU_MS / 1000} s`, found.problems);
+  }
+  const fixes = await autoFix(found.problems, { adb: healthAdb, pkg: PKG, activity: ACTIVITY });
+  // A command stuck in an open shell holds up everything queued behind it; new shells start clean.
+  plainShell?.close();
+  appShell?.close();
+  print(`RETRY: ${fixes.length ? `${fixes.join(", ")}; ` : ""}giving up "${where}" and going on.`);
+  const why = found.problems.length ? found.problems.map((p) => p.what).join("; ") : "the phone, Metro and the app looked fine";
+  abandon(frame, new StallError(`stalled for ${quietS} s (${why}); the step was given up and the run went on`));
+}
+
+/**
+ * Something only a person can fix is on the phone (a prompt, the shade, a
+ * locked screen, a loose cable). Say so at once, then look again every 5 s.
+ * A problem with lateFix (the shade) is fixed by the script after that long.
+ */
+async function waitForPerson(problems) {
+  const start = Date.now();
+  let found = { problems };
+  let said = 0;
+  watch.waiting = problems.filter((p) => p.who === "you").map((p) => p.what).join("; ");
+  try {
+    while (Date.now() - start < WAIT_YOU_MS) {
+      if (Date.now() - said >= 60000) {
+        for (const line of needs(found.problems)) print(line);
+        said = Date.now();
+      }
+      const late = found.problems.filter((p) => p.lateFix && Date.now() - start >= p.lateFix);
+      if (late.length) {
+        const fixes = await autoFix(late.map((p) => ({ ...p, forceFix: true })), { adb: healthAdb, pkg: PKG, activity: ACTIVITY });
+        print(`nobody closed it, so the script did: ${fixes.join(", ")}`);
+      }
+      await sleep(5000);
+      found = await diagnose({ adb: healthAdb, pkg: PKG });
+      if (!found.problems.some((p) => p.who !== "auto")) {
+        print("the phone is clear again; going on");
+        return found;
+      }
+      watch.waiting = found.problems.filter((p) => p.who !== "auto").map((p) => p.what).join("; ");
+    }
+    return found;
+  } finally {
+    watch.waiting = null;
+  }
+}
+
+function abandon(frame, error) {
+  if (!frame) return;
+  frame.dead = true;
+  leave(frame);
+  frame.reject(error);
+}
+
+/** Ends the run: the stuck step and everything around it are abandoned and the results so far are written. */
+function stop(where, why, problems) {
+  const lines = needs(problems);
+  watch.stalled = {
+    step: where,
+    why,
+    problems: problems.map((p) => `[${p.who}] ${p.what}`),
+    needs: lines.length ? lines : ["NEEDS PC: nothing wrong was found on the phone; look at the console and the last screenshots"],
+  };
+  print(`STALLED: "${where}": ${why}.`);
+  for (const line of watch.stalled.needs) print(line);
+  let root = watch.frame;
+  while (root?.parent) root = root.parent;
+  if (!root) return;
+  root.dead = true;
+  watch.frame = null;
+  root.reject(new Fatal(`stalled in "${where}": ${why}`));
+}
+
+/*
+ * The window in front, watched all the time through its own adb shell, so a
+ * tap or swipe never lands on the notification shade, a prompt or another
+ * app. Before each input the script looks at the latest answer (at most about
+ * a second old); when something is in the way it pauses until it is gone.
+ */
+const front = { shell: null, running: false, focus: "", at: 0 };
+
+async function startFrontWatch() {
+  front.shell = new OpenShell("focus", []);
+  front.running = true;
+  void (async () => {
+    while (front.running) {
+      try {
+        front.focus = (await front.shell.run("dumpsys window | grep -m1 'mCurrentFocus='; true", { timeout: 5000 })).trim();
+        front.at = Date.now();
+      } catch {
+        front.at = 0;
+        await sleep(1000);
+      }
+      await sleep(400);
+    }
+  })();
+}
+
+function stopFrontWatch() {
+  front.running = false;
+  front.shell?.close();
+}
+
+async function frontNow() {
+  if (Date.now() - front.at > 1500) {
+    front.focus = (await shell("dumpsys window | grep -m1 'mCurrentFocus='; true", { timeout: 8000 }).catch(() => "")).trim();
+    front.at = Date.now();
+  }
+  return classifyFocus(front.focus, PKG);
+}
+
+/** Waits until the app is in front and nothing is over it. */
+async function clearFront() {
+  if (!front.running) return;
+  let found = await frontNow();
+  if (!found) return;
+  const start = Date.now();
+  let said = false;
+  let fixed = false;
+  try {
+    // On Android 12 and later the lock screen is the shade's window, so ask once what it really is.
+    const looked = await diagnose({ adb: healthAdb, pkg: PKG, metro: false, needApp: false });
+    if (looked.problems.some((p) => p.id === "asleep" && p.who === "auto")) {
+      await autoFix(looked.problems.filter((p) => p.id === "asleep"), { adb: healthAdb, pkg: PKG });
+      await sleep(1000);
+      front.at = 0;
+      found = await frontNow();
+      if (!found) return;
+    }
+    found = looked.problems.find((p) => p.id === "locked" || (p.id === "asleep" && p.who === "you")) ?? found;
+    for (;;) {
+      if (found.id === "anr") {
+        await autoFix([found], { adb: healthAdb, pkg: PKG, activity: ACTIVITY });
+        const error = new Error(`${found.what}; restarted the app`);
+        error.recovered = true;
+        throw error;
+      }
+      const waited = Date.now() - start;
+      // Another app in front: give a person 15 s, then bring the app back. The shade: a minute, then close it.
+      const late = found.id === "other-app" ? 15000 : found.lateFix;
+      if (late && waited >= late && !fixed) {
+        const fixes = await autoFix([{ ...found, forceFix: true }], { adb: healthAdb, pkg: PKG, activity: ACTIVITY });
+        print(`${found.what} for ${secondsSince(start)} s; ${fixes.join(", ") || "nothing a script can do"}`);
+        fixed = true;
+        await sleep(1200);
+        front.at = 0;
+      } else if (waited >= WAIT_YOU_MS) {
+        throw new Fatal(`${found.what}, and it was still there after ${WAIT_YOU_MS / 1000} s`);
+      } else if (!said) {
+        print(`PAUSED: ${found.what}. The run waits and goes on by itself once it is gone.`);
+        if (found.who === "you") for (const line of needs([found])) print(line);
+        said = true;
+        watch.waiting = found.what;
+      }
+      await sleep(500);
+      const now = await frontNow();
+      if (!now && (found.id !== "locked" || !(await diagnose({ adb: healthAdb, pkg: PKG, metro: false, needApp: false })).problems.some((p) => p.id === "locked"))) {
+        if (said) print("the app is in front again; going on");
+        return;
+      }
+      if (now && now.id !== found.id && found.id !== "locked") found = now;
+    }
+  } finally {
+    if (said) watch.waiting = null;
+  }
+}
+
+/** Every tap, swipe and key the script sends goes through here. */
+async function input(args) {
+  await clearFront();
+  return shell(`${INPUT} ${args}`);
+}
 
 let recoveries = 0;
 
@@ -524,7 +908,11 @@ async function hello(timeout = 40000) {
 }
 
 /** Start the app and wait for the command channel. A first launch can hang on the splash, so try twice. */
-async function launch() {
+function launch() {
+  return quietly(180000, "waiting for the app to start (Metro may be bundling)", launchOnce);
+}
+
+async function launchOnce() {
   for (let attempt = 1; attempt <= 2; attempt++) {
     await shell(`am start -n ${ACTIVITY}`);
     try {
@@ -554,7 +942,7 @@ function zonePoint(st, zone) {
   return toPx(st, st.viewport.width * fraction, st.viewport.height * 0.5);
 }
 
-const tap = ([x, y]) => shell(`${INPUT} tap ${x} ${y}`);
+const tap = ([x, y]) => input(`tap ${x} ${y}`);
 
 let OUT = "";
 
@@ -630,12 +1018,14 @@ async function shot(dir, name) {
   }
 }
 
-const results = { checks: [], books: [], notes: [], taps: [], lifecycle: [], imports: [], notCovered: [] };
+const results = { checks: [], books: [], notes: [], taps: [], lifecycle: [], imports: [], notCovered: [], stalls: [] };
 
 /** pass: true, false, or null for "does not apply". */
 function check(scope, name, pass, detail = "") {
+  if (abandoned()) return null;
   const value = pass === null || pass === undefined ? null : Boolean(pass);
   results.checks.push({ scope, name, pass: value, detail: String(detail ?? "") });
+  if (value) watch.passedSinceStall = true;
   const mark = value === null ? "–" : value ? "✓" : "✗";
   say(`${mark} ${scope}: ${name}${detail ? ` (${detail})` : ""}`);
   return value;
@@ -799,7 +1189,7 @@ async function freshImport(entries, frankenstein) {
   const names = [];
   for (const entry of entries) {
     say(`pushing ${entry.name}`);
-    await adb(["push", entry.path, `${EXTERNAL}/${entry.name}`], { timeout: 15 * 60000 });
+    await quietly(15 * 60000, `pushing ${entry.name}`, () => adb(["push", entry.path, `${EXTERNAL}/${entry.name}`], { timeout: 15 * 60000 }));
     names.push(entry.name);
   }
   if (frankenstein) {
@@ -807,7 +1197,8 @@ async function freshImport(entries, frankenstein) {
     names.push("duplicate-frankenstein.epub");
   }
   await runAs(`echo ${b64(names.join("\n"))} | base64 -d > files/quire-import`);
-  const answer = await send("drain-imports", {}, { timeout: 30 * 60000 });
+  // Each imported book writes a line, which counts as progress; one book may take a few minutes.
+  const answer = await quietly(5 * 60000, "importing books", () => send("drain-imports", {}, { timeout: 30 * 60000 }));
   results.imports = answer.imported;
   for (const entry of entries) {
     const row = answer.imported.find((item) => item.name === entry.name);
@@ -843,7 +1234,7 @@ async function pushReader() {
     say("reader page: the one built into the APK");
     return;
   }
-  await run(process.execPath, [join(ROOT, "scripts", "bundle-reader.mjs")]);
+  await quietly(120000, "building the reader page", () => run(process.execPath, [join(ROOT, "scripts", "bundle-reader.mjs")]));
   await runAs(`mkdir -p ${DEV_READER}`);
   for (const [from, to] of [["index.html", "reader.html"], ["reader.js", "reader.js"]]) {
     const tmp = `/data/local/tmp/quire-${to}`;
@@ -911,13 +1302,13 @@ async function swipeForward(st) {
   if (st.vertical) {
     const [left, y] = toPx(st, st.viewport.width * 0.2, st.viewport.height * 0.5);
     const [right] = toPx(st, st.viewport.width * 0.8, st.viewport.height * 0.5);
-    await shell(`${INPUT} swipe ${left} ${y} ${right} ${y} 350`);
+    await input(`swipe ${left} ${y} ${right} ${y} 350`);
   } else {
     // Start above the bottom quarter, where the reader's own controls (the slider, the
     // Back pill) sit and would take the touch, and end below the top fifth (banners).
     const [x, top] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.25);
     const [, bottom] = toPx(st, st.viewport.width * 0.5, st.viewport.height * 0.6);
-    await shell(`${INPUT} swipe ${x} ${bottom} ${x} ${top} 350`);
+    await input(`swipe ${x} ${bottom} ${x} ${top} 350`);
   }
   // A fling keeps scrolling after the finger lifts, and foliate reports the place
   // 250 ms after scrolling stops.
@@ -1035,7 +1426,7 @@ async function runBook(entry, index) {
 async function closeNote(how, st) {
   const from = log.mark();
   if (how === "button") await reader("popup-click", { name: "close" });
-  else if (how === "back key") await shell(`${INPUT} keyevent 4`);
+  else if (how === "back key") await input("keyevent 4");
   // The shade above the sheet (the sheet is at most 62% of the height). Never the top
   // of the screen: a notification banner can drop in there and take the tap.
   else await tap(toPx(st, st.viewport.width / 2, st.viewport.height * 0.25));
@@ -1287,7 +1678,7 @@ async function runLifecycle(entry) {
   say(`home, then ${seconds} s in the background`);
   let from = log.mark();
   await shell(`${INPUT} keyevent 3`);
-  await sleep(seconds * 1000);
+  await quietly(seconds * 1000 + 60000, "the app is in the background on purpose", () => sleep(seconds * 1000));
   await shell(`am start -n ${ACTIVITY}`);
   const foreground = await log.waitFor((line) => line.source === "reader" && line.phase === "foreground", { from, timeout: 20000 });
   check(scope, `after ${seconds} s in the background the reader server is alive`, foreground?.serving === true, foreground ? `serving ${foreground.serving}` : "no foreground line");
@@ -1357,6 +1748,12 @@ function summary(meta) {
     `Device: ${meta.device}. Build: ${meta.commit}. Mode: ${meta.mode}, ${meta.seconds} s. ${results.checks.length} checks: ${passed.length} passed, ${failed.length} failed, ${na.length} did not apply.`,
     "",
   ];
+  if (meta.stalled) {
+    parts.push("## Stalled", "", `The run stopped in "${meta.stalled.step}": ${meta.stalled.why}.`, "", ...meta.stalled.needs.map((line) => `- ${line}`), "");
+  }
+  if (results.stalls.length) {
+    parts.push("## Stalls", "", ...results.stalls.map((st) => `- "${st.step}", nothing moved for ${st.quietS} s: ${st.problems.length ? st.problems.join("; ") : "nothing wrong found"}`), "");
+  }
   if (failed.length) {
     parts.push("## Failed", "", ...failed.map((c) => `- **${c.scope}**: ${c.name}${c.detail ? ` (${c.detail})` : ""}`), "");
   }
@@ -1446,22 +1843,20 @@ async function main() {
   say(`adb: ${ADB}`);
   say(`output: ${OUT}`);
 
-  if (!serial) {
-    const devices = (await adb(["devices"]))
-      .split("\n")
-      .slice(1)
-      .map((line) => line.trim().split(/\s+/))
-      .filter((parts) => parts[1] === "device");
-    if (devices.length !== 1) throw new Error(`found ${devices.length} devices; pass --serial`);
-    serial = devices[0][0];
-  }
+  if (!serial) await pickDevice();
+  healthAdb = adbRunner(ADB, serial);
+  if (!(await preflight())) return;
   await openShells();
   const device = `${(await shell("getprop ro.product.model")).trim()}, Android ${(await shell("getprop ro.build.version.release")).trim()} (${serial})`;
   const meta = { started, device, commit: await gitCommit(), mode: opts.quick ? "quick" : opts.only ? `only ${opts.only}` : "full" };
   say(device);
-  if (!(await shell(`pm path ${PKG}`)).includes("package:")) throw new Error(`${PKG} (Quire Dev) is not installed. Debug builds install under that id now; run \`npm run android\` once.`);
+  const installed = (await shell(`pm path ${PKG}`)).includes("package:");
+  if (opts.install || (!installed && serial.startsWith("emulator-"))) await installDebug();
+  else if (!installed) throw new Error(`${PKG} (Quire Dev) is not installed. Debug builds install under that id now; run \`npm run android\` once, or pass --install.`);
   await adb(["reverse", "tcp:8081", "tcp:8081"]);
   await pickInput();
+  startWatchdog();
+  await startFrontWatch();
 
   const entries = catalog();
   const frankenstein = entries.find((entry) => entry.key === "frankenstein") ?? null;
@@ -1469,79 +1864,92 @@ async function main() {
   const lap = (name, since) => say(`${name}: ${Math.round((Date.now() - since) / 1000)} s`);
 
   try {
-    if (opts.fresh) {
-      say("clearing the app's data");
-      await shell(`pm clear ${PKG}`);
-    }
-    // A cold start, so the app runs Metro's current code and the reader page pushed below.
-    await shell(`am force-stop ${PKG}`);
-    await runAs(`rm -rf ${COMMANDS}`).catch(() => {});
-    await pushReader();
-    log.reset();
-    await launch();
-    await log.clear();
-    if (opts.fresh) await freshImport(entries, frankenstein);
+    await guard("run", async () => {
+      await guard("starting the app", async () => {
+        if (opts.fresh) {
+          say("clearing the app's data");
+          await shell(`pm clear ${PKG}`);
+        }
+        // A cold start, so the app runs Metro's current code and the reader page pushed below.
+        await shell(`am force-stop ${PKG}`);
+        await runAs(`rm -rf ${COMMANDS}`).catch(() => {});
+        await pushReader();
+        log.reset();
+        await launch();
+        await log.clear();
+        if (opts.fresh) await freshImport(entries, frankenstein);
+      });
 
-    if (!opts["skip-books"]) {
-      const since = Date.now();
-      for (const [index, entry] of entries.entries()) {
-        say(`— ${entry.name}: ${entry.why}`);
-        try {
-          await runBook(entry, index);
-        } catch (error) {
-          passFatal(error);
-          check(entry.name, "book routine finished", false, error.message);
-          await send("library").catch(passFatal);
+      if (!opts["skip-books"]) {
+        const since = Date.now();
+        for (const [index, entry] of entries.entries()) {
+          say(`— ${entry.name}: ${entry.why}`);
+          try {
+            await guard(entry.name, () => runBook(entry, index));
+          } catch (error) {
+            passFatal(error);
+            check(entry.name, "book routine finished", false, error.message);
+            await send("library").catch(passFatal);
+          }
+        }
+        lap("books", since);
+      }
+      if (!opts["skip-notes"]) {
+        const since = Date.now();
+        for (const [index, entry] of entries.filter((e) => e.notes).entries()) {
+          say(`— notes in ${entry.name}`);
+          try {
+            await guard(`notes in ${entry.name}`, () => runNotes(entry, index));
+          } catch (error) {
+            passFatal(error);
+            check(`${entry.name} notes`, "note routine finished", false, error.message);
+            await send("library").catch(passFatal);
+          }
+        }
+        lap("notes", since);
+      }
+      if (!opts["skip-taps"]) {
+        const arabic = entries.find((entry) => entry.key === "arabic");
+        if (arabic || frankenstein) {
+          say("— tap direction setting");
+          try {
+            await guard("tap direction", () => runTapSetting(arabic, frankenstein));
+          } catch (error) {
+            passFatal(error);
+            check("tap direction", "tap routine finished", false, error.message);
+          }
         }
       }
-      lap("books", since);
-    }
-    if (!opts["skip-notes"]) {
-      const since = Date.now();
-      for (const [index, entry] of entries.filter((e) => e.notes).entries()) {
-        say(`— notes in ${entry.name}`);
+      if (!opts["skip-lifecycle"] && !opts.quick && frankenstein) {
+        say("— restore and lifecycle, hands off the phone");
+        const since = Date.now();
         try {
-          await runNotes(entry, index);
+          await guard("restore and lifecycle", () => runLifecycle(frankenstein));
         } catch (error) {
           passFatal(error);
-          check(`${entry.name} notes`, "note routine finished", false, error.message);
-          await send("library").catch(passFatal);
+          check("restore and lifecycle", "lifecycle routine finished", false, error.message);
+        } finally {
+          await restoreRotation();
         }
+        lap("lifecycle", since);
       }
-      lap("notes", since);
-    }
-    if (!opts["skip-taps"]) {
-      const arabic = entries.find((entry) => entry.key === "arabic");
-      if (arabic || frankenstein) {
-        say("— tap direction setting");
-        try {
-          await runTapSetting(arabic, frankenstein);
-        } catch (error) {
-          passFatal(error);
-          check("tap direction", "tap routine finished", false, error.message);
-        }
-      }
-    }
-    if (!opts["skip-lifecycle"] && !opts.quick && frankenstein) {
-      say("— restore and lifecycle, hands off the phone");
-      const since = Date.now();
-      try {
-        await runLifecycle(frankenstein);
-      } catch (error) {
-        passFatal(error);
-        check("restore and lifecycle", "lifecycle routine finished", false, error.message);
-      } finally {
-        await restoreRotation();
-      }
-      lap("lifecycle", since);
-    }
+    });
   } catch (error) {
-    if (!(error instanceof Fatal)) throw error;
-    check("run", "the app kept answering", false, `${error.message}. The run ended early; the checks above are all it got to.`);
+    if (!(error instanceof Fatal || error instanceof StallError)) throw error;
+    check("run", "the run went to the end", false, `${error.message}. The run ended early; the checks above are all it got to.`);
+    if (!watch.stalled) {
+      // The app or the phone gave out without a stall first: say what is in the way, as a stall does.
+      const found = await diagnose({ adb: healthAdb, pkg: PKG }).catch(() => ({ problems: [] }));
+      for (const line of describe(found.problems)) print(`  ${line}`);
+      stop(watch.fatalStep ?? watch.step, error.message, found.problems);
+    }
   }
+  stopFrontWatch();
+  await stopWatchdog(watch.stalled ? "stalled" : "done");
 
   meta.seconds = Math.round((Date.now() - t0) / 1000);
   meta.usbDrops = usbDrops;
+  meta.stalled = watch.stalled;
   if (usbDrops) results.notCovered.push(`The phone dropped off USB ${usbDrops} time(s); the steps it interrupted failed and say so.`);
   await Promise.all(pendingShots);
   const report = await adb(["exec-out", `run-as ${PKG} cat ${REPORT}`], { buffer: true }).catch(() => Buffer.alloc(0));
@@ -1550,13 +1958,140 @@ async function main() {
   await writeFile(join(OUT, "summary.md"), summary(meta));
   await writeFile(join(OUT, "index.html"), html(meta));
   const failed = results.checks.filter((c) => c.pass === false).length;
-  say(`${results.checks.length} checks, ${failed} failed, in ${meta.seconds} s. ${join(OUT, "summary.md")}`);
-  process.exitCode = failed ? 1 : 0;
+  print(`${results.checks.length} checks, ${failed} failed, in ${meta.seconds} s. ${join(OUT, "summary.md")}`);
+  if (watch.stalled) {
+    print(`STALLED: "${watch.stalled.step}": ${watch.stalled.why}.`);
+    for (const line of watch.stalled.needs) print(line);
+  }
+  process.exitCode = watch.stalled ? 3 : failed ? 1 : 0;
+}
+
+const EMULATOR_PORT = 5584;
+let startedEmulator = null;
+
+function sdkRoot() {
+  if (/[\\/]platform-tools[\\/]adb(\.exe)?$/i.test(ADB)) return dirname(dirname(ADB));
+  return process.env.ANDROID_HOME ?? process.env.ANDROID_SDK_ROOT ?? (process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "Android", "Sdk") : join(process.env.HOME ?? "", "Android", "Sdk"));
+}
+
+/**
+ * Which device to drive. By default the emulator, so runs never need the
+ * person's phone: a running emulator if there is one, else the --avd (quire)
+ * started without a window. --phone drives the phone on USB instead; --serial
+ * names a device outright.
+ */
+async function pickDevice() {
+  const ready = (await adb(["devices"]))
+    .split("\n")
+    .slice(1)
+    .map((line) => line.trim().split(/\s+/))
+    .filter((parts) => parts[1] === "device")
+    .map((parts) => parts[0]);
+  if (opts.phone) {
+    const phones = ready.filter((id) => !id.startsWith("emulator-"));
+    if (phones.length !== 1) throw new Error(phones.length ? `found ${phones.length} phones; pass --serial` : "no phone on USB (plug it in, or leave out --phone to use the emulator)");
+    serial = phones[0];
+    say(`device: the phone on USB (${serial})`);
+    return;
+  }
+  const running = ready.find((id) => id.startsWith("emulator-"));
+  if (running) {
+    serial = running;
+    say(`device: the running emulator (${serial})`);
+    return;
+  }
+  serial = await startEmulator();
+}
+
+/** Starts the AVD without a window and waits for Android to finish booting. */
+async function startEmulator() {
+  const exe = join(sdkRoot(), "emulator", process.platform === "win32" ? "emulator.exe" : "emulator");
+  if (!existsSync(exe)) throw new Error(`no emulator at ${exe}. Install it once: sdkmanager "emulator" and a system image, then create the "${opts.avd}" AVD (DECISIONS.md, phone tests). Or pass --phone.`);
+  const target = `emulator-${EMULATOR_PORT}`;
+  const logFile = join(OUT, "emulator.log");
+  const fd = openSync(logFile, "a");
+  say(`starting the "${opts.avd}" emulator without a window (${target}); its log is ${logFile}`);
+  const child = spawn(exe, ["-avd", opts.avd, "-port", String(EMULATOR_PORT), "-no-window", "-no-audio", "-no-boot-anim"], {
+    detached: true,
+    stdio: ["ignore", fd, fd],
+    windowsHide: true,
+  });
+  closeSync(fd);
+  let exited = null;
+  child.on("exit", (code) => (exited = code));
+  child.on("error", (error) => (exited = error.message));
+  child.unref();
+  startedEmulator = target;
+  const at = adbRunner(ADB, target);
+  const start = Date.now();
+  let said = start;
+  while (Date.now() - start < 6 * 60000) {
+    const booted = (await at(["shell", "getprop sys.boot_completed"], { timeout: 5000 }).catch(() => "")).trim();
+    if (booted === "1") {
+      say(`the emulator booted in ${Math.round((Date.now() - start) / 1000)} s`);
+      // Taps and screenshots expect a screen that stays on.
+      await at(["shell", "svc power stayon true"], { timeout: 10000 }).catch(() => {});
+      await at(["shell", "input keyevent KEYCODE_WAKEUP"], { timeout: 10000 }).catch(() => {});
+      return target;
+    }
+    if (exited !== null) {
+      const tail = readFileSync(logFile, "utf8").split("\n").filter(Boolean).slice(-6).join(" | ");
+      throw new Error(`the emulator stopped while booting (exit ${exited}): ${tail.slice(0, 600)}`);
+    }
+    if (Date.now() - said >= 20000) {
+      say(`waiting for the emulator to boot (${Math.round((Date.now() - start) / 1000)} s)`);
+      said = Date.now();
+    }
+    await sleep(2000);
+  }
+  throw new Error(`the emulator did not finish booting within 6 minutes; see ${logFile}`);
+}
+
+/** Puts this checkout's debug build on the device (an emulator gets it without asking). */
+async function installDebug() {
+  const apk = join(ROOT, "android", "app", "build", "outputs", "apk", "debug", "app-debug.apk");
+  if (!existsSync(apk)) throw new Error(`${PKG} is not on ${serial} and there is no debug APK at ${apk}; build it first (gradlew assembleDebug).`);
+  say(`installing the debug build (${Math.round(statSync(apk).size / 1e6)} MB) on ${serial}`);
+  await quietly(5 * 60000, "installing the debug build", () => adb(["install", "-r", apk], { timeout: 5 * 60000 }));
+}
+
+/** The emulator this run started goes again at the end (its quick-boot snapshot makes the next start fast). */
+async function stopEmulator() {
+  if (!startedEmulator || opts["keep-emulator"]) return;
+  say(`stopping the emulator (${startedEmulator}); --keep-emulator leaves it running`);
+  await adbRunner(ADB, startedEmulator)(["emu", "kill"], { timeout: 30000 }).catch(() => {});
+}
+
+/**
+ * Before anything runs: is the phone there, awake, unlocked and free of
+ * prompts, and is Metro up? What a script can fix it fixes; what needs a
+ * person it says at once and waits for; what needs the PC ends the run here.
+ */
+async function preflight() {
+  const found = await diagnose({ adb: healthAdb, pkg: PKG, needApp: false });
+  // The app is started fresh below, so whatever is in front now does not matter.
+  let problems = found.problems.filter((p) => p.id !== "other-app" && p.id !== "app-dead" && p.id !== "anr");
+  for (const line of describe(problems)) print(`preflight: ${line}`);
+  if (problems.some((p) => p.who === "you")) {
+    problems = (await waitForPerson(problems)).problems.filter((p) => p.id !== "other-app" && p.id !== "app-dead" && p.id !== "anr");
+  }
+  if (problems.some((p) => p.who !== "auto")) {
+    stop("preflight", "the run cannot start", problems);
+    await writeStatus();
+    process.exitCode = 3;
+    return false;
+  }
+  const fixes = await autoFix(problems, { adb: healthAdb, pkg: PKG, activity: ACTIVITY });
+  if (fixes.length) print(`preflight: ${fixes.join(", ")}`);
+  return true;
 }
 
 process.on("SIGINT", () => {
   void restoreRotation().finally(() => process.exit(130));
 });
+
+// The PC must not sleep in the middle of a run (it did once, for two hours).
+const releaseAwake = keepAwake();
 
 main()
   .catch(async (error) => {
@@ -1564,4 +2099,10 @@ main()
     await restoreRotation();
     process.exitCode = 2;
   })
-  .finally(closeShells);
+  .finally(async () => {
+    clearInterval(watch.timer);
+    stopFrontWatch();
+    closeShells();
+    await stopEmulator().catch(() => {});
+    releaseAwake();
+  });

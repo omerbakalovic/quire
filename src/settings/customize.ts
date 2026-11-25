@@ -40,7 +40,7 @@ export type Row =
 export type Section = { group: Group; rows: Row[] };
 
 // Page turns join the screen with the animation work; until then nothing honours them.
-const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "behaviour"];
+const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "gestures", "behaviour"];
 
 /**
  * The rows for editing one layer. `set` is true when that layer holds the

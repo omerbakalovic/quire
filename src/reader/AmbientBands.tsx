@@ -63,9 +63,12 @@ export function AmbientBands({ settings, theme, insets, scrolled, info }: Props)
         <Text numberOfLines={1} style={[styles.text, styles.left, { color: theme.inkMuted }]}>
           {left}
         </Text>
-        <Text numberOfLines={1} style={[styles.text, styles.center, { color: theme.inkMuted }]}>
-          {center}
-        </Text>
+        {/* An empty centre gives its width to the sides, so "7 pages left in chapter" fits. */}
+        {center ? (
+          <Text numberOfLines={1} style={[styles.text, styles.center, { color: theme.inkMuted }]}>
+            {center}
+          </Text>
+        ) : null}
         <Text numberOfLines={1} style={[styles.text, styles.right, { color: theme.inkMuted }]}>
           {right}
         </Text>

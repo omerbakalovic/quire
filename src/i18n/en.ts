@@ -134,8 +134,11 @@ export const en = {
       chapter: "Chapter",
       page: "Page in chapter",
       pagesLeft: "Pages left",
+      timeLeftChapter: "Time left in chapter",
+      timeLeftBook: "Time left in book",
       percent: "Percent",
       clock: "Clock",
+      battery: "Battery",
     } as Record<string, string>,
     controls: {
       back: "Back to library",
@@ -231,6 +234,9 @@ export const en = {
     pageOf: (page: number, pages: number) => `${page} of ${pages}`,
     pagesLeft: (count: number) => (count === 1 ? "1 page left in chapter" : `${count} pages left in chapter`),
     lastPage: "Last page in chapter",
+    leftInChapter: (time: string) => `${time} left in chapter`,
+    leftInBook: (time: string) => `${time} left in book`,
+    battery: (percent: string, charging: boolean) => (charging ? `Charging ${percent}` : `Battery ${percent}`),
   },
   reader: {
     title: "Reader",

@@ -9,6 +9,7 @@ import { setReaderDebug } from "@/debug/matrix-command";
 import { classifyEncryption } from "@/domain/drm";
 import { findBook, type Flow, type PositionReport } from "@/domain/library";
 import { adjacentChapter, currentEntry, type NavEntry } from "@/domain/navigation";
+import { EMPTY_SPEED, recordTurn, speedOf, timeLeft, type Speed, type SpeedState } from "@/domain/reading-speed";
 import { t } from "@/i18n";
 import { flushLibrary, getLibrary, loadLibrary, saveFlow, saveOpened, savePosition, useLibrary } from "@/library/store";
 import { appendNote, bookUrl, ensureLoopback, isServing, readerUrl, registerBook } from "@/renderer/book-url";
@@ -56,6 +57,11 @@ export default function BookScreen() {
   const [phase, setPhase] = useState<Phase>("starting");
   const [controls, setControls] = useState(true);
   const [flow, setFlowState] = useState<Flow>(() => getLibrary().flow);
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+  // This session's reading speed, for "time left" in the header and footer.
+  const speedState = useRef<SpeedState>(EMPTY_SPEED);
+  const [speed, setSpeed] = useState<Speed>(() => speedOf(EMPTY_SPEED));
   const [chapter, setChapter] = useState<string | null>(null);
   const [fraction, setFraction] = useState<number | null>(book?.fraction ?? null);
   // Where the visible page starts; `fraction` is where it ends. Chapter logic needs the start.
@@ -237,6 +243,17 @@ export default function BookScreen() {
         setChapter(message.tocLabel);
         setTocHref(message.tocHref);
         setPageInChapter((was) => (was.page === message.page && was.pages === message.pages ? was : { page: message.page, pages: message.pages }));
+        // Scroll mode has no pages, so it gives no samples; the last speed stays.
+        speedState.current = recordTurn(speedState.current, {
+          at: Date.now(),
+          section: message.sectionIndex,
+          page: flowRef.current === "paginated" ? message.page : null,
+          fraction: message.fraction,
+        });
+        setSpeed((was) => {
+          const next = speedOf(speedState.current);
+          return was.secondsPerPage === next.secondsPerPage && was.secondsPerBook === next.secondsPerBook ? was : next;
+        });
         pending.current = report;
         if (Date.now() - lastSaved.current > SAVE_EVERY_MS) flush();
         return;
@@ -472,6 +489,7 @@ export default function BookScreen() {
               page: pageInChapter.page,
               pages: pageInChapter.pages,
               fraction,
+              ...secondsLeft(timeLeft(speed, { page: pageInChapter.page, pages: pageInChapter.pages, fraction })),
             }}
           />
         ) : null}
@@ -584,3 +602,7 @@ const styles = StyleSheet.create({
   },
   noticeText: { color: "#fff", fontSize: 14, textAlign: "center" },
 });
+
+function secondsLeft(left: { chapter: number | null; book: number | null }) {
+  return { secondsLeftChapter: left.chapter, secondsLeftBook: left.book };
+}

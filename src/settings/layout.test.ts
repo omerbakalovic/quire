@@ -10,8 +10,22 @@ const words = {
   pageOf: (page: number, pages: number) => `${page} of ${pages}`,
   pagesLeft: (count: number) => `${count} left`,
   lastPage: "last",
+  leftInChapter: (time: string) => `${time} ch`,
+  leftInBook: (time: string) => `${time} book`,
+  battery: (percent: string, charging: boolean) => `${charging ? "+" : ""}${percent}`,
 };
-const info = { title: "Moby-Dick", author: "Herman Melville", chapter: "Loomings", page: 3, pages: 12, fraction: 0.4219, now: new Date(2026, 10, 23, 7, 5) };
+const info = {
+  title: "Moby-Dick",
+  author: "Herman Melville",
+  chapter: "Loomings",
+  page: 3,
+  pages: 12,
+  fraction: 0.4219,
+  secondsLeftChapter: 270,
+  secondsLeftBook: 7500,
+  battery: { level: 0.836, charging: false },
+  now: new Date(2026, 10, 23, 7, 5),
+};
 
 test("slot values: catalog items only, no repeats, at most the slot's max", () => {
   assert.deepEqual(cleanValue("layout.header.left", ["title", "nope", "title", "clock", "percent", "page"]), ["title", "clock", "percent"]);
@@ -49,6 +63,13 @@ test("element texts", () => {
   assert.equal(ambientText("pagesLeft", { ...info, page: 12 }, words), "last");
   assert.equal(ambientText("percent", info, words), "42%");
   assert.equal(ambientText("clock", info, words), "07:05");
+  assert.equal(ambientText("timeLeftChapter", info, words), "5 min ch");
+  assert.equal(ambientText("timeLeftBook", info, words), "2 h 5 min book");
+  assert.equal(ambientText("timeLeftChapter", { ...info, secondsLeftChapter: null }, words), null);
+  assert.equal(ambientText("battery", info, words), "84%");
+  assert.equal(ambientText("battery", { ...info, battery: { level: 0.5, charging: true } }, words), "+50%");
+  assert.equal(ambientText("battery", { ...info, battery: null }, words), null);
+  assert.equal(ambientText("battery", { ...info, battery: { level: -1, charging: false } }, words), null);
   assert.equal(ambientText("page", { ...info, page: null, pages: null }, words), null);
   assert.equal(ambientText("chapter", { ...info, chapter: null }, words), null);
   assert.equal(slotText(["chapter", "page", "pagesLeft"], { ...info, page: null }, words), "Loomings");

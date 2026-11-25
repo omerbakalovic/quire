@@ -6,6 +6,8 @@ import { BAND_PX, bandsOf, slotText, type AmbientInfo } from "@/settings/layout"
 import { AMBIENT_SLOTS, type Resolved } from "@/settings/registry";
 import type { ThemeTokens } from "@/settings/themes";
 
+import { useBattery } from "./useBattery";
+
 type Insets = { top: number; bottom: number; left: number; right: number };
 
 type Props = {
@@ -14,7 +16,7 @@ type Props = {
   insets: Insets;
   /** In scroll mode the text runs under the bands, so they get the page colour behind them. */
   scrolled: boolean;
-  info: Omit<AmbientInfo, "now">;
+  info: Omit<AmbientInfo, "now" | "battery">;
 };
 
 /** The page's top and bottom margin, as the reader page sizes it (src/reader-page/app.js, applyMargin). */
@@ -24,7 +26,7 @@ export function pageMargin(insets: Insets, band: number): number {
 
 /**
  * The header and footer lines (layout slots): book and chapter titles, page,
- * percent, clock, in the page's margin bands in the theme's muted ink. They
+ * time left, percent, clock, battery, in the page's margin bands in the theme's muted ink. They
  * take no touches, so taps still reach the page.
  */
 export function AmbientBands({ settings, theme, insets, scrolled, info }: Props) {
@@ -32,10 +34,18 @@ export function AmbientBands({ settings, theme, insets, scrolled, info }: Props)
   const bands = bandsOf(settings);
   const usesClock = AMBIENT_SLOTS.some((slot) => settings[slot].includes("clock"));
   const now = useMinute(usesClock);
+  const battery = useBattery(AMBIENT_SLOTS.some((slot) => settings[slot].includes("battery")));
   if (!bands.top && !bands.bottom) return null;
   const margin = pageMargin(insets, BAND_PX);
-  const words = { pageOf: strings.pageOf, pagesLeft: strings.pagesLeft, lastPage: strings.lastPage };
-  const full = { ...info, now };
+  const words = {
+    pageOf: strings.pageOf,
+    pagesLeft: strings.pagesLeft,
+    lastPage: strings.lastPage,
+    leftInChapter: strings.leftInChapter,
+    leftInBook: strings.leftInBook,
+    battery: strings.battery,
+  };
+  const full = { ...info, now, battery };
   const line = (slots: [string, string, string], key: "top" | "bottom") => {
     const [left, center, right] = slots.map((slot) => slotText(settings[slot as (typeof AMBIENT_SLOTS)[number]], full, words));
     const edge = key === "top" ? insets.top : insets.bottom;

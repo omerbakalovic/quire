@@ -40,9 +40,9 @@ export const THEME_IDS = ["light", "paper", "gray", "dark", "black", "night", "c
 export const TURN_STYLES = ["none", "slide", "fade"] as const;
 /**
  * What the header and footer bands can show while reading (docs/customization.md, 3.3).
- * Battery and time left come later: one needs a native module, the other reading speed (M7).
+ * Time left comes from this session's reading speed until Milestone 7 keeps it across sessions.
  */
-export const AMBIENT = ["title", "author", "chapter", "page", "pagesLeft", "percent", "clock"] as const;
+export const AMBIENT = ["title", "author", "chapter", "page", "pagesLeft", "timeLeftChapter", "timeLeftBook", "percent", "clock", "battery"] as const;
 export const AMBIENT_SLOTS = [
   "layout.header.left",
   "layout.header.center",

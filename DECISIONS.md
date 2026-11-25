@@ -345,3 +345,7 @@ A look change goes back to the text the reader was at, and every later change go
 ## Gestures, Milestone 4
 
 Gestures share one action catalog with the controls, so anything a button does a gesture can do, and no gesture runs anything outside it (the line in section 1 of the design). The page runs page turns itself, so a tap still turns with no round trip to the app; every other action goes to the app as an `action` message checked against a fixed list. Vertical swipes are free only in Pages mode and in horizontal text: in Scroll mode they scroll, and a vertical-writing book turns pages that way. Each finger is measured from where it landed, so a two-finger tap whose fingers land or lift at different moments still counts. Gestures are set for all books or a profile, not per book: muscle memory should not change between books.
+
+## Battery and time left, Milestone 4
+
+Battery uses `expo-battery` 58.0.4 (MIT, maintained by Expo, matched to SDK 58). It needs no permission. Like brightness, it is loaded lazily, so an APK built before it shows no battery instead of crashing, and it listens only while a slot shows the battery. Time left was planned for Milestone 7's reading statistics; a session-only estimate now costs little and needs no storage. It takes the median of recent one-page forward turns, so a jump, a chapter change, a skim or a break never skews it, and it stays blank until there are three samples rather than guessing.

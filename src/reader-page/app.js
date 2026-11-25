@@ -80,9 +80,13 @@ function runAction(action, { view, reply, id, popup, physical }) {
   reply({ type: "action", id, action });
 }
 
+/** Vertical text, read where foliate's paginator reads it (getDirection: the body), and the root too. */
 function verticalText(doc) {
-  const mode = doc.defaultView?.getComputedStyle?.(doc.documentElement)?.writingMode ?? "";
-  return mode.startsWith("vertical") || mode.startsWith("sideways");
+  const style = (element) => (element ? doc.defaultView?.getComputedStyle?.(element)?.writingMode ?? "" : "");
+  return [doc.body, doc.documentElement].some((element) => {
+    const mode = style(element);
+    return mode.startsWith("vertical") || mode.startsWith("sideways");
+  });
 }
 
 /**
@@ -163,7 +167,8 @@ function attachTaps(view, doc, reply, id, popup) {
     const scale = frame?.offsetWidth ? rect.width / frame.offsetWidth : 1;
     const zone = tapZone((rect?.left ?? 0) + event.clientX * scale, window.innerWidth);
     const gesture = tapGesture(zone);
-    run(gesture, settings.gestures[gesture], settings.tapZones !== "screen");
+    // Only a side zone turns toward its side of the screen; the middle runs its action as named.
+    run(gesture, settings.gestures[gesture], zone !== "center" && settings.tapZones !== "screen");
   });
 }
 

@@ -1,7 +1,7 @@
 import { Canvas, Fill, ImageShader, makeImageFromView, Shader, Skia, type SkImage } from "@shopify/react-native-skia";
 import { forwardRef, useImperativeHandle, useMemo, useRef, useState, type ComponentRef, type RefObject } from "react";
 import { StyleSheet, View } from "react-native";
-import { Easing, useDerivedValue, useSharedValue, withTiming } from "react-native-reanimated";
+import { Easing, useDerivedValue, useFrameCallback, useSharedValue, withTiming } from "react-native-reanimated";
 import { scheduleOnRN } from "react-native-worklets";
 
 import { ease, packFor, shaderSource, type TurnPack } from "@/turns/packs";
@@ -34,12 +34,14 @@ type Props = {
   durationMs: number;
   width: number;
   height: number;
-  onFrameTimes?: (report: { style: string; frames: number; ms: number }) => void;
+  onFrameTimes?: (report: { style: string; frames: number; ms: number; longestFrameMs: number }) => void;
+  /** The overlay went away; the page can be pictured again. */
+  onIdle?: () => void;
 };
 
 const nextFrame = () => new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
 
-export const TurnOverlay = forwardRef<TurnOverlayHandle, Props>(function TurnOverlay({ target, style, durationMs, width, height, onFrameTimes }, ref) {
+export const TurnOverlay = forwardRef<TurnOverlayHandle, Props>(function TurnOverlay({ target, style, durationMs, width, height, onFrameTimes, onIdle }, ref) {
   const pack: TurnPack | null = packFor(style);
   const effect = useMemo(() => (pack ? Skia.RuntimeEffect.Make(shaderSource(pack)) : null), [pack]);
   const snapshot = useRef<SkImage | null>(null);
@@ -49,16 +51,24 @@ export const TurnOverlay = forwardRef<TurnOverlayHandle, Props>(function TurnOve
   const t = useSharedValue(0);
   const direction = useSharedValue(1);
   const frames = useSharedValue(0);
+  const longest = useSharedValue(0);
   const easing = pack?.easing ?? "linear";
   const params = useMemo(() => Object.fromEntries((pack?.params ?? []).map((p) => [p.key, p.default])), [pack]);
 
-  const uniforms = useDerivedValue(() => {
+  const uniforms = useDerivedValue(
+    () => ({ progress: ease(easing, t.value), direction: direction.value, size: [width, height], ...params }),
+    [easing, width, height, params],
+  );
+  // Frame times for the spike's measurements, counted only while an animation runs.
+  const meter = useFrameCallback((frame) => {
     frames.value += 1;
-    return { progress: ease(easing, t.value), direction: direction.value, size: [width, height], ...params };
-  }, [easing, width, height, params]);
+    const gap = frame.timeSincePreviousFrame ?? 0;
+    if (frames.value > 1 && gap > longest.value) longest.value = gap;
+  }, false);
 
   const hide = () => {
     animating.current = false;
+    meter.setActive(false);
     setShown(null);
     // The picture was of the old page; the next one is taken once the new page settles.
     snapshot.current?.dispose();
@@ -67,8 +77,9 @@ export const TurnOverlay = forwardRef<TurnOverlayHandle, Props>(function TurnOve
 
   const done = () => {
     if (!animating.current) return;
-    onFrameTimes?.({ style, frames: frames.value, ms: Math.round(performance.now() - started.current) });
+    onFrameTimes?.({ style, frames: frames.value, ms: Math.round(performance.now() - started.current), longestFrameMs: Math.round(longest.value) });
     hide();
+    onIdle?.();
   };
 
   useImperativeHandle(ref, () => ({
@@ -98,6 +109,7 @@ export const TurnOverlay = forwardRef<TurnOverlayHandle, Props>(function TurnOve
       animating.current = true;
       t.value = 0;
       frames.value = 0;
+      longest.value = 0;
       direction.value = dir;
       setShown(image);
       // Two frames: React commits the canvas, then Skia draws it.
@@ -108,6 +120,7 @@ export const TurnOverlay = forwardRef<TurnOverlayHandle, Props>(function TurnOve
     play() {
       if (!animating.current) return;
       started.current = performance.now();
+      meter.setActive(true);
       t.value = withTiming(1, { duration: durationMs, easing: Easing.linear }, (finished) => {
         if (finished) scheduleOnRN(done);
       });
@@ -116,6 +129,7 @@ export const TurnOverlay = forwardRef<TurnOverlayHandle, Props>(function TurnOve
       if (!animating.current) return;
       t.value = 1;
       hide();
+      onIdle?.();
     },
     busy: () => animating.current,
   }));

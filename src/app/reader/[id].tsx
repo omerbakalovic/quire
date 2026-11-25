@@ -406,8 +406,10 @@ export default function BookScreen() {
   async function startTurn(direction: 1 | -1) {
     const overlay = overlayRef.current;
     const asked = performance.now();
-    if (captureTimer.current) clearTimeout(captureTimer.current);
     if (overlay?.busy()) overlay.finish();
+    // The page is about to move; its relocate asks for the next picture.
+    if (captureTimer.current) clearTimeout(captureTimer.current);
+    captureTimer.current = null;
     const shown = overlay ? await overlay.show(direction) : false;
     post({ type: "turn-go", id });
     if (shown) {
@@ -556,6 +558,8 @@ export default function BookScreen() {
             width={pageSize.width}
             height={pageSize.height}
             onFrameTimes={(report) => note({ phase: "turn-anim", id, ...report })}
+            // A capture asked for during an animation was refused; take it once the overlay is gone.
+            onIdle={scheduleCapture}
           />
         ) : null}
         {phase === "reading" ? <LightVeil dimmer={reader.settings["light.dimmer"]} warmth={reader.settings["light.warmth"]} /> : null}

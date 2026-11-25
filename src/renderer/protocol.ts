@@ -42,6 +42,8 @@ export type ReaderToHost =
       canGoBack: boolean;
     }
   | { type: "action"; id: string; action: HostAction }
+  /** A page turn is about to happen; the page waits for "turn-go" (or a short timeout). */
+  | { type: "turning"; id: string; direction: 1 | -1 }
   | { type: "back-stack"; id: string; depth: number; label: string | null }
   | { type: "refused"; id: string; kind: string }
   | { type: "failed"; id: string; error: string }
@@ -126,6 +128,7 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
     const depth = optNumber(message.depth);
     return { type: "back-stack", id, depth: depth === null ? 0 : Math.max(0, Math.floor(depth)), label: optString(message.label) };
   }
+  if (message.type === "turning") return { type: "turning", id, direction: message.direction === -1 ? -1 : 1 };
   if (message.type === "action") {
     return (HOST_ACTIONS as readonly unknown[]).includes(message.action) ? { type: "action", id, action: message.action as HostAction } : null;
   }

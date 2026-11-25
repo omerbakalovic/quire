@@ -4,7 +4,7 @@ import * as paginator from "../../vendor/foliate-js/paginator.js";
 import * as zip from "../../vendor/foliate-js/vendor/zip.js";
 import "../../vendor/foliate-js/view.js";
 
-import { applyInsets, applySettings, back, closeNote, debug, goTo, historyBack, openForReading, setFlow, setLook, turn } from "./app.js";
+import { applyInsets, applySettings, back, closeNote, debug, goTo, historyBack, openForReading, setFlow, setLook, turn, turnGo } from "./app.js";
 import { chapterFacts, liveDoc, timeTurns } from "./measure.js";
 import { openPrepared } from "./open-book.js";
 import { installPageErrors } from "./page-errors.js";
@@ -175,6 +175,10 @@ function onMessage(event) {
   }
   if (message.type === "back") {
     back(message).catch((error) => console.error(error));
+    return;
+  }
+  if (message.type === "turn-go") {
+    turnGo(message);
     return;
   }
   if (message.type === "turn") {

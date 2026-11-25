@@ -17,7 +17,7 @@ let current = null;
 let tapAt = null;
 // "reading": the zones follow the book's page direction, so in a right-to-left
 // book the left zone is the next page. "screen": right is always forward.
-let settings = { tapZones: "reading", gestures: cleanGestures(null) };
+let settings = { tapZones: "reading", gestures: cleanGestures(null), turns: false };
 
 let insets = { top: 0, bottom: 0, left: 0, right: 0 };
 // Extra margin for the host's header and footer line (layout slots), 0 when both are empty.
@@ -51,6 +51,7 @@ function applyMargin(view) {
 export function applySettings(message) {
   if (message.tapZones === "screen" || message.tapZones === "reading") settings = { ...settings, tapZones: message.tapZones };
   if (message.gestures) settings = { ...settings, gestures: cleanGestures(message.gestures) };
+  if (typeof message.turns === "boolean") settings = { ...settings, turns: message.turns };
 }
 
 function flowOf(value) {
@@ -72,12 +73,51 @@ function runAction(action, { view, reply, id, popup, physical }) {
   if (PAGE_ACTIONS.includes(action)) {
     tapAt = performance.now();
     popup?.hideBack();
-    const forward = action === "nextPage";
-    if (physical) void (forward ? view.goRight() : view.goLeft());
-    else void (forward ? view.next() : view.prev());
+    const toRight = action === "nextPage";
+    const go = () => {
+      if (physical) void (toRight ? view.goRight() : view.goLeft());
+      else void (toRight ? view.next() : view.prev());
+    };
+    // Which way the old page leaves: a physical tap turns toward its side; a logical turn follows the book.
+    const rtl = view.book?.dir === "rtl";
+    const direction = physical ? (toRight ? 1 : -1) : toRight !== rtl ? 1 : -1;
+    turnWithOverlay(view, reply, id, go, direction);
     return;
   }
   reply({ type: "action", id, action });
+}
+
+/**
+ * With a page-turn style on (docs/customization.md, 5.3), the app lays a
+ * picture of this page over the WebView before the page turns underneath it,
+ * then animates the picture away. The page asks first and turns on "turn-go",
+ * or after a short wait if no answer comes, so a turn is never lost or slow.
+ */
+const TURN_WAIT_MS = 150;
+let pendingTurn = null;
+
+function turnWithOverlay(view, reply, id, go, direction) {
+  flushTurn();
+  if (!settings.turns || view.isFixedLayout || view.renderer?.getAttribute?.("flow") === "scrolled") {
+    go();
+    return;
+  }
+  const turn = { id, go, timer: setTimeout(() => flushTurn(), TURN_WAIT_MS) };
+  pendingTurn = turn;
+  reply({ type: "turning", id, direction });
+}
+
+function flushTurn() {
+  const turn = pendingTurn;
+  if (!turn) return;
+  pendingTurn = null;
+  clearTimeout(turn.timer);
+  turn.go();
+}
+
+/** The app's overlay is up: turn now. */
+export function turnGo(message) {
+  if (pendingTurn && pendingTurn.id === message.id) flushTurn();
 }
 
 function verticalText(doc) {

@@ -5,6 +5,7 @@ import { applyLookTo, openBook } from "./open-book.js";
 import { pageErrors } from "./page-errors.js";
 import * as probe from "./probe.js";
 import { tapZone } from "./tap-zones.js";
+import { classifyTouch, cleanGestures, PAGE_ACTIONS, TAP_SLOP_PX, tapGesture } from "./gestures.js";
 
 /**
  * The reading path: one imported book, opened through range reads, with
@@ -16,7 +17,7 @@ let current = null;
 let tapAt = null;
 // "reading": the zones follow the book's page direction, so in a right-to-left
 // book the left zone is the next page. "screen": right is always forward.
-let settings = { tapZones: "reading" };
+let settings = { tapZones: "reading", gestures: cleanGestures(null) };
 
 let insets = { top: 0, bottom: 0, left: 0, right: 0 };
 // Extra margin for the host's header and footer line (layout slots), 0 when both are empty.
@@ -49,6 +50,7 @@ function applyMargin(view) {
 
 export function applySettings(message) {
   if (message.tapZones === "screen" || message.tapZones === "reading") settings = { ...settings, tapZones: message.tapZones };
+  if (message.gestures) settings = { ...settings, gestures: cleanGestures(message.gestures) };
 }
 
 function flowOf(value) {
@@ -60,43 +62,101 @@ function selectionIn(doc) {
   return Boolean(selection && !selection.isCollapsed && String(selection).trim().length > 0);
 }
 
-// A touch that moves less than this is a tap, not a swipe.
-const TAP_SLOP_PX = 10;
+/**
+ * Run a gesture's action. A turn happens here; anything else is the app's. A
+ * tap zone in "reading" mode turns toward its side of the screen, which for a
+ * right-to-left book mirrors back and forward (view.goLeft and view.goRight).
+ */
+function runAction(action, { view, reply, id, popup, physical }) {
+  if (!action || action === "none") return;
+  if (PAGE_ACTIONS.includes(action)) {
+    tapAt = performance.now();
+    popup?.hideBack();
+    const forward = action === "nextPage";
+    if (physical) void (forward ? view.goRight() : view.goLeft());
+    else void (forward ? view.next() : view.prev());
+    return;
+  }
+  reply({ type: "action", id, action });
+}
+
+/** Vertical text, read where foliate's paginator reads it (getDirection: the body), and the root too. */
+function verticalText(doc) {
+  const style = (element) => (element ? doc.defaultView?.getComputedStyle?.(element)?.writingMode ?? "" : "");
+  return [doc.body, doc.documentElement].some((element) => {
+    const mode = style(element);
+    return mode.startsWith("vertical") || mode.startsWith("sideways");
+  });
+}
 
 /**
- * foliate snaps to the nearest page one frame after every touchend. After a
- * tap, that snap races the turn the tap's click starts and can cancel it, so
- * the page stays put (seen after a chapter change). A touch that did not move
- * is kept from foliate's touchend; a swipe still reaches it and snaps as before.
+ * Touches on a section. foliate snaps to the nearest page one frame after
+ * every touchend; after a tap, that snap races the turn the tap's click starts
+ * and can cancel it, so a touch that did not move is kept from foliate's
+ * touchend. A swipe still reaches it and snaps as before. A vertical swipe or
+ * a two-finger tap runs its gesture, in Pages mode only (Scroll mode scrolls,
+ * and a vertical-writing book turns pages that way).
  */
-function keepTapsFromSnap(doc) {
-  let start = null;
+function attachTouches(view, doc, run) {
+  // Each finger's own start, so a finger that lifts early is still measured against where it landed.
+  const starts = new Map();
+  let first = null;
+  let fingers = 0;
+  let far = 0;
+  let last = null;
   doc.addEventListener(
     "touchstart",
     (event) => {
-      const touch = event.changedTouches[0];
-      start = touch && event.touches.length === 1 ? { x: touch.screenX, y: touch.screenY } : null;
+      if (starts.size === 0) {
+        first = null;
+        fingers = 0;
+        far = 0;
+        last = null;
+      }
+      const now = performance.now();
+      for (const touch of Array.from(event.changedTouches)) {
+        starts.set(touch.identifier, { x: touch.screenX, y: touch.screenY });
+        first ??= { x: touch.screenX, y: touch.screenY, t: now, finger: touch.identifier };
+      }
+      fingers = Math.max(fingers, event.touches.length, starts.size);
     },
     { capture: true, passive: true },
   );
   doc.addEventListener(
     "touchend",
     (event) => {
-      const touch = event.changedTouches[0];
-      const from = start;
-      start = null;
-      if (!from || !touch || event.touches.length > 0) return;
-      if (Math.abs(touch.screenX - from.x) < TAP_SLOP_PX && Math.abs(touch.screenY - from.y) < TAP_SLOP_PX) {
-        event.stopImmediatePropagation();
+      for (const touch of Array.from(event.changedTouches)) {
+        const from = starts.get(touch.identifier);
+        starts.delete(touch.identifier);
+        if (!from) continue;
+        far = Math.max(far, Math.abs(touch.screenX - from.x), Math.abs(touch.screenY - from.y));
+        if (touch.identifier === first?.finger) last = { x: touch.screenX, y: touch.screenY };
       }
+      if (event.touches.length > 0 || !first) return;
+      const end = { ...(last ?? first), t: performance.now() };
+      // Two fingers: how far any finger moved is what counts.
+      const measured = fingers >= 2 ? { x: first.x + far, y: first.y, t: end.t } : end;
+      if (fingers === 1 && far < TAP_SLOP_PX) {
+        event.stopImmediatePropagation();
+        return;
+      }
+      if (view.renderer?.getAttribute?.("flow") === "scrolled" || verticalText(doc) || selectionIn(doc)) return;
+      const gesture = classifyTouch(first, measured, fingers);
+      if (!gesture) return;
+      const action = settings.gestures[gesture];
+      // A turn lands on a page boundary itself; foliate's snap back would race it, as after a tap.
+      if (PAGE_ACTIONS.includes(action)) event.stopImmediatePropagation();
+      run(gesture, action, false);
     },
     { capture: true },
   );
+  doc.addEventListener("touchcancel", () => starts.clear(), { capture: true, passive: true });
 }
 
 /** Tap zones. Links keep their own click, and an active selection is never a page turn. */
 function attachTaps(view, doc, reply, id, popup) {
-  keepTapsFromSnap(doc);
+  const run = (_gesture, action, physical) => runAction(action, { view, reply, id, popup, physical });
+  attachTouches(view, doc, run);
   doc.addEventListener("click", (event) => {
     if (event.defaultPrevented) return;
     if (linkFromEvent(event)) return;
@@ -106,14 +166,9 @@ function attachTaps(view, doc, reply, id, popup) {
     const rect = frame?.getBoundingClientRect();
     const scale = frame?.offsetWidth ? rect.width / frame.offsetWidth : 1;
     const zone = tapZone((rect?.left ?? 0) + event.clientX * scale, window.innerWidth);
-    if (zone === "left" || zone === "right") {
-      tapAt = performance.now();
-      popup?.hideBack();
-    }
-    const screen = settings.tapZones === "screen";
-    if (zone === "left") void (screen ? view.prev() : view.goLeft());
-    else if (zone === "right") void (screen ? view.next() : view.goRight());
-    else reply({ type: "tap", id, zone: "center" });
+    const gesture = tapGesture(zone);
+    // Only a side zone turns toward its side of the screen; the middle runs its action as named.
+    run(gesture, settings.gestures[gesture], zone !== "center" && settings.tapZones !== "screen");
   });
 }
 

@@ -75,12 +75,12 @@ test("accepts the reading messages and cleans their fields", () => {
   assert.deepEqual(debug, { type: "debug", id: "b1", reqId: "debug-1", result: { ok: true } });
   assert.equal(parseReaderMessage('{"type":"debug","id":"b1","result":1}'), null);
   assert.equal(parseReaderMessage('{"type":"relocate","id":"b1","cfi":""}'), null);
-  assert.deepEqual(parseReaderMessage('{"type":"tap","id":"b1","zone":"center"}'), {
-    type: "tap",
-    id: "b1",
-    zone: "center",
-  });
-  assert.equal(parseReaderMessage('{"type":"tap","id":"b1","zone":"left"}'), null);
+  assert.deepEqual(parseReaderMessage('{"type":"action","id":"b1","action":"bars"}'), { type: "action", id: "b1", action: "bars" });
+  assert.deepEqual(parseReaderMessage('{"type":"action","id":"b1","action":"contents"}'), { type: "action", id: "b1", action: "contents" });
+  // The page turns pages itself, and unknown actions are dropped.
+  assert.equal(parseReaderMessage('{"type":"action","id":"b1","action":"nextPage"}'), null);
+  assert.equal(parseReaderMessage('{"type":"action","id":"b1","action":"rm"}'), null);
+  assert.equal(parseReaderMessage('{"type":"tap","id":"b1","zone":"center"}'), null);
   const opened = parseReaderMessage(
     JSON.stringify({ type: "opened", id: "b1", title: 7, sections: 4, toc: [{ label: "One", depth: 99 }, null] }),
   );

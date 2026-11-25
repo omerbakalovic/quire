@@ -9,11 +9,12 @@ import { setReaderDebug } from "@/debug/matrix-command";
 import { classifyEncryption } from "@/domain/drm";
 import { findBook, type Flow, type PositionReport } from "@/domain/library";
 import { adjacentChapter, currentEntry, type NavEntry } from "@/domain/navigation";
+import { EMPTY_SPEED, recordTurn, speedOf, timeLeft, type Speed, type SpeedState } from "@/domain/reading-speed";
 import { t } from "@/i18n";
 import { flushLibrary, getLibrary, loadLibrary, saveFlow, saveOpened, savePosition, useLibrary } from "@/library/store";
 import { appendNote, bookUrl, ensureLoopback, isServing, readerUrl, registerBook } from "@/renderer/book-url";
 import { decideOpen } from "@/renderer/open-decision";
-import { parseReaderMessage } from "@/renderer/protocol";
+import { parseReaderMessage, type HostAction } from "@/renderer/protocol";
 import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webview-allow";
 import { AmbientBands } from "@/reader/AmbientBands";
 import { BackPill } from "@/reader/BackPill";
@@ -25,6 +26,7 @@ import { useBrightness } from "@/reader/useBrightness";
 import { QuickPanel } from "@/reader/QuickPanel";
 import { chromeFor, ChromeProvider } from "@/reader/chrome";
 import { TocPanel } from "@/reader/TocPanel";
+import { gestureMap } from "@/settings/gestures";
 import { useLook } from "@/reader/useLook";
 
 type ReaderWebView = WebView<object>;
@@ -55,6 +57,11 @@ export default function BookScreen() {
   const [phase, setPhase] = useState<Phase>("starting");
   const [controls, setControls] = useState(true);
   const [flow, setFlowState] = useState<Flow>(() => getLibrary().flow);
+  const flowRef = useRef(flow);
+  flowRef.current = flow;
+  // This session's reading speed, for "time left" in the header and footer.
+  const speedState = useRef<SpeedState>(EMPTY_SPEED);
+  const [speed, setSpeed] = useState<Speed>(() => speedOf(EMPTY_SPEED));
   const [chapter, setChapter] = useState<string | null>(null);
   const [fraction, setFraction] = useState<number | null>(book?.fraction ?? null);
   // Where the visible page starts; `fraction` is where it ends. Chapter logic needs the start.
@@ -94,6 +101,8 @@ export default function BookScreen() {
   }, []);
   const reader = useLook(library, id ?? null, phase === "reading", post);
   useBrightness(reader.settings["light.brightness"], phase === "reading");
+  // A string, so the effect that sends it runs only when a gesture really changes.
+  const gestures = JSON.stringify(gestureMap(reader.settings));
 
   const flush = useCallback(() => {
     const next = pending.current;
@@ -234,12 +243,23 @@ export default function BookScreen() {
         setChapter(message.tocLabel);
         setTocHref(message.tocHref);
         setPageInChapter((was) => (was.page === message.page && was.pages === message.pages ? was : { page: message.page, pages: message.pages }));
+        // Scroll mode has no pages, so it gives no samples; the last speed stays.
+        speedState.current = recordTurn(speedState.current, {
+          at: Date.now(),
+          section: message.sectionIndex,
+          page: flowRef.current === "paginated" ? message.page : null,
+          fraction: message.fraction,
+        });
+        setSpeed((was) => {
+          const next = speedOf(speedState.current);
+          return was.secondsPerPage === next.secondsPerPage && was.secondsPerBook === next.secondsPerBook ? was : next;
+        });
         pending.current = report;
         if (Date.now() - lastSaved.current > SAVE_EVERY_MS) flush();
         return;
       }
-      case "tap":
-        setControls((value) => !value);
+      case "action":
+        runAction(message.action);
         return;
       case "back-stack":
         if (message.id !== id) return;
@@ -277,8 +297,8 @@ export default function BookScreen() {
 
   // Settings changed elsewhere reach the open page.
   useEffect(() => {
-    if (id && phase === "reading") post({ type: "settings", id, tapZones });
-  }, [id, phase, tapZones, post]);
+    if (id && phase === "reading") post({ type: "settings", id, tapZones, gestures: JSON.parse(gestures) });
+  }, [id, phase, tapZones, gestures, post]);
 
   // The system bars can change, for example on rotation. The page keeps its sheet and text clear of them.
   useEffect(() => {
@@ -350,6 +370,32 @@ export default function BookScreen() {
     if (!id) return;
     note({ phase: "jump", id, target, from: latest.current?.cfi ?? null });
     post({ type: "goto", id, target });
+  }
+
+  /** A gesture's action (docs/customization.md, 3.5): the same thing the matching control does. */
+  function runAction(action: HostAction) {
+    note({ phase: "gesture", id, action });
+    switch (action) {
+      case "bars":
+        setControls((value) => !value);
+        return;
+      case "contents":
+        showToc(true);
+        return;
+      case "look":
+        if (!fixedLayout) showLook(true);
+        return;
+      case "prevChapter":
+      case "nextChapter":
+        stepChapter(action === "prevChapter" ? "prev" : "next");
+        return;
+      case "flow":
+        if (!fixedLayout) switchFlow(flow === "paginated" ? "scrolled" : "paginated");
+        return;
+      case "back":
+        router.back();
+        return;
+    }
   }
 
   function stepChapter(dir: "prev" | "next") {
@@ -443,6 +489,7 @@ export default function BookScreen() {
               page: pageInChapter.page,
               pages: pageInChapter.pages,
               fraction,
+              ...secondsLeft(timeLeft(speed, { page: pageInChapter.page, pages: pageInChapter.pages, fraction })),
             }}
           />
         ) : null}
@@ -555,3 +602,7 @@ const styles = StyleSheet.create({
   },
   noticeText: { color: "#fff", fontSize: 14, textAlign: "center" },
 });
+
+function secondsLeft(left: { chapter: number | null; book: number | null }) {
+  return { secondsLeftChapter: left.chapter, secondsLeftBook: left.book };
+}

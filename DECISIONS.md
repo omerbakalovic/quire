@@ -341,3 +341,11 @@ The header and footer lines are drawn by the app over the page, not by foliate's
 ## Keeping the place across look changes, Milestone 4
 
 A look change goes back to the text the reader was at, and every later change goes back to that same text until the reader turns a page, swipes, scrolls or jumps. Re-anchoring on each relayout's landing page walked the place backwards: the page that holds the anchor starts before it, and quick changes on the phone overlapped, so the second one anchored on the first one's half-finished page (phone run 9; reproduced on the desktop by sending two looks 30 ms apart). foliate says why it moved (`page`, `snap`, `scroll`, `navigation`), so the page clears the kept anchor on those, except while a relayout of its own is running. Before going back, it waits up to 1.5 s for the new fonts to load, and goes back once more if one finished after the return.
+
+## Gestures, Milestone 4
+
+Gestures share one action catalog with the controls, so anything a button does a gesture can do, and no gesture runs anything outside it (the line in section 1 of the design). The page runs page turns itself, so a tap still turns with no round trip to the app; every other action goes to the app as an `action` message checked against a fixed list. Vertical swipes are free only in Pages mode and in horizontal text: in Scroll mode they scroll, and a vertical-writing book turns pages that way. Each finger is measured from where it landed, so a two-finger tap whose fingers land or lift at different moments still counts. Gestures are set for all books or a profile, not per book: muscle memory should not change between books.
+
+## Battery and time left, Milestone 4
+
+Battery uses `expo-battery` 58.0.4 (MIT, maintained by Expo, matched to SDK 58). It needs no permission. Like brightness, it is loaded lazily, so an APK built before it shows no battery instead of crashing, and it listens only while a slot shows the battery. Time left was planned for Milestone 7's reading statistics; a session-only estimate now costs little and needs no storage. It takes the median of recent one-page forward turns, so a jump, a chapter change, a skim or a break never skews it, and it stays blank until there are three samples rather than guessing.

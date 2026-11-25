@@ -8,7 +8,7 @@ import { isFontId } from "./fonts.ts";
 
 export type Layer = "session" | "book" | "profile" | "global";
 
-export type Group = "typography" | "page" | "theme" | "light" | "layout" | "turns" | "behaviour";
+export type Group = "typography" | "page" | "theme" | "light" | "layout" | "gestures" | "turns" | "behaviour";
 
 type Base = {
   key: string;
@@ -33,15 +33,16 @@ export type Value = number | string | boolean | readonly string[];
 
 const ALL: Layer[] = ["session", "book", "profile", "global"];
 const NOT_SESSION: Layer[] = ["book", "profile", "global"];
+const PROFILE_UP: Layer[] = ["profile", "global"];
 
 export const ALIGNMENTS = ["publisher", "start", "justify"] as const;
 export const THEME_IDS = ["light", "paper", "gray", "dark", "black", "night", "contrast"] as const;
 export const TURN_STYLES = ["none", "slide", "fade"] as const;
 /**
  * What the header and footer bands can show while reading (docs/customization.md, 3.3).
- * Battery and time left come later: one needs a native module, the other reading speed (M7).
+ * Time left comes from this session's reading speed until Milestone 7 keeps it across sessions.
  */
-export const AMBIENT = ["title", "author", "chapter", "page", "pagesLeft", "percent", "clock"] as const;
+export const AMBIENT = ["title", "author", "chapter", "page", "pagesLeft", "timeLeftChapter", "timeLeftBook", "percent", "clock", "battery"] as const;
 export const AMBIENT_SLOTS = [
   "layout.header.left",
   "layout.header.center",
@@ -57,6 +58,12 @@ const NONE: readonly string[] = [];
  */
 export const CONTROLS = ["back", "title", "contents", "look", "flow", "prevChapter", "slider", "nextChapter", "percent"] as const;
 export const CONTROL_SLOTS = ["layout.topBar", "layout.quickRow", "layout.bottomBar"] as const;
+/**
+ * What a gesture can do (3.5): the controls' actions, plus turning a page and
+ * showing the bars. The page runs a turn itself; the rest go to the app.
+ */
+export const ACTIONS = ["none", "prevPage", "nextPage", "bars", "contents", "look", "prevChapter", "nextChapter", "flow", "back"] as const;
+const GESTURE = { type: "choice", choices: ACTIONS, group: "gestures", scopes: PROFILE_UP, relayout: false, depth: "standard" } as const;
 
 export const SETTINGS = [
   { key: "type.fontSize", type: "number", default: 100, min: 60, max: 300, step: 5, group: "typography", scopes: ALL, relayout: true, depth: "quick" },
@@ -89,6 +96,15 @@ export const SETTINGS = [
   { key: "layout.topBar", type: "elements", default: ["back", "title"], catalog: CONTROLS, max: 5, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "layout.quickRow", type: "elements", default: ["prevChapter", "slider", "nextChapter", "percent"], catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "layout.bottomBar", type: "elements", default: ["contents", "look", "flow"], catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
+  // Tap zones: thirds of the page. Left and right follow the "reading direction" setting.
+  { key: "gesture.tapLeft", default: "prevPage", ...GESTURE },
+  { key: "gesture.tapCenter", default: "bars", ...GESTURE },
+  { key: "gesture.tapRight", default: "nextPage", ...GESTURE },
+  // A horizontal swipe always turns the page. Vertical swipes are free in Pages mode only;
+  // in Scroll mode they scroll. Long press stays text selection.
+  { key: "gesture.swipeUp", default: "none", ...GESTURE },
+  { key: "gesture.swipeDown", default: "none", ...GESTURE },
+  { key: "gesture.twoFingerTap", default: "none", ...GESTURE },
   { key: "turn.style", type: "choice", default: "none", choices: TURN_STYLES, group: "turns", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "turn.followReduceMotion", type: "boolean", default: true, group: "turns", scopes: ["global"], relayout: false, depth: "advanced" },
 ] as const satisfies readonly Setting[];

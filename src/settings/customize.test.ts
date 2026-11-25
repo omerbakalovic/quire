@@ -24,7 +24,7 @@ test("the global screen lists every honoured setting once, grouped in order", ()
   const sections = sectionsFor({}, "global");
   const keys = sections.flatMap((s) => s.rows.map((r) => r.key));
   assert.deepEqual([...keys].sort(), SETTINGS.filter((s) => s.group !== "turns").map((s) => s.key).sort());
-  assert.deepEqual(sections.map((s) => s.group), ["typography", "page", "theme", "light", "layout"]);
+  assert.deepEqual(sections.map((s) => s.group), ["typography", "page", "theme", "light", "layout", "gestures"]);
 });
 
 test("a profile screen leaves out global-only settings, and marks what the layer sets", () => {
@@ -55,4 +55,17 @@ test("numbers read as people expect", () => {
   assert.equal(formatNumber("light.brightness", 0, words), "System");
   assert.equal(formatNumber("light.dimmer", 0.25, words), "25%");
   assert.equal(formatNumber("light.warmth", 0, words), "Off");
+});
+
+test("gestures are a group on the Reading look screen, and the map follows the settings", async () => {
+  const { gestureMap, barsUnreachable } = await import("./gestures.ts");
+  const { defaults } = await import("./registry.ts");
+  const base = defaults();
+  assert.deepEqual(gestureMap(base), { tapLeft: "prevPage", tapCenter: "bars", tapRight: "nextPage", swipeUp: "none", swipeDown: "none", twoFingerTap: "none" });
+  assert.equal(barsUnreachable(base), false);
+  assert.equal(barsUnreachable({ ...base, "gesture.tapCenter": "contents" }), true);
+  assert.equal(barsUnreachable({ ...base, "gesture.tapCenter": "contents", "gesture.swipeUp": "bars" }), false);
+  const section = sectionsFor({}, "global").find((s) => s.group === "gestures");
+  assert.equal(section?.rows.length, 6);
+  assert.equal(sectionsFor({}, "book").some((s) => s.group === "gestures"), false);
 });

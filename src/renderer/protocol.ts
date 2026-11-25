@@ -2,6 +2,10 @@ import { parseNavEntries, type NavEntry } from "../domain/navigation.ts";
 
 export type CheckReport = { engineOpened: boolean } & Record<string, unknown>;
 
+/** Gesture actions the page hands to the app; it turns pages itself (src/reader-page/gestures.js). */
+export const HOST_ACTIONS = ["bars", "contents", "look", "prevChapter", "nextChapter", "flow", "back"] as const;
+export type HostAction = (typeof HOST_ACTIONS)[number];
+
 export type ReaderToHost =
   | { type: "pong"; id: string }
   | { type: "encryption"; id: string; xml: string | null }
@@ -37,7 +41,7 @@ export type ReaderToHost =
       sinceTapMs: number | null;
       canGoBack: boolean;
     }
-  | { type: "tap"; id: string; zone: "center" }
+  | { type: "action"; id: string; action: HostAction }
   | { type: "back-stack"; id: string; depth: number; label: string | null }
   | { type: "refused"; id: string; kind: string }
   | { type: "failed"; id: string; error: string }
@@ -122,7 +126,9 @@ export function parseReaderMessage(raw: string): ReaderToHost | null {
     const depth = optNumber(message.depth);
     return { type: "back-stack", id, depth: depth === null ? 0 : Math.max(0, Math.floor(depth)), label: optString(message.label) };
   }
-  if (message.type === "tap") return message.zone === "center" ? { type: "tap", id, zone: "center" } : null;
+  if (message.type === "action") {
+    return (HOST_ACTIONS as readonly unknown[]).includes(message.action) ? { type: "action", id, action: message.action as HostAction } : null;
+  }
   if (message.type === "refused") return { type: "refused", id, kind: optString(message.kind) ?? "unknown" };
   if (message.type === "failed") return { type: "failed", id, error: optString(message.error) ?? "unknown error" };
   if (message.type === "note") {

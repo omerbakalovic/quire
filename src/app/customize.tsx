@@ -8,6 +8,7 @@ import { confirmRemoveFont, pickFont } from "@/reader/font-import";
 import { layersFor } from "@/settings/customization";
 import { formatNumber, sectionsFor, stepValue, type Row } from "@/settings/customize";
 import { fontLabel } from "@/settings/fonts";
+import { barsUnreachable } from "@/settings/gestures";
 import { resolve } from "@/settings/layers";
 import { LAYOUT_PRESETS, presetOf, presetValues } from "@/settings/layout";
 import { CONTROL_SLOTS, type SettingKey } from "@/settings/registry";
@@ -42,6 +43,7 @@ export default function CustomizeScreen() {
     if (key === "theme.id") return book.themes[option] ?? option;
     if (key === "type.alignment") return book.aligns[option] ?? option;
     if (key === "turn.style") return strings.turns[option] ?? option;
+    if (key.startsWith("gesture.")) return strings.actions[option] ?? option;
     return option;
   };
 
@@ -190,6 +192,12 @@ export default function CustomizeScreen() {
               </View>
             </>
           ) : null}
+          {section.group === "gestures" ? (
+            <>
+              <Text style={styles.help}>{strings.gesturesHelp}</Text>
+              {barsUnreachable(resolve(layers)) ? <Text style={styles.warning}>{strings.gesturesNoBars}</Text> : null}
+            </>
+          ) : null}
           {section.rows.map(draw)}
         </View>
       ))}
@@ -217,4 +225,5 @@ const styles = StyleSheet.create({
   chipTextOn: { color: "#fff", fontWeight: "600" },
   input: { flex: 1, minHeight: 44, borderWidth: 1, borderColor: "#8888", borderRadius: 8, paddingHorizontal: 12, fontSize: 16 },
   help: { fontSize: 14, opacity: 0.7, lineHeight: 20 },
+  warning: { fontSize: 14, lineHeight: 20, color: "#a33a00", fontWeight: "600" },
 });

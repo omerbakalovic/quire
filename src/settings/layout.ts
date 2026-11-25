@@ -1,4 +1,5 @@
-import { AMBIENT_SLOTS, sameValue, type Resolved } from "./registry.ts";
+import { AMBIENT, AMBIENT_SLOTS, sameValue, type Resolved } from "./registry.ts";
+import { formatDuration } from "../domain/reading-speed.ts";
 import type { Values } from "./layers.ts";
 
 /**
@@ -7,7 +8,7 @@ import type { Values } from "./layers.ts";
  * Kept free of React so it can be tested.
  */
 export type AmbientSlot = (typeof AMBIENT_SLOTS)[number];
-export type AmbientElement = "title" | "author" | "chapter" | "page" | "pagesLeft" | "percent" | "clock";
+export type AmbientElement = (typeof AMBIENT)[number];
 
 export const LAYOUT_PRESETS = ["bare", "classic", "informative"] as const;
 export type LayoutPreset = (typeof LAYOUT_PRESETS)[number];
@@ -21,16 +22,16 @@ const EMPTY: Record<AmbientSlot, readonly string[]> = {
   "layout.footer.right": [],
 };
 
-/** Bare is the default: text only. Classic is a printed book's running head and folio. */
+/** Bare is the default: text only. Classic is a printed book's running head and folio. Informative adds the clock, battery and time left. */
 export const PRESET_SLOTS: Record<LayoutPreset, Record<AmbientSlot, readonly string[]>> = {
   bare: EMPTY,
   classic: { ...EMPTY, "layout.header.left": ["title"], "layout.header.right": ["chapter"], "layout.footer.center": ["page"] },
   informative: {
     ...EMPTY,
     "layout.header.left": ["chapter"],
-    "layout.header.right": ["clock"],
+    "layout.header.right": ["clock", "battery"],
     "layout.footer.left": ["pagesLeft"],
-    "layout.footer.right": ["percent"],
+    "layout.footer.right": ["timeLeftChapter", "percent"],
   },
 };
 
@@ -67,6 +68,11 @@ export type AmbientInfo = {
   page: number | null;
   pages: number | null;
   fraction: number | null;
+  /** Seconds left at this session's reading speed; null until there are enough page turns. */
+  secondsLeftChapter: number | null;
+  secondsLeftBook: number | null;
+  /** 0 to 1, and whether it is charging; null on a build without the battery module. */
+  battery: { level: number; charging: boolean } | null;
   now: Date;
 };
 
@@ -74,6 +80,9 @@ export type AmbientWords = {
   pageOf: (page: number, pages: number) => string;
   pagesLeft: (count: number) => string;
   lastPage: string;
+  leftInChapter: (time: string) => string;
+  leftInBook: (time: string) => string;
+  battery: (percent: string, charging: boolean) => string;
 };
 
 /** The text one element shows, or null when there is nothing to show (no chapter, scroll mode). */
@@ -92,6 +101,12 @@ export function ambientText(element: string, info: AmbientInfo, words: AmbientWo
       const left = info.pages - info.page;
       return left > 0 ? words.pagesLeft(left) : words.lastPage;
     }
+    case "timeLeftChapter":
+      return info.secondsLeftChapter === null ? null : words.leftInChapter(formatDuration(info.secondsLeftChapter));
+    case "timeLeftBook":
+      return info.secondsLeftBook === null ? null : words.leftInBook(formatDuration(info.secondsLeftBook));
+    case "battery":
+      return info.battery === null || !(info.battery.level >= 0) ? null : words.battery(`${Math.round(info.battery.level * 100)}%`, info.battery.charging);
     case "percent":
       return info.fraction === null ? null : `${Math.round(info.fraction * 100)}%`;
     case "clock":

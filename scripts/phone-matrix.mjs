@@ -1043,12 +1043,12 @@ function words(text, count = 6) {
  * other. A page and a scrolled screen hold different amounts of text, so either
  * may contain the other's start.
  */
-function samePlace(a, b) {
+function samePlace(a, b, within = 0.0005) {
   if (!a || !b) return false;
   if (a.cfi && a.cfi === b.cfi) return true;
   if (a.section !== b.section) return false;
   // Front matter and covers have little or no text to compare; the same spot to within a page is the same place.
-  if (typeof a.fraction === "number" && typeof b.fraction === "number" && Math.abs(a.fraction - b.fraction) < 0.0005) return true;
+  if (typeof a.fraction === "number" && typeof b.fraction === "number" && Math.abs(a.fraction - b.fraction) < within) return true;
   const phrase = (st) => words(st.text, 5).join(" ");
   const contains = (st, text) => text.length > 0 && (st.pageText ?? st.text ?? "").includes(text);
   const startOf = (st) => (st.pageText ?? st.text ?? "").split(/\s+/).slice(0, 5).join(" ");
@@ -1404,7 +1404,8 @@ async function runBook(entry, index) {
     const scrolled = await setFlow("scrolled");
     row.shots.push(await shot(dir, "03-scroll.png"));
     check(scope, "Scroll shows text or an image", hasContent(scrolled), scrolled.text?.slice(0, 50));
-    check(scope, "Pages → Scroll keeps the place", samePlace(before, scrolled), `section ${before.section}→${scrolled.section}, ${before.fraction?.toFixed(3)}→${scrolled.fraction?.toFixed(3)}`);
+    // Scroll mode shows a little text above the anchor, so the switch may move up to about a screen (DECISIONS.md, page layout).
+    check(scope, "Pages → Scroll keeps the place", samePlace(before, scrolled, 0.002), `section ${before.section}→${scrolled.section}, ${before.fraction?.toFixed(3)}→${scrolled.fraction?.toFixed(3)}`);
     // In a chapter shorter than a screen and a half, two swipes scroll past its end onto blank paper.
     const short = scrolled.shortSection;
     await swipeForward(scrolled);

@@ -3,7 +3,8 @@ import { useEffect, useRef } from "react";
 import { Dimensions, PixelRatio } from "react-native";
 
 import { sortedBooks } from "@/domain/library";
-import { addFont, getLibrary, importFiles, loadLibrary, saveSettings } from "@/library/store";
+import { addFont, getLibrary, importFiles, loadLibrary, saveSetting, saveSettings } from "@/library/store";
+import { resolvedFor } from "@/settings/customization";
 import { appendNote, takeCommands, takePendingImports } from "@/renderer/book-url";
 
 import { parseMatrixCommand, readerDebug, type MatrixCommand } from "./matrix-command";
@@ -93,6 +94,11 @@ export function MatrixChannel() {
         case "settings":
           await saveSettings({ tapZones: command.tapZones });
           return { settings: getLibrary().settings };
+        case "setting": {
+          // The book's own layer sits above a reading profile, so the open page always shows it.
+          await saveSetting(command.book ? "book" : "global", command.key, command.value, command.book);
+          return { key: command.key, value: resolvedFor(getLibrary().custom, command.book)[command.key] };
+        }
         case "drain-imports": {
           const uris = takePendingImports();
           const results = await importFiles(uris.map((uri) => ({ uri, name: uri.split("/").pop() ?? null })));

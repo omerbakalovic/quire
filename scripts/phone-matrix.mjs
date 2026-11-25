@@ -7,7 +7,7 @@
  * measurements from files/quire-report.jsonl.
  *
  *   npm run phone-matrix -- [--quick] [--fresh] [--only frank,arabic]
- *     [--skip-books] [--skip-notes] [--skip-taps] [--skip-lifecycle]
+ *     [--skip-books] [--skip-notes] [--skip-taps] [--skip-size] [--skip-lifecycle]
  *     [--background-s 90] [--apk-reader] [--serial SERIAL] [--adb PATH] [--out DIR]
  *     [--package ID] [--stall-s 90] [--wait-you-s 300]
  *     [--phone] [--avd quire] [--keep-emulator] [--install]
@@ -20,11 +20,12 @@
  * an emulator a missing Quire Dev is installed from android/app/build (--install
  * reinstalls it anywhere). --phone drives the phone on USB, for a short final pass.
  *
- * --quick checks a fix in a few minutes: five books that cover the usual
- * breakage, notes in two of them, the tap setting, no lifecycle. Run the full
- * matrix before closing a milestone.
+ * --quick checks a fix in a few minutes: six books that cover the usual
+ * breakage, notes in two of them, the tap setting, text size, no lifecycle.
+ * Run the full matrix before closing a milestone.
  * --fresh clears the app's data and imports every book again. Only needed when
- * import code changed; a reinstall keeps the library.
+ * import code changed; a reinstall keeps the library. Without it, books the
+ * library lacks (a fixture added since) are imported and nothing is cleared.
  * The reader page is rebuilt from this checkout and pushed to the debug build,
  * so reader-page changes need no gradle build (app code comes from Metro).
  * --apk-reader tests the reader page built into the APK instead.
@@ -68,6 +69,7 @@ const { values: opts } = parseArgs({
     "skip-notes": { type: "boolean", default: false },
     "skip-taps": { type: "boolean", default: false },
     "skip-lifecycle": { type: "boolean", default: false },
+    "skip-size": { type: "boolean", default: false },
     "background-s": { type: "string", default: "90" },
     "stall-s": { type: "string", default: "90" },
     "wait-you-s": { type: "string", default: "300" },
@@ -95,11 +97,11 @@ const DEV_READER = "files/quire-dev";
 const deflate = promisify(zlib.deflate);
 
 // --quick: the books that catch most breakage, in a few minutes.
-const QUICK = ["frankenstein", "arabic", "sous-le-vent", "noteref", "pmd-link"];
+const QUICK = ["frankenstein", "arabic", "sous-le-vent", "noteref", "pmd-link", "px-sizes"];
 
 // Each book is here for a reason; the reason is printed in the summary.
 const CATALOG = [
-  { file: "se-frankenstein.epub", dir: "downloaded", why: "baseline, restore and lifecycle", key: "frankenstein" },
+  { file: "se-frankenstein.epub", dir: "downloaded", why: "baseline, restore and lifecycle", key: "frankenstein", size: true },
   { file: "pg1342.epub", dir: "downloaded", why: "plain Gutenberg EPUB" },
   { file: "pg2600.epub", dir: "downloaded", why: "367 sections" },
   { file: "pg1184-images.epub", dir: "downloaded", why: "81 MB with images", openTimeoutMs: 180000 },
@@ -114,6 +116,7 @@ const CATALOG = [
   { file: "drm.epub", dir: "fixtures", why: "DRM, must be refused", expect: "drm" },
   { file: "scripted.epub", dir: "fixtures", why: "scripts must not run" },
   { file: "font-obfuscation.epub", dir: "fixtures", why: "obfuscated fonts" },
+  { file: "px-sizes.epub", dir: "fixtures", why: "text set in px must follow the text size", key: "px-sizes", size: true },
   {
     file: "Moby-Dick.Power.foot.-.Herman.Melville.epub",
     as: "pmd-foot.epub",
@@ -1018,7 +1021,7 @@ async function shot(dir, name) {
   }
 }
 
-const results = { checks: [], books: [], notes: [], taps: [], lifecycle: [], imports: [], notCovered: [], stalls: [] };
+const results = { checks: [], books: [], notes: [], taps: [], sizes: [], lifecycle: [], imports: [], notCovered: [], stalls: [] };
 
 /** pass: true, false, or null for "does not apply". */
 function check(scope, name, pass, detail = "") {
@@ -1053,6 +1056,24 @@ function samePlace(a, b, within = 0.0005) {
   const contains = (st, text) => text.length > 0 && (st.pageText ?? st.text ?? "").includes(text);
   const startOf = (st) => (st.pageText ?? st.text ?? "").split(/\s+/).slice(0, 5).join(" ");
   return contains(b, startOf(a)) || contains(a, startOf(b)) || (phrase(a).length > 0 && contains(b, phrase(a)));
+}
+
+// foliate's own CFI parsing and order, loaded as a module of its own so Node needs no package type for it.
+const epubcfi = await import(`data:text/javascript,${encodeURIComponent(readFileSync(join(ROOT, "vendor", "foliate-js", "epubcfi.js"), "utf8"))}`);
+
+/**
+ * Whether the text that started page `a` is on page `b`, by CFI: after a
+ * relayout the reader goes back to the page that holds it. Stricter than
+ * samePlace, which a book with repeated sentences can satisfy anywhere.
+ */
+function keptStart(a, b) {
+  if (!a?.cfi || !b?.cfi) return false;
+  try {
+    const anchor = epubcfi.collapse(a.cfi);
+    return epubcfi.compare(epubcfi.collapse(b.cfi), anchor) <= 0 && epubcfi.compare(anchor, epubcfi.collapse(b.cfi, true)) <= 0;
+  } catch {
+    return samePlace(a, b);
+  }
 }
 
 const isRelocate = (line) => line.source === "reader" && line.phase === "relocate";
@@ -1185,6 +1206,21 @@ function catalog() {
 
 async function freshImport(entries, frankenstein) {
   say("importing every book again");
+  await pushAndImport(entries, frankenstein);
+  results.notCovered.push("The system file picker: it is the phone's own UI, so a person picks one book by hand.");
+}
+
+/** Books in the catalog that a kept library lacks, such as a fixture added since the last --fresh. Nothing is cleared. */
+async function importMissing(entries) {
+  const library = await send("hello");
+  const have = new Set(library.books.map((book) => book.id));
+  const missing = entries.filter((entry) => entry.expect !== "drm" && !have.has(entry.id));
+  if (!missing.length) return;
+  say(`importing what the library lacks: ${missing.map((entry) => entry.name).join(", ")}`);
+  await pushAndImport(missing, null);
+}
+
+async function pushAndImport(entries, frankenstein) {
   await shell(`mkdir -p ${EXTERNAL}`).catch(() => {});
   const names = [];
   for (const entry of entries) {
@@ -1210,7 +1246,6 @@ async function freshImport(entries, frankenstein) {
     check("duplicate-frankenstein.epub", 'the same bytes again import as "duplicate"', row?.kind === "duplicate", row?.kind ?? "no import line");
   }
   await shell(`rm -f ${names.map((name) => `${EXTERNAL}/${name}`).join(" ")}`).catch(() => {});
-  results.notCovered.push("The system file picker: it is the phone's own UI, so a person picks one book by hand.");
 }
 
 const readerJs = () => join(ROOT, "assets", "reader", "reader.js");
@@ -1646,6 +1681,121 @@ async function runTapSetting(arabic, frankenstein) {
   }
 }
 
+/**
+ * Text size, the setting the Aa panel's – and + change, set through the command
+ * channel in the book's own layer (above any profile). Body text must grow with
+ * it, also where the book sets sizes in px (emulator run 11), the place must hold
+ * through each relayout, and the next chapter must open at the new size.
+ */
+async function setTextSize(entry, size) {
+  return send("setting", { key: "type.fontSize", value: size, book: entry.id });
+}
+
+/** The page after a size change: once the body text is at the expected size (or 5 s pass) and the relayout is over. */
+async function resized(from, expectPx) {
+  await settle(from, { timeout: 4000, quietMs: 400 });
+  const end = Date.now() + 5000;
+  let st = await state();
+  while (!(st.fontPx !== null && Math.abs(st.fontPx - expectPx) <= expectPx * 0.03) && Date.now() < end) {
+    await sleep(300);
+    st = await state();
+  }
+  await settle(log.mark(), { timeout: 800, quietMs: 300 });
+  return state();
+}
+
+/** A page of body text: page 3 of the first chapter with text, so a jump back to its heading shows. */
+async function textPage() {
+  let st = await goToStart();
+  for (let i = 0; i < 15 && (st.fontPx === null || st.textLength < 300); i++) {
+    const from = log.mark();
+    await reader("turn", { dir: "next" });
+    await settle(from, { timeout: 3000, quietMs: 250 });
+    st = await state();
+  }
+  const from = log.mark();
+  const shown = (await reader("show-page", { page: 2 })).page;
+  if (shown?.shown) await settle(from, { timeout: 2000, quietMs: 300 });
+  return state();
+}
+
+async function goToPlace(target) {
+  const from = log.mark();
+  await reader("goto", { target });
+  await settle(from, { timeout: 3000, quietMs: 300 });
+  return state();
+}
+
+async function runTextSize(entry, index) {
+  const scope = `text size, ${entry.name}`;
+  const dir = join(OUT, `${String(index + 1).padStart(2, "0")}-${stem(entry.name)}`);
+  await mkdir(dir, { recursive: true });
+  const row = { name: entry.name, steps: [], shots: [] };
+  results.sizes.push(row);
+  const opened = await openBook(entry);
+  if (!check(scope, "opens", opened?.phase === "opened", opened?.error ?? opened?.phase ?? "no opened line")) {
+    await send("library").catch(passFatal);
+    return;
+  }
+  try {
+    let cleared;
+    try {
+      // A size left in this book's layer by an earlier run would skew the baseline.
+      cleared = await send("setting", { key: "type.fontSize", value: null, book: entry.id }, { timeout: 8000, recover: false });
+    } catch (error) {
+      results.notCovered.push(`Text size: the app did not take the setting command (${error.message}); it needs this checkout's app code from Metro.`);
+      return;
+    }
+    const baseSize = typeof cleared?.value === "number" ? cleared.value : 100;
+    await ensurePaginated(await state());
+    const base = await textPage();
+    if (!check(scope, "finds a page of body text", base.fontPx !== null && base.textLength >= 300, base.text?.slice(0, 50))) return;
+    const note = (label, st) => row.steps.push({ label, page: st.page, section: st.section, fontPx: st.fontPx, cfi: st.cfi, text: st.text?.slice(0, 60) });
+    note(`${baseSize}%`, base);
+    row.shots.push(await shot(dir, `size-${baseSize}.png`));
+
+    // The next chapter's body text at the start size, to compare with it once the size changed.
+    const nextSection = base.section + 1 < (base.sections ?? 0) ? base.section + 1 : null;
+    let nextBase = null;
+    if (nextSection !== null) {
+      nextBase = await goToPlace(nextSection);
+      await goToPlace(base.cfi);
+    }
+
+    const where = (a, b) => `page ${a.page}→${b.page}, "${a.text?.slice(0, 30)}" → "${b.text?.slice(0, 30)}"${b.page === 1 && a.page !== 1 ? ", landed on the chapter's first page" : ""} (${a.cfi} → ${b.cfi})`;
+    let before = base;
+    for (const size of [baseSize + 10, baseSize + 20]) {
+      const from = log.mark();
+      await setTextSize(entry, size);
+      const ratio = size / baseSize;
+      const st = await resized(from, base.fontPx * ratio);
+      note(`${size}%`, st);
+      row.shots.push(await shot(dir, `size-${size}.png`));
+      const grew = st.fontPx !== null && Math.abs(st.fontPx / base.fontPx - ratio) <= 0.03;
+      check(scope, `at ${size}% body text grows to about ${Math.round(ratio * 100)}%`, grew, `${base.fontPx} → ${st.fontPx} css px`);
+      check(scope, `at ${size}% the place holds`, keptStart(before, st), where(before, st));
+      before = st;
+    }
+    if (nextSection !== null && nextBase?.fontPx) {
+      const ratio = (baseSize + 20) / baseSize;
+      const next = await goToPlace(nextSection);
+      note(`next chapter at ${baseSize + 20}%`, next);
+      check(scope, "the next chapter opens at the new size", next.fontPx !== null && Math.abs(next.fontPx / nextBase.fontPx - ratio) <= 0.03, `${nextBase.fontPx} → ${next.fontPx} css px`);
+      before = await goToPlace(before.cfi);
+    }
+    const from = log.mark();
+    await setTextSize(entry, null);
+    const back = await resized(from, base.fontPx);
+    note(`back to ${baseSize}%`, back);
+    row.shots.push(await shot(dir, `size-back.png`));
+    check(scope, `back at ${baseSize}% body text is its own size again`, back.fontPx !== null && Math.abs(back.fontPx - base.fontPx) <= 0.3, `${base.fontPx} → ${back.fontPx} css px`);
+    check(scope, `back at ${baseSize}% the place holds`, keptStart(before, back), where(before, back));
+  } finally {
+    await setTextSize(entry, null).catch(passFatal);
+    await send("library").catch(passFatal);
+  }
+}
+
 let rotation = null;
 
 async function restoreRotation() {
@@ -1793,6 +1943,17 @@ function summary(meta) {
       "",
     );
   }
+  if (results.sizes.length) {
+    parts.push(
+      "## Text size",
+      "",
+      table(
+        ["Book", "Step", "Body text", "Page", "Starts with"],
+        results.sizes.flatMap((row) => row.steps.map((step) => [row.name, step.label, step.fontPx === null ? "" : `${step.fontPx} css px`, step.page ?? "", step.text ?? ""])),
+      ),
+      "",
+    );
+  }
   const scoped = (scope) => results.checks.filter((c) => c.scope === scope);
   for (const [title, scope] of [["Tap direction", "tap direction"], ["Restore and lifecycle", "restore and lifecycle"]]) {
     const rows = scoped(scope);
@@ -1815,7 +1976,8 @@ function html(meta) {
   for (const [scope, checks] of groups) {
     const book = results.books.find((row) => row.name === scope);
     const notes = results.notes.filter((n) => n.book === scope && n.shot);
-    const shots = [...(book?.shots ?? []), ...notes.map((n) => n.shot)].filter(Boolean);
+    const size = results.sizes.find((row) => `text size, ${row.name}` === scope);
+    const shots = [...(book?.shots ?? []), ...notes.map((n) => n.shot), ...(size?.shots ?? [])].filter(Boolean);
     sections.push(`<section><h2>${esc(scope)}</h2>${book?.why ? `<p class="why">${esc(book.why)}</p>` : ""}<ul>${checks
       .map((c) => `<li class="${c.pass === null ? "na" : c.pass ? "ok" : "bad"}">${c.pass === null ? "–" : c.pass ? "✓" : "✗"} ${esc(c.name)}${c.detail ? ` <span>${esc(c.detail)}</span>` : ""}</li>`)
       .join("")}</ul><div class="shots">${shots.map((s) => `<a href="${esc(s)}"><img src="${esc(s)}" loading="lazy" alt="${esc(s)}"></a>`).join("")}</div></section>`);
@@ -1882,6 +2044,7 @@ async function main() {
         await launch();
         await log.clear();
         if (opts.fresh) await freshImport(entries, frankenstein);
+        else await importMissing(entries);
       });
 
       if (!opts["skip-books"]) {
@@ -1921,6 +2084,18 @@ async function main() {
           } catch (error) {
             passFatal(error);
             check("tap direction", "tap routine finished", false, error.message);
+          }
+        }
+      }
+      if (!opts["skip-size"]) {
+        for (const entry of entries.filter((e) => e.size)) {
+          say(`— text size in ${entry.name}`);
+          try {
+            await guard(`text size in ${entry.name}`, () => runTextSize(entry, entries.indexOf(entry)));
+          } catch (error) {
+            passFatal(error);
+            check(`text size, ${entry.name}`, "text size routine finished", false, error.message);
+            await send("library").catch(passFatal);
           }
         }
       }

@@ -23,6 +23,8 @@ import { ControlBars } from "@/reader/ControlBars";
 import { confirmRemoveFont, pickFont } from "@/reader/font-import";
 import { LightVeil } from "@/reader/LightVeil";
 import { useBrightness } from "@/reader/useBrightness";
+import { TurnOverlay, type TurnOverlayHandle } from "@/reader/TurnOverlay";
+import { useReduceMotion } from "@/reader/useReduceMotion";
 import { QuickPanel } from "@/reader/QuickPanel";
 import { chromeFor, ChromeProvider } from "@/reader/chrome";
 import { TocPanel } from "@/reader/TocPanel";
@@ -93,6 +95,12 @@ export default function BookScreen() {
   const [fixedLayout, setFixedLayout] = useState(false);
   const tapZones = library.settings.tapZones;
   const screenRef = useRef<ComponentRef<typeof View>>(null);
+  // Page-turn styles (docs/customization.md, 5.3): the picture of the page and the overlay that animates it.
+  const pageRef = useRef<ComponentRef<typeof View>>(null);
+  const overlayRef = useRef<TurnOverlayHandle>(null);
+  const captureTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [pageSize, setPageSize] = useState({ width: 0, height: 0 });
+  const reduceMotion = useReduceMotion();
   const debugWaiters = useRef(new Map<string, (result: unknown) => void>());
   const debugSeq = useRef(0);
 
@@ -101,6 +109,8 @@ export default function BookScreen() {
   }, []);
   const reader = useLook(library, id ?? null, phase === "reading", post);
   useBrightness(reader.settings["light.brightness"], phase === "reading");
+  const turnStyle =
+    fixedLayout || flow !== "paginated" || (reduceMotion && reader.settings["turn.followReduceMotion"]) ? "none" : reader.settings["turn.style"];
   // A string, so the effect that sends it runs only when a gesture really changes.
   const gestures = JSON.stringify(gestureMap(reader.settings));
 
@@ -243,6 +253,7 @@ export default function BookScreen() {
         setChapter(message.tocLabel);
         setTocHref(message.tocHref);
         setPageInChapter((was) => (was.page === message.page && was.pages === message.pages ? was : { page: message.page, pages: message.pages }));
+        scheduleCapture();
         // Scroll mode has no pages, so it gives no samples; the last speed stays.
         speedState.current = recordTurn(speedState.current, {
           at: Date.now(),
@@ -260,6 +271,9 @@ export default function BookScreen() {
       }
       case "action":
         runAction(message.action);
+        return;
+      case "turning":
+        void startTurn(message.direction);
         return;
       case "back-stack":
         if (message.id !== id) return;
@@ -297,8 +311,8 @@ export default function BookScreen() {
 
   // Settings changed elsewhere reach the open page.
   useEffect(() => {
-    if (id && phase === "reading") post({ type: "settings", id, tapZones, gestures: JSON.parse(gestures) });
-  }, [id, phase, tapZones, gestures, post]);
+    if (id && phase === "reading") post({ type: "settings", id, tapZones, gestures: JSON.parse(gestures), turns: turnStyle !== "none" });
+  }, [id, phase, tapZones, gestures, turnStyle, post]);
 
   // The system bars can change, for example on rotation. The page keeps its sheet and text clear of them.
   useEffect(() => {
@@ -370,6 +384,38 @@ export default function BookScreen() {
     if (!id) return;
     note({ phase: "jump", id, target, from: latest.current?.cfi ?? null });
     post({ type: "goto", id, target });
+  }
+
+  /**
+   * Take a picture of the page once it has settled after a move, so the next
+   * turn can animate. Nothing is captured while something covers the page.
+   */
+  function scheduleCapture() {
+    overlayRef.current?.invalidate();
+    if (captureTimer.current) clearTimeout(captureTimer.current);
+    captureTimer.current = setTimeout(() => {
+      captureTimer.current = null;
+      if (noteOpen.current || tocOpenRef.current || lookOpenRef.current) return;
+      void overlayRef.current?.capture().then((ms) => {
+        if (ms !== null) note({ phase: "turn-capture", id, ms });
+      });
+    }, CAPTURE_AFTER_MS);
+  }
+
+  /** The page asks to turn: put the picture up first, then let it turn underneath. A turn during an animation ends it. */
+  async function startTurn(direction: 1 | -1) {
+    const overlay = overlayRef.current;
+    const asked = performance.now();
+    if (overlay?.busy()) overlay.finish();
+    // The page is about to move; its relocate asks for the next picture.
+    if (captureTimer.current) clearTimeout(captureTimer.current);
+    captureTimer.current = null;
+    const shown = overlay ? await overlay.show(direction) : false;
+    post({ type: "turn-go", id });
+    if (shown) {
+      overlay?.play();
+      note({ phase: "turn-start", id, style: turnStyle, firstFrameMs: Math.round(performance.now() - asked) });
+    }
   }
 
   /** A gesture's action (docs/customization.md, 3.5): the same thing the matching control does. */
@@ -457,6 +503,15 @@ export default function BookScreen() {
       <View ref={screenRef} style={[styles.screen, { backgroundColor: reader.look.page }]} collapsable={false}>
         <StatusBar style={chrome.dark ? "light" : "dark"} />
         <Stack.Screen options={{ headerShown: false }} />
+        <View
+          ref={pageRef}
+          style={styles.page}
+          collapsable={false}
+          onLayout={(event) => {
+            const { width, height } = event.nativeEvent.layout;
+            setPageSize((was) => (was.width === width && was.height === height ? was : { width, height }));
+          }}
+        >
         {pageUrl && !message ? (
           <WebView<object>
             key={mount}
@@ -491,6 +546,20 @@ export default function BookScreen() {
               fraction,
               ...secondsLeft(timeLeft(speed, { page: pageInChapter.page, pages: pageInChapter.pages, fraction })),
             }}
+          />
+        ) : null}
+        </View>
+        {phase === "reading" && turnStyle !== "none" ? (
+          <TurnOverlay
+            ref={overlayRef}
+            target={pageRef}
+            style={turnStyle}
+            durationMs={reader.settings["turn.duration"]}
+            width={pageSize.width}
+            height={pageSize.height}
+            onFrameTimes={(report) => note({ phase: "turn-anim", id, ...report })}
+            // A capture asked for during an animation was refused; take it once the overlay is gone.
+            onIdle={scheduleCapture}
           />
         ) : null}
         {phase === "reading" ? <LightVeil dimmer={reader.settings["light.dimmer"]} warmth={reader.settings["light.warmth"]} /> : null}
@@ -581,6 +650,7 @@ export default function BookScreen() {
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: "#111" },
   web: { flex: 1, backgroundColor: "#fff" },
+  page: { flex: 1 },
   overlay: {
     ...StyleSheet.absoluteFill,
     alignItems: "center",
@@ -606,3 +676,6 @@ const styles = StyleSheet.create({
 function secondsLeft(left: { chapter: number | null; book: number | null }) {
   return { secondsLeftChapter: left.chapter, secondsLeftBook: left.book };
 }
+
+// Long enough for the page to settle after a turn, and for header and footer lines to update.
+const CAPTURE_AFTER_MS = 300;

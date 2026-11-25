@@ -349,3 +349,11 @@ Gestures share one action catalog with the controls, so anything a button does a
 ## Battery and time left, Milestone 4
 
 Battery uses `expo-battery` 58.0.4 (MIT, maintained by Expo, matched to SDK 58). It needs no permission. Like brightness, it is loaded lazily, so an APK built before it shows no battery instead of crashing, and it listens only while a slot shows the battery. Time left was planned for Milestone 7's reading statistics; a session-only estimate now costs little and needs no storage. It takes the median of recent one-page forward turns, so a jump, a chapter change, a skim or a break never skews it, and it stays blank until there are three samples rather than guessing.
+
+## Page-turn engine, Milestone 4 (spike)
+
+Skia (`@shopify/react-native-skia`, MIT, Shopify) draws the overlay, and Reanimated drives progress on the UI thread, so an animation doesn't wait on the JS thread. All three are the versions Expo SDK 58 pins. The picture of the page comes from Skia's `makeImageFromView` on a view that holds the WebView and the header and footer lines, so the controls are never in it. If that proves slow or blank on the phone, the fallback in 5.3 (a Kotlin `PixelCopy` in the loopback module) replaces only the capture.
+
+The page turns itself, so the overlay has to be up before the page moves. The page asks ("turning"), the app shows the picture at progress 0, waits two frames for it to be on screen, and answers "turn-go". The page doesn't wait more than 150 ms, so a lost answer costs one plain turn, never a stuck page. A turn with no fresh picture (just after a jump or a look change) is a plain turn too. Built-in packs are checked in `npm test` by compiling them with CanvasKit, the same SkSL compiler, and drawing them at set progress values.
+
+Still to measure on the emulator and the Xiaomi 15T: APK size added, capture time, first-frame latency (tap to overlay), and frame times at 120 Hz.

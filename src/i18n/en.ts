@@ -107,6 +107,7 @@ export const en = {
       "gesture.swipeDown": "Swipe down (Pages mode)",
       "gesture.twoFingerTap": "Two-finger tap",
       "turn.style": "Page-turn animation",
+      "turn.duration": "Page-turn length",
       "turn.followReduceMotion": "Follow the phone's reduce motion setting",
     } as Record<string, string>,
     turns: { none: "None", slide: "Slide", fade: "Fade" } as Record<string, string>,

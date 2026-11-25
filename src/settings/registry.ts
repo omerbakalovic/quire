@@ -106,6 +106,7 @@ export const SETTINGS = [
   { key: "gesture.swipeDown", default: "none", ...GESTURE },
   { key: "gesture.twoFingerTap", default: "none", ...GESTURE },
   { key: "turn.style", type: "choice", default: "none", choices: TURN_STYLES, group: "turns", scopes: NOT_SESSION, relayout: false, depth: "standard" },
+  { key: "turn.duration", type: "number", default: 280, min: 120, max: 1200, step: 20, group: "turns", scopes: NOT_SESSION, relayout: false, depth: "standard" },
   { key: "turn.followReduceMotion", type: "boolean", default: true, group: "turns", scopes: ["global"], relayout: false, depth: "advanced" },
 ] as const satisfies readonly Setting[];
 

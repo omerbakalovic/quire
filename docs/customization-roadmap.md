@@ -336,8 +336,8 @@ Every milestone also checks: existing positions, profiles, overrides, fonts and 
 
 | Milestone | Status | Branch / PR | Verified |
 |---|---|---|---|
-| C1 Reading Look hub | Built; emulator and phone checked | `claude/project-thread-jxy4a7`, PR #13 | Cloud: unit tests, type check, reader bundle, Android JS export. Emulator run 14 (x86_64 debug build, 2026-11-26): Kotlin 40/40 incl. the backup tests; quick matrix 134 checks, 2 failed (the known noteref turn stuck at 0.567, as in run 12, fixed by PR #11), all 6 Reading Look checks pass; `library.v1.backup.json` byte-identical to the old v1 file. Phone run 16 (arm64 Quire Dev, f08f5a9, Frankenstein): 36/36, backup made |
-| C2 Live preview | Planned | | |
+| C1 Reading Look hub | Merged (PR #13); emulator and phone checked | PR #13 | Cloud: unit tests, type check, reader bundle, Android JS export. Emulator run 14 (x86_64 debug build, 2026-11-26): Kotlin 40/40 incl. the backup tests; quick matrix 134 checks, 2 failed (the known noteref turn stuck at 0.567, as in run 12, fixed by PR #11), all 6 Reading Look checks pass; `library.v1.backup.json` byte-identical to the old v1 file. Phone run 16 (arm64 Quire Dev, f08f5a9, Frankenstein): 36/36, backup made |
+| C2 Live preview | Built; emulator checked | `claude/project-thread-jxy4a7`, PR #14 | Cloud: unit tests incl. open-message parity and sample content, type check, Android JS export with the EPUB asset; desktop Chromium harness. Emulator run 17 (1e30d87, quick matrix): 135 checks, 2 failed (the same known noteref turns as run 14), all 7 Reading Look checks pass, preview opened in 1355 ms; memory +6.3 MB with the preview showing. Run 18 (ad5fede, look step only): 8/8, preview 1437 ms |
 | C3 App-wide theme | Planned | | |
 | C4 Colours and custom themes | Planned | | |
 | C5 Bars editor | Planned | | |
@@ -357,6 +357,14 @@ Built: `/look` route (old `/customize` redirects), fixed top with profile chips,
 Limitations: the Colours tab only picks a built-in theme (custom colours are C4). The editor uses the reading theme's colours; the rest of the app is still unthemed (C3). Revert does not bring back a font file deleted during the visit. No live sample preview yet (C2): from a book, the book under the editor shows the result after Back.
 
 Verified on the emulator (run 14): Aa's editor opens over the book; closing it with the command or the back key returns to the same page; the backup is made once and matches the old file. Run 14 screenshots showed the fixed top taking about 45 % of a tall screen; the text size row was made a single line afterwards; run 15 (emulator, 1c6e8bf, Frankenstein only) passed 36/36 and the fixed top is now about 27 % of the screen with the size row on one line. Phone run 16 passed; during it a matrix tap hit a web link and a later tap confirmed the Open dialog (fixed in the matrix, 0befcd1). Not checked yet: TalkBack, a 360 dp screen, profile menu and Revert by hand.
+
+### C2 notes (2026-11-26)
+
+Built: `assets/sample/quire-sample.epub` (6.4 KB, made by `npm run sample` from `scripts/build-sample.mjs`, deterministic so it imports once with a stable id); `src/look/PreviewPane.tsx`, a second WebView with the real reader page, opening the sample through the reader's own open message (`src/reader/open-message.ts`, shared with the reader) and receiving the same `look` messages; colour changes go at once, relayouts at most every 120 ms; the page is laid out at the screen's width and drawn at 0.62 scale so lines break as in a book; the reader's own header and footer lines with sample info; side taps turn the sample's pages; Hide/Show above the pane (30 % of the screen height in portrait, 40 % in landscape). The matrix's Reading Look step waits for the preview's `opened` note.
+
+Limitations: "Preview current book" is C8. The preview takes about 1.3 to 1.4 s to appear on the emulator (a spinner shows meanwhile); its first open per install also imports the sample.
+
+Verified on the emulator (runs 17, 18): the sample page fills the pane, centred, with whole lines; Dark applies to the preview and the editor; the Informative bar preset shows a header and footer inside the preview; Revert puts bars and theme back. Not checked yet: a phone pass, landscape, a 360 dp screen.
 
 ## 8. Checkpoints and handoff
 

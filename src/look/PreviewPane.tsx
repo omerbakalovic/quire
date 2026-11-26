@@ -243,7 +243,7 @@ export function PreviewPane({ settings, fonts }: Props) {
 const styles = StyleSheet.create({
   wrap: { flex: 1, overflow: "hidden" },
   // Centred on the pane and scaled about its own centre (the default origin), so the scaled page fills the
-  // pane's height exactly. transformOrigin isn't used: the emulator drew the page shifted down and cut off with it.
+  // pane's height exactly without depending on transformOrigin support.
   page: { position: "absolute", elevation: 2 },
   web: { flex: 1 },
   cover: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", padding: 16 },

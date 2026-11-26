@@ -336,7 +336,7 @@ Every milestone also checks: existing positions, profiles, overrides, fonts and 
 
 | Milestone | Status | Branch / PR | Verified |
 |---|---|---|---|
-| C1 Reading Look hub | Built; emulator-checked, not yet on the phone | `claude/project-thread-jxy4a7`, PR #13 | Cloud: unit tests, type check, reader bundle, Android JS export. Emulator run 14 (x86_64 debug build, 2026-11-26): Kotlin 40/40 incl. the backup tests; quick matrix 134 checks, 2 failed (the known noteref turn stuck at 0.567, as in run 12, fixed by PR #11), all 6 Reading Look checks pass; `library.v1.backup.json` byte-identical to the old v1 file. Not yet: phone pass |
+| C1 Reading Look hub | Built; emulator and phone checked | `claude/project-thread-jxy4a7`, PR #13 | Cloud: unit tests, type check, reader bundle, Android JS export. Emulator run 14 (x86_64 debug build, 2026-11-26): Kotlin 40/40 incl. the backup tests; quick matrix 134 checks, 2 failed (the known noteref turn stuck at 0.567, as in run 12, fixed by PR #11), all 6 Reading Look checks pass; `library.v1.backup.json` byte-identical to the old v1 file. Phone run 16 (arm64 Quire Dev, f08f5a9, Frankenstein): 36/36, backup made |
 | C2 Live preview | Planned | | |
 | C3 App-wide theme | Planned | | |
 | C4 Colours and custom themes | Planned | | |
@@ -356,7 +356,7 @@ Built: `/look` route (old `/customize` redirects), fixed top with profile chips,
 
 Limitations: the Colours tab only picks a built-in theme (custom colours are C4). The editor uses the reading theme's colours; the rest of the app is still unthemed (C3). Revert does not bring back a font file deleted during the visit. No live sample preview yet (C2): from a book, the book under the editor shows the result after Back.
 
-Verified on the emulator (run 14): Aa's editor opens over the book; closing it with the command or the back key returns to the same page; the backup is made once and matches the old file. Run 14 screenshots showed the fixed top taking about 45 % of a tall screen; the text size row was made a single line afterwards; run 15 (emulator, 1c6e8bf, Frankenstein only) passed 36/36 and the fixed top is now about 27 % of the screen with the size row on one line. Not checked yet: the phone, TalkBack, a 360 dp screen, profile menu and Revert by hand.
+Verified on the emulator (run 14): Aa's editor opens over the book; closing it with the command or the back key returns to the same page; the backup is made once and matches the old file. Run 14 screenshots showed the fixed top taking about 45 % of a tall screen; the text size row was made a single line afterwards; run 15 (emulator, 1c6e8bf, Frankenstein only) passed 36/36 and the fixed top is now about 27 % of the screen with the size row on one line. Phone run 16 passed; during it a matrix tap hit a web link and a later tap confirmed the Open dialog (fixed in the matrix, 0befcd1). Not checked yet: TalkBack, a 360 dp screen, profile menu and Revert by hand.
 
 ## 8. Checkpoints and handoff
 

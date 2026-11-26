@@ -181,7 +181,8 @@ export function PreviewPane({ settings, fonts }: Props) {
             {
               width: screen.width,
               height: size.height / PAGE_SCALE,
-              left: (size.width - screen.width * PAGE_SCALE) / 2,
+              left: (size.width - screen.width) / 2,
+              top: (size.height - size.height / PAGE_SCALE) / 2,
               backgroundColor: look.page,
               transform: [{ scale: PAGE_SCALE }],
             },
@@ -241,8 +242,9 @@ export function PreviewPane({ settings, fonts }: Props) {
 
 const styles = StyleSheet.create({
   wrap: { flex: 1, overflow: "hidden" },
-  // Scaled about the top-left corner; transformOrigin keeps the page's top edge at the pane's top.
-  page: { position: "absolute", top: 0, transformOrigin: "top left", elevation: 2 },
+  // Centred on the pane and scaled about its own centre (the default origin), so the scaled page fills the
+  // pane's height exactly. transformOrigin isn't used: the emulator drew the page shifted down and cut off with it.
+  page: { position: "absolute", elevation: 2 },
   web: { flex: 1 },
   cover: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", padding: 16 },
   failed: { fontSize: 14, textAlign: "center" },

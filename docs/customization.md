@@ -1,6 +1,23 @@
 # Customization design
 
-Status: design, not built yet. Written 2026-11-23 for Milestones 4, 5, 7 and 8. It covers three things: how Quire's look and behaviour are customized as a whole, how the reader's layout (bars, buttons, margins, where controls sit) can be rearranged, and how people can make their own page-turn animations.
+The overhaul planned on 2026-11-26 (Reading Look hub, live preview, app-wide themes, bars editor, library look, reading bookmark) is in [customization-roadmap.md](customization-roadmap.md).
+
+Status: partly implemented as of 2026-11-23, through `m4-bars` at `cec1b25`. This document describes the target design for Milestones 4, 5, 7 and 8, not a list of shipped features. It covers Quire's appearance and behaviour, rearrangeable reader controls, and planned page-turn animations.
+
+## Implementation status
+
+| Area | Current implementation | Still planned |
+|---|---|---|
+| Settings and profiles | Typed registry; default/global/profile/book/session resolution; saved profiles; Settings > Reading look screen; Aa edits the active profile or book | Preset/profile export and import; settings search |
+| Typography and light | Publisher-relative text scale, spacing, alignment, margins, bundled/imported fonts, brightness, dimmer and warmth | Further advanced typography controls described below |
+| Themes | Seven built-in themes; themed reader chrome and footnote sheet | Custom theme editor and theme sharing |
+| Information bands | Six header/footer slots; title, author, chapter, chapter page/count, pages left, percent and clock; Bare/Classic/Informative presets | Battery and reading-time elements; live drag editor |
+| Control rows | Configurable top bar, quick row and bottom bar; Back, title, Contents, Aa, flow, chapter controls, slider and percent; wrapping on narrow screens | Bar styling, auto-hide options, additional actions and drag editing |
+| Library | Minimal rows or cover-coloured pills; optional covers, authors and progress | Folders, tags and the broader library design |
+| Page turns | Instant turns; registry placeholders for none/slide/fade, hidden from Reading look because effects are not implemented | Skia feasibility spike, overlay engine, effects, tunable packs and imports |
+| Gestures | Existing page taps/swipes and tap-direction setting | Assignable action catalog, edge gestures, volume keys and 3-by-3 grid |
+
+Layout presets currently replace only the six information slots; they do not replace the three control rows. The full preset descriptions below remain design targets. Reading-look changes preserve an anchor across repeated edits until the reader navigates. See [PROGRESS.md](../PROGRESS.md) for validation evidence and outstanding device checks.
 
 ## The short version
 
@@ -97,16 +114,16 @@ A theme is a small palette, not a stylesheet: `page`, `ink`, `inkMuted`, `link`,
 The page has fixed slots. Each holds an ordered list of elements (zero or more).
 
 ```
-┌──────────────────────────────────────┐
-│ [top bar: left ··········· right]    │  controls
-│ header:  left    center    right     │  ambient
-│                                      │
-│              book text               │
-│                                      │
-│ footer:  left    center    right     │  ambient
-│ [quick row: ···················]     │  controls
-│ [bottom bar: ··· slider ···]         │  controls
-└──────────────────────────────────────┘
+��������������������������������������Ŀ
+� [top bar: left ����������� right]    �  controls
+� header:  left    center    right     �  ambient
+�                                      �
+�              book text               �
+�                                      �
+� footer:  left    center    right     �  ambient
+� [quick row: �������������������]     �  controls
+� [bottom bar: ��� slider ���]         �  controls
+����������������������������������������
 ```
 
 Slots, not free placement, because they keep every layout readable at any font size and screen width, they line up with foliate's header and footer margin bands (today `applyMargin` in `src/reader-page/app.js` sizes those bands for the system bars), and they are easy to edit with a thumb.
@@ -140,7 +157,7 @@ Ambient elements take the theme's muted ink and the book's font size scaled down
 
 Gestures map to the same action catalog the controls use, so anything a button does a gesture can do:
 
-- Tap zones: left, middle and right by default (with the existing "reading" or "screen" direction setting); a 3×3 grid with an action per cell as P1, which also gives the spec's left-handed layout.
+- Tap zones: left, middle and right by default (with the existing "reading" or "screen" direction setting); a 3�3 grid with an action per cell as P1, which also gives the spec's left-handed layout.
 - Horizontal swipe turns pages (fixed). Vertical swipes, edge swipes (brightness on the left edge, font size on the right, spec 4E P1), a two-finger tap and volume keys are assignable.
 - Chapter navigation from anywhere (a horizon goal): Contents is in the default bottom bar and can also be put on a gesture or in the header, so it is never more than one tap away.
 - Long press stays reserved for text selection.
@@ -245,10 +262,10 @@ Not customizable, on purpose:
 
 | Milestone | Customization work |
 |---|---|
-| **4: Customization foundation, typography, themes, page turns** | Settings registry with all five layers, reading profiles and per-book overrides; quick panel and Customize screens generated from the registry; typography and margins (4D); theme tokens, built-in themes and the theme editor (4E); brightness, dimmer; reader layout slots, element catalog, Edit layout mode and the three layout presets; gestures mapped to actions (3×3 grid stays P1); the turn-pack format, snapshot overlay engine and the six built-in styles with tunable parameters and saved presets. Starts with the Skia spike. |
+| **4: Customization foundation, typography, themes, page turns** | Settings registry with all five layers, reading profiles and per-book overrides; quick panel and Customize screens generated from the registry; typography and margins (4D); theme tokens, built-in themes and the theme editor (4E); brightness, dimmer; reader layout slots, element catalog, Edit layout mode and the three layout presets; gestures mapped to actions (3�3 grid stays P1); the turn-pack format, snapshot overlay engine and the six built-in styles with tunable parameters and saved presets. Starts with the Skia spike. |
 | **5: Library and folders** | Library looks and fields through the registry, cover colour pills (from PR 3) as the default, folders, tags seeded from `dc:subject`, grouping. |
 | **7: Search, stats, backup** | `.quire` export and import for presets, profiles and themes, alongside full backup; time-left elements use reading speed. |
-| **8: Polish and hardening** | `.quireturn` import, `docs/turn-packs.md`, pack guards; layout list editor accessibility pass; 3×3 tap grid and left-handed layout. |
+| **8: Polish and hardening** | `.quireturn` import, `docs/turn-packs.md`, pack guards; layout list editor accessibility pass; 3�3 tap grid and left-handed layout. |
 | **9 (stretch)** | In-app pack editor, book CSS snippet, a pack "maker" if wanted. |
 
 ## 8. Open questions for the Milestone 4 plan

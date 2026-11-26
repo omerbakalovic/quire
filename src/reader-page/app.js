@@ -147,6 +147,11 @@ function attachTouches(view, doc, run) {
   doc.addEventListener(
     "touchstart",
     (event) => {
+      // Fingers the browser no longer lists are gone, even if their touchend never reached this
+      // document (seen on a phone at a wide table); a stale one would make every later tap look
+      // like a two-finger touch, and foliate's snap would then cancel the turn.
+      const down = new Set(Array.from(event.touches, (touch) => touch.identifier));
+      for (const finger of starts.keys()) if (!down.has(finger)) starts.delete(finger);
       if (starts.size === 0) {
         first = null;
         fingers = 0;

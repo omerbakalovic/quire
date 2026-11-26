@@ -27,6 +27,29 @@ test("matrix commands parse only known shapes", () => {
   });
 });
 
+test("setting takes a known key with a valid value, or null to clear it", () => {
+  assert.deepEqual(parseMatrixCommand('{"seq":9,"cmd":"setting","key":"type.fontSize","value":120,"book":"abc_12"}'), {
+    seq: 9,
+    cmd: "setting",
+    key: "type.fontSize",
+    value: 120,
+    book: "abc_12",
+  });
+  assert.deepEqual(parseMatrixCommand('{"seq":10,"cmd":"setting","key":"type.fontSize","value":null}'), {
+    seq: 10,
+    cmd: "setting",
+    key: "type.fontSize",
+    value: null,
+    book: null,
+  });
+  // Numbers are stepped and clamped the way the panel does it.
+  assert.equal((parseMatrixCommand('{"seq":11,"cmd":"setting","key":"type.fontSize","value":999}') as { value: unknown }).value, 300);
+  assert.equal(parseMatrixCommand('{"seq":12,"cmd":"setting","key":"type.nope","value":1}'), null);
+  assert.equal(parseMatrixCommand('{"seq":13,"cmd":"setting","key":"type.fontSize","value":"big"}'), null);
+  assert.equal(parseMatrixCommand('{"seq":14,"cmd":"setting","key":"type.fontSize","value":110,"book":"../x"}'), null);
+  assert.equal(parseMatrixCommand('{"seq":15,"cmd":"setting","key":"type.fontSize"}'), null);
+});
+
 test("add-font takes only a file in the app's own command font folder", () => {
   const path = "/data/user/0/app.quire.reader.dev/files/quire-cmd-fonts/Bookerly-Regular.ttf";
   assert.deepEqual(parseMatrixCommand(JSON.stringify({ seq: 7, cmd: "add-font", path })), { seq: 7, cmd: "add-font", path });

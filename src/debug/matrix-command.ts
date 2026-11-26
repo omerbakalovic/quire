@@ -3,6 +3,8 @@
  * through files/quire-cmd/. Each one is answered with one line in
  * files/quire-report.jsonl: { source: "matrix", seq, cmd, ok, result | error }.
  */
+import { cleanValue, settingFor, type SettingKey, type Value } from "../settings/registry.ts";
+
 export type MatrixCommand =
   | { seq: number; cmd: "hello" }
   | { seq: number; cmd: "open"; id: string }
@@ -10,6 +12,8 @@ export type MatrixCommand =
   | { seq: number; cmd: "settings"; tapZones: "reading" | "screen" }
   | { seq: number; cmd: "drain-imports" }
   | { seq: number; cmd: "add-font"; path: string }
+  /** One reading-look setting, for one book (its own layer, above any profile) or for all books. null clears it. */
+  | { seq: number; cmd: "setting"; key: SettingKey; value: Value | null; book: string | null }
   | { seq: number; cmd: "reader"; action: string; args: Record<string, unknown> };
 
 const BOOK_ID = /^[A-Za-z0-9_-]{1,80}$/;
@@ -39,6 +43,14 @@ export function parseMatrixCommand(raw: string): MatrixCommand | null {
       return { seq, cmd: command.cmd };
     case "add-font":
       return typeof command.path === "string" && FONT_PATH.test(command.path) ? { seq, cmd: "add-font", path: command.path } : null;
+    case "setting": {
+      if (typeof command.key !== "string" || !settingFor(command.key)) return null;
+      const value = command.value === null ? null : cleanValue(command.key, command.value);
+      if (command.value !== null && value === null) return null;
+      const book = command.book ?? null;
+      if (book !== null && (typeof book !== "string" || !BOOK_ID.test(book))) return null;
+      return { seq, cmd: "setting", key: command.key as SettingKey, value, book };
+    }
     case "open":
       return typeof command.id === "string" && BOOK_ID.test(command.id) ? { seq, cmd: "open", id: command.id } : null;
     case "settings":

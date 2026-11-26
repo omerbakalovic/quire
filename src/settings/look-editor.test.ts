@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { changeSetting, parseCustomization } from "./customization.ts";
-import { defaultTarget, editorLayers, isTab, MIN_PREVIEW_HEIGHT, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TAB_GROUPS, TABS, targetsFor, validTarget } from "./look-editor.ts";
+import { defaultTarget, editorLayers, isSideways, isTab, MIN_PREVIEW_HEIGHT, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TAB_GROUPS, TABS, targetsFor, validTarget } from "./look-editor.ts";
 import { SETTINGS } from "./registry.ts";
 
 const custom = parseCustomization({
@@ -51,4 +51,12 @@ test("the preview shrinks so the settings list keeps its least height, and goes 
   assert.equal(previewHeight({ width: 412, height: 915 }, 400), 400 - MIN_SETTINGS_HEIGHT);
   assert.equal(previewHeight({ width: 800, height: 360 }, 200), 0);
   assert.equal(previewHeight({ width: 800, height: 360 }, MIN_SETTINGS_HEIGHT + MIN_PREVIEW_HEIGHT - 1), 0);
+});
+
+test("a slider only takes a move that is clearly sideways", () => {
+  assert.equal(isSideways(30, 4), true);
+  assert.equal(isSideways(-30, 10), true);
+  assert.equal(isSideways(5, 0), false);
+  assert.equal(isSideways(20, 40), false);
+  assert.equal(isSideways(20, 15), false);
 });

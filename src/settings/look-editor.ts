@@ -97,3 +97,11 @@ export function previewHeight(window: { width: number; height: number }, free: n
   const height = Math.min(wanted, room);
   return height >= MIN_PREVIEW_HEIGHT ? height : 0;
 }
+
+/** How far, in dp, a touch on a slider moves before it counts as a slide rather than a tap. */
+export const SLIDE_SLOP = 8;
+
+/** A move is a slide when it has gone past the slop and is clearly more sideways than up or down. */
+export function isSideways(dx: number, dy: number): boolean {
+  return Math.abs(dx) > SLIDE_SLOP && Math.abs(dx) > Math.abs(dy) * 1.5;
+}

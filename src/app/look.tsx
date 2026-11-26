@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { findBook } from "@/domain/library";
@@ -13,7 +13,7 @@ import { SettingSlider } from "@/look/SettingSlider";
 import { ChromeProvider, chromeFor } from "@/reader/chrome";
 import { changedSince, resolvedFor, type Customization } from "@/settings/customization";
 import { formatNumber } from "@/settings/customize";
-import { defaultTarget, editorLayers, isTab, layerOf, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
+import { defaultTarget, editorLayers, isTab, layerOf, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
 import { THEMES, themeFor } from "@/settings/themes";
 
@@ -50,9 +50,22 @@ export default function LookScreen() {
   const [heights, setHeights] = useState({ screen: 0, top: 0, toggle: 0, tabs: 0 });
   const measure = (part: keyof typeof heights) => (event: LayoutChangeEvent) => {
     const height = event.nativeEvent.layout.height;
+    // The screen is measured without the keyboard, so the top doesn't move between fixed and scrolling while typing.
+    if (part === "screen" && Keyboard.isVisible()) return;
     setHeights((old) => (old[part] === height ? old : { ...old, [part]: height }));
   };
   const free = heights.screen > 0 ? heights.screen - heights.top - heights.toggle - heights.tabs : null;
+  const pinTop = free === null || free >= MIN_SETTINGS_HEIGHT;
+  // The keyboard folds the preview away (kept loaded) so the field being typed into stays in view.
+  const [keyboard, setKeyboard] = useState(false);
+  useEffect(() => {
+    const shown = Keyboard.addListener("keyboardDidShow", () => setKeyboard(true));
+    const hidden = Keyboard.addListener("keyboardDidHide", () => setKeyboard(false));
+    return () => {
+      shown.remove();
+      hidden.remove();
+    };
+  }, []);
   const paneHeight = previewHeight(window, free);
   const [tab, setTab] = useState<Tab>(isTab(params.tab) ? params.tab : "text");
   const [chosen, setTarget] = useState<Target>(() => defaultTarget(custom, bookId));
@@ -123,6 +136,49 @@ export default function LookScreen() {
     );
   };
 
+  // The top: fixed while the settings list keeps room under it, so a quick change is Aa → change → Back.
+  // In a short window (a landscape phone) it scrolls with the list instead (emulator run 19).
+  const fixedTop = (
+    <View style={[styles.top, !pinTop && styles.topInList, { borderBottomColor: chrome.line }]} onLayout={measure("top")}>
+      <ProfileBar custom={custom} onNotice={showNotice} />
+      <SettingSlider
+        settingKey="type.fontSize"
+        label={strings.textSize}
+        value={settings["type.fontSize"]}
+        format={(v) => formatNumber("type.fontSize", v, { system: words.system, off: words.off, bookDefault: words.bookDefault })}
+        onChange={(v) => change("type.fontSize", v)}
+        compact
+      />
+      {note(sizeOrigin, "type.fontSize", strings.textSize)}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.swatches}>
+        {THEME_IDS.map((id) => {
+          const swatch = THEMES[id];
+          const on = settings["theme.id"] === id;
+          return (
+            <Pressable
+              key={id}
+              onPress={() => change("theme.id", id)}
+              accessibilityRole="button"
+              accessibilityLabel={`${strings.theme}: ${words.themes[id]}`}
+              accessibilityState={{ selected: on }}
+              style={[styles.swatch, { backgroundColor: swatch.page, borderColor: on ? chrome.accent : swatch.inkMuted }, on && styles.swatchOn]}
+            >
+              <Text style={[styles.swatchText, { color: swatch.ink }]}>Aa</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      {note(themeOrigin, "theme.id", strings.theme)}
+      <View style={styles.targetRow}>
+        <Text style={[styles.small, { color: chrome.muted }]}>{strings.savingTo}</Text>
+        {/* Wraps rather than scrolls, so "This book" is never hidden off the edge (phone run 16). */}
+        <View style={[styles.chips, styles.wrap]}>
+          {targetsFor(custom, bookId).map((option) => chip(option, targetName(option), option === target, () => setTarget(option)))}
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <ChromeProvider chrome={chrome}>
       <View style={[styles.screen, { backgroundColor: chrome.panel }]} onLayout={measure("screen")}>
@@ -147,45 +203,7 @@ export default function LookScreen() {
             ),
           }}
         />
-        {/* The fixed top: always visible, so a quick change is Aa → change → Back. */}
-        <View style={[styles.top, { borderBottomColor: chrome.line }]} onLayout={measure("top")}>
-          <ProfileBar custom={custom} onNotice={showNotice} />
-          <SettingSlider
-            settingKey="type.fontSize"
-            label={strings.textSize}
-            value={settings["type.fontSize"]}
-            format={(v) => formatNumber("type.fontSize", v, { system: words.system, off: words.off, bookDefault: words.bookDefault })}
-            onChange={(v) => change("type.fontSize", v)}
-            compact
-          />
-          {note(sizeOrigin, "type.fontSize", strings.textSize)}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.swatches}>
-            {THEME_IDS.map((id) => {
-              const swatch = THEMES[id];
-              const on = settings["theme.id"] === id;
-              return (
-                <Pressable
-                  key={id}
-                  onPress={() => change("theme.id", id)}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${strings.theme}: ${words.themes[id]}`}
-                  accessibilityState={{ selected: on }}
-                  style={[styles.swatch, { backgroundColor: swatch.page, borderColor: on ? chrome.accent : swatch.inkMuted }, on && styles.swatchOn]}
-                >
-                  <Text style={[styles.swatchText, { color: swatch.ink }]}>Aa</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-          {note(themeOrigin, "theme.id", strings.theme)}
-          <View style={styles.targetRow}>
-            <Text style={[styles.small, { color: chrome.muted }]}>{strings.savingTo}</Text>
-            {/* Wraps rather than scrolls, so "This book" is never hidden off the edge (phone run 16). */}
-            <View style={[styles.chips, styles.wrap]}>
-              {targetsFor(custom, bookId).map((option) => chip(option, targetName(option), option === target, () => setTarget(option)))}
-            </View>
-          </View>
-        </View>
+        {pinTop ? fixedTop : null}
         {/* The live sample page (roadmap C2): the real reader page with the sample chapter. */}
         <Pressable
           onPress={() => setPreview((v) => !v)}
@@ -199,7 +217,7 @@ export default function LookScreen() {
           </Text>
         </Pressable>
         {preview && paneHeight > 0 ? (
-          <View style={{ height: paneHeight }}>
+          <View style={{ height: keyboard ? 0 : paneHeight }}>
             <PreviewPane settings={settings} fonts={custom.fonts} />
           </View>
         ) : null}
@@ -219,6 +237,7 @@ export default function LookScreen() {
           ))}
         </View>
         <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 }]} keyboardShouldPersistTaps="handled">
+          {pinTop ? null : fixedTop}
           <Text style={[styles.small, { color: chrome.muted }]}>{help}</Text>
           {bookOverrides > 0 ? (
             <Pressable onPress={() => setTarget("book")} accessibilityRole="button">
@@ -274,6 +293,7 @@ const styles = StyleSheet.create({
   tab: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabText: { fontSize: 13 },
   body: { padding: 16, gap: 10 },
+  topInList: { marginHorizontal: -16, marginTop: -16 },
   notice: { position: "absolute", left: 16, right: 16, flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12, padding: 14, borderRadius: 10 },
   noticeText: { fontSize: 15, flexShrink: 1 },
 });

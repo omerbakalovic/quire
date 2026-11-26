@@ -4,6 +4,7 @@ import { PanResponder, Pressable, StyleSheet, Text, TextInput, View, type Layout
 import { t } from "@/i18n";
 import { useChrome } from "@/reader/chrome";
 import { stepValue, UNSET } from "@/settings/customize";
+import { isSideways, SLIDE_SLOP as SLOP } from "@/settings/look-editor";
 import { cleanValue, settingFor, type SettingKey } from "@/settings/registry";
 
 type Props = {
@@ -74,33 +75,41 @@ export function SettingSlider({ settingKey, label, value, format, onChange, comp
     }
   };
 
+  // A touch only moves the value once it is clearly sideways, so a vertical scroll of the list that starts on
+  // a slider scrolls instead (emulator run 19). A touch that barely moves is a tap: the value jumps there.
+  const sliding = useRef(false);
   const responder = useMemo(
     () =>
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
-        onMoveShouldSetPanResponder: () => true,
-        // A vertical scroll of the editor may take the gesture back before the thumb has moved far.
-        onPanResponderTerminationRequest: () => false,
-        onPanResponderGrant: (event) => {
-          const pageX = event.nativeEvent.pageX;
+        onMoveShouldSetPanResponder: (_event, g) => isSideways(g.dx, g.dy),
+        // Until the thumb is sliding, a scroll of the editor may take the gesture.
+        onPanResponderTerminationRequest: () => !sliding.current,
+        onPanResponderGrant: () => {
+          sliding.current = false;
           trackRef.current?.measure((_x, _y, w, _h, left) => {
             geometry.current = { width: w, pageX: left };
-            const v = at(pageX);
-            setDrag(v);
-            send(v, false);
           });
         },
-        onPanResponderMove: (event) => {
+        onPanResponderMove: (event, g) => {
+          if (!sliding.current) {
+            if (!isSideways(g.dx, g.dy)) return;
+            sliding.current = true;
+          }
           const v = at(event.nativeEvent.pageX);
           setDrag(v);
           send(v, false);
         },
-        onPanResponderRelease: (event) => {
-          const v = at(event.nativeEvent.pageX);
+        onPanResponderRelease: (event, g) => {
+          const tap = !sliding.current && Math.abs(g.dx) < SLOP && Math.abs(g.dy) < SLOP;
+          if (sliding.current || tap) send(at(event.nativeEvent.pageX), true);
+          sliding.current = false;
           setDrag(null);
-          send(v, true);
         },
-        onPanResponderTerminate: () => setDrag(null),
+        onPanResponderTerminate: () => {
+          sliding.current = false;
+          setDrag(null);
+        },
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [min, max],

@@ -170,7 +170,8 @@ export function PreviewPane({ settings, fonts }: Props) {
 
   const onLayout = (event: LayoutChangeEvent) => {
     const { width, height } = event.nativeEvent.layout;
-    setSize({ width, height });
+    // Folded to nothing (the keyboard is up): keep the last size so the page stays loaded.
+    if (height > 0) setSize({ width, height });
   };
 
   return (

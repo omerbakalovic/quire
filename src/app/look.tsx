@@ -1,11 +1,12 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { findBook } from "@/domain/library";
 import { t } from "@/i18n";
 import { getLibrary, loadLibrary, revertCustomization, saveSetting, useLibrary } from "@/library/store";
+import { PreviewPane } from "@/look/PreviewPane";
 import { ProfileBar } from "@/look/ProfileBar";
 import { SettingRows } from "@/look/SettingRows";
 import { SettingSlider } from "@/look/SettingSlider";
@@ -43,6 +44,8 @@ export default function LookScreen() {
     });
   }, []);
 
+  const window = useWindowDimensions();
+  const [preview, setPreview] = useState(true);
   const [tab, setTab] = useState<Tab>(isTab(params.tab) ? params.tab : "text");
   const [chosen, setTarget] = useState<Target>(() => defaultTarget(custom, bookId));
   const target = validTarget(custom, bookId, chosen);
@@ -175,6 +178,15 @@ export default function LookScreen() {
             </View>
           </View>
         </View>
+        {/* The live sample page (roadmap C2): the real reader page with the sample chapter. */}
+        <Pressable onPress={() => setPreview((v) => !v)} accessibilityRole="button" style={[styles.previewToggle, { borderBottomColor: chrome.line }]}>
+          <Text style={[styles.small, { color: chrome.muted }]}>{preview ? `${strings.previewHide} ▴` : `${strings.previewShow} ▾`}</Text>
+        </Pressable>
+        {preview ? (
+          <View style={{ height: Math.round(window.height * (window.height > window.width ? 0.3 : 0.4)) }}>
+            <PreviewPane settings={settings} fonts={custom.fonts} />
+          </View>
+        ) : null}
         <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist">
           {TABS.map((option) => (
             <Pressable
@@ -241,6 +253,7 @@ const styles = StyleSheet.create({
   swatchText: { fontSize: 14, fontWeight: "600" },
   targetRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   wrap: { flex: 1, flexWrap: "wrap" },
+  previewToggle: { minHeight: 32, alignItems: "center", justifyContent: "center", borderBottomWidth: StyleSheet.hairlineWidth },
   tabs: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth },
   tab: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabText: { fontSize: 13 },

@@ -336,7 +336,7 @@ Every milestone also checks: existing positions, profiles, overrides, fonts and 
 
 | Milestone | Status | Branch / PR | Verified |
 |---|---|---|---|
-| C1 Reading Look hub | Planned | | |
+| C1 Reading Look hub | Built, not yet run on a device | `claude/project-thread-jxy4a7`, PR #13 | Cloud: 171 unit tests, type check, reader bundle, Android JS export. Not yet: emulator matrix (`runLook`), Kotlin unit test for the backup, phone pass |
 | C2 Live preview | Planned | | |
 | C3 App-wide theme | Planned | | |
 | C4 Colours and custom themes | Planned | | |
@@ -349,6 +349,14 @@ Every milestone also checks: existing positions, profiles, overrides, fonts and 
 Open before this plan starts: PR #11 (touch reset, unmerged, waiting on an emulator rerun) and PR #10 (matrix text size). Neither blocks C1.
 
 ---
+
+### C1 notes (2026-11-26)
+
+Built: `/look` route (old `/customize` redirects), fixed top with profile chips, text size slider, theme swatches and Saving to; Revert; tabs from the registry with "from …" labels; `SettingSlider` for every number setting; profile rename, duplicate, update from current and delete with Undo; Aa opens the editor over the mounted reader; the reader's back handler stands aside while another screen is on top and the place is saved on blur; library format 2 with the native one-time backup; text size in 1 % steps. The quick panel is removed.
+
+Limitations: the Colours tab only picks a built-in theme (custom colours are C4). The editor uses the reading theme's colours; the rest of the app is still unthemed (C3). Revert does not bring back a font file deleted during the visit. No live sample preview yet (C2): from a book, the book under the editor shows the result after Back.
+
+Untested on a device: everything in C1. The backup is in Kotlin and needs a Gradle build.
 
 ## 8. Checkpoints and handoff
 

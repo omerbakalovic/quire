@@ -113,6 +113,17 @@ export function MatrixChannel() {
           const added = await addFont(`file://${command.path}`, name);
           return added.ok ? { added: added.font, fonts: getLibrary().custom.fonts.length } : { refused: added.reason };
         }
+        case "look": {
+          if (command.open) {
+            const reader = readerDebug();
+            if (!reader) throw new Error("no reader screen is open");
+            router.push({ pathname: "/look", params: command.tab ? { book: reader.id, tab: command.tab } : { book: reader.id } });
+          } else if (path.current.startsWith("/look")) {
+            router.back();
+          }
+          await wait(600);
+          return { route: path.current };
+        }
         case "reader": {
           const reader = readerDebug();
           if (!reader) throw new Error("no reader screen is open");

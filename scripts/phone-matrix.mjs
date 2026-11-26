@@ -7,7 +7,7 @@
  * measurements from files/quire-report.jsonl.
  *
  *   npm run phone-matrix -- [--quick] [--fresh] [--only frank,arabic]
- *     [--skip-books] [--skip-notes] [--skip-taps] [--skip-lifecycle]
+ *     [--skip-books] [--skip-notes] [--skip-taps] [--skip-look] [--skip-lifecycle]
  *     [--background-s 90] [--apk-reader] [--serial SERIAL] [--adb PATH] [--out DIR]
  *     [--package ID] [--stall-s 90] [--wait-you-s 300]
  *     [--phone] [--avd quire] [--keep-emulator] [--install]
@@ -67,6 +67,7 @@ const { values: opts } = parseArgs({
     "skip-books": { type: "boolean", default: false },
     "skip-notes": { type: "boolean", default: false },
     "skip-taps": { type: "boolean", default: false },
+    "skip-look": { type: "boolean", default: false },
     "skip-lifecycle": { type: "boolean", default: false },
     "background-s": { type: "string", default: "90" },
     "stall-s": { type: "string", default: "90" },
@@ -1646,6 +1647,51 @@ async function runTapSetting(arabic, frankenstein) {
   }
 }
 
+/**
+ * Reading Look over a book (docs/customization-roadmap.md, C1): Aa opens the
+ * editor on top of the open book, and closing it, with the editor's own
+ * command or the system back key, returns to the same page.
+ */
+async function runLook(entry) {
+  const scope = "reading look";
+  const dir = join(OUT, "look");
+  await mkdir(dir, { recursive: true });
+  const opened = await openBook(entry);
+  if (!check(scope, `${entry.name} opens`, opened?.phase === "opened")) return;
+  await ensurePaginated(await state());
+  for (let i = 0; i < 3; i++) {
+    const from = log.mark();
+    const st = await state();
+    await reader("turn", { dir: "next" });
+    await waitRelocate(from, 3000, st.cfi);
+  }
+  const before = await state();
+  const answer = await send("look", { open: true });
+  check(scope, "Aa's editor opens over the book", String(answer.route ?? "").startsWith("/look"), answer.route);
+  await shot(dir, "look-text.png");
+  await send("look", { open: true, tab: "page" });
+  await shot(dir, "look-page.png");
+  await send("look", { open: false });
+  await sleep(400);
+  const afterClose = await send("look", { open: false });
+  check(scope, "closing it goes back to the book", String(afterClose.route ?? "").startsWith("/reader"), afterClose.route);
+  const back = await send("look", { open: false });
+  check(scope, "a second close stays on the book", String(back.route ?? "").startsWith("/reader"), back.route);
+  // The editor was pushed twice above; one close popped each. Back in the book, the place is kept.
+  await readerReady();
+  const returned = await state();
+  check(scope, "the book is on the same page after the editor", samePlace(before, returned), `${before.fraction?.toFixed(4)} → ${returned.fraction?.toFixed(4)}`);
+  await send("look", { open: true });
+  await shell("input keyevent 4");
+  await sleep(800);
+  const key = await send("hello");
+  check(scope, "the back key closes the editor, not the book", String(key.route ?? "").startsWith("/reader"), key.route);
+  await readerReady();
+  const afterKey = await state();
+  check(scope, "and the book is still on the same page", samePlace(before, afterKey), `${before.fraction?.toFixed(4)} → ${afterKey.fraction?.toFixed(4)}`);
+  await send("library");
+}
+
 let rotation = null;
 
 async function restoreRotation() {
@@ -1922,6 +1968,16 @@ async function main() {
             passFatal(error);
             check("tap direction", "tap routine finished", false, error.message);
           }
+        }
+      }
+      if (!opts["skip-look"] && frankenstein) {
+        say("— reading look over a book");
+        try {
+          await guard("reading look", () => runLook(frankenstein));
+        } catch (error) {
+          passFatal(error);
+          check("reading look", "look routine finished", false, error.message);
+          await send("library").catch(passFatal);
         }
       }
       if (!opts["skip-lifecycle"] && !opts.quick && frankenstein) {

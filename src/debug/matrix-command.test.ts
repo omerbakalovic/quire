@@ -48,3 +48,10 @@ test("only the latest reader screen receives reader commands", async () => {
   offB();
   assert.equal(readerDebug(), null);
 });
+
+test("look opens Reading Look over the book or goes back", () => {
+  assert.deepEqual(parseMatrixCommand('{"seq":3,"cmd":"look","open":true,"tab":"page"}'), { seq: 3, cmd: "look", open: true, tab: "page" });
+  assert.deepEqual(parseMatrixCommand('{"seq":3,"cmd":"look","open":false}'), { seq: 3, cmd: "look", open: false, tab: null });
+  assert.deepEqual(parseMatrixCommand('{"seq":3,"cmd":"look","open":true,"tab":"../x"}'), { seq: 3, cmd: "look", open: true, tab: null });
+  assert.equal(parseMatrixCommand('{"seq":3,"cmd":"look","open":"yes"}'), null);
+});

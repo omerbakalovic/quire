@@ -356,7 +356,7 @@ Built: `/look` route (old `/customize` redirects), fixed top with profile chips,
 
 Limitations: the Colours tab only picks a built-in theme (custom colours are C4). The editor uses the reading theme's colours; the rest of the app is still unthemed (C3). Revert does not bring back a font file deleted during the visit. No live sample preview yet (C2): from a book, the book under the editor shows the result after Back.
 
-Verified on the emulator (run 14): Aa's editor opens over the book; closing it with the command or the back key returns to the same page; the backup is made once and matches the old file. Run 14 screenshots showed the fixed top taking about 45 % of a tall screen; the text size row was made a single line afterwards (not re-run). Not checked yet: the phone, TalkBack, a 360 dp screen, profile menu and Revert by hand.
+Verified on the emulator (run 14): Aa's editor opens over the book; closing it with the command or the back key returns to the same page; the backup is made once and matches the old file. Run 14 screenshots showed the fixed top taking about 45 % of a tall screen; the text size row was made a single line afterwards; run 15 (emulator, 1c6e8bf, Frankenstein only) passed 36/36 and the fixed top is now about 27 % of the screen with the size row on one line. Not checked yet: the phone, TalkBack, a 360 dp screen, profile menu and Revert by hand.
 
 ## 8. Checkpoints and handoff
 

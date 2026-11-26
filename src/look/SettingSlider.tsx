@@ -123,8 +123,8 @@ export function SettingSlider({ settingKey, label, value, format, onChange, comp
     const parsed = Number.parseFloat((typing ?? "").replace(",", ".").replace(/[^0-9.\-]/g, ""));
     setTyping(null);
     if (!Number.isFinite(parsed)) return;
-    // Fractions are shown as percents (Dimmer 30 %), so a typed 30 means 0.3.
-    onChange(clean(max <= 1 && parsed > 1 ? parsed / 100 : parsed));
+    // Fractions are shown and typed as percents (Dimmer 30 %), so a typed 30 means 0.3 and 1 means 1 %.
+    onChange(clean(max <= 1 ? parsed / 100 : parsed));
   };
 
   return (

@@ -96,10 +96,21 @@ export default function LookScreen() {
 
   const sizeOrigin = originOf(layers, target, "type.fontSize");
   const themeOrigin = originOf(layers, target, "theme.id");
-  const note = (origin: ReturnType<typeof originOf>) =>
-    origin.kind === "above" ? (
-      <Text style={[styles.small, { color: chrome.accent }]}>{origin.source === "book" ? strings.origin.book : strings.origin.profile(profile?.name ?? "")}</Text>
-    ) : null;
+  // The pinned controls have no row in the tabs, so their reset lives here.
+  const note = (origin: ReturnType<typeof originOf>, key: SettingKey, name: string) => {
+    if (origin.kind === "above") {
+      return <Text style={[styles.small, { color: chrome.accent }]}>{origin.source === "book" ? strings.origin.book : strings.origin.profile(profile?.name ?? "")}</Text>;
+    }
+    if (origin.kind !== "here") return null;
+    return (
+      <View style={styles.noteRow}>
+        <Text style={[styles.small, { color: chrome.muted }]}>{strings.origin.here}</Text>
+        <Pressable onPress={() => change(key, null)} accessibilityRole="button" accessibilityLabel={t().customize.resetLabel(name)} hitSlop={8}>
+          <Text style={[styles.small, styles.underline, { color: chrome.accent }]}>{t().customize.reset}</Text>
+        </Pressable>
+      </View>
+    );
+  };
 
   return (
     <ChromeProvider chrome={chrome}>
@@ -136,7 +147,7 @@ export default function LookScreen() {
             onChange={(v) => change("type.fontSize", v)}
             compact
           />
-          {note(sizeOrigin)}
+          {note(sizeOrigin, "type.fontSize", strings.textSize)}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.swatches}>
             {THEME_IDS.map((id) => {
               const swatch = THEMES[id];
@@ -155,7 +166,7 @@ export default function LookScreen() {
               );
             })}
           </ScrollView>
-          {note(themeOrigin)}
+          {note(themeOrigin, "theme.id", strings.theme)}
           <View style={styles.targetRow}>
             <Text style={[styles.small, { color: chrome.muted }]}>{strings.savingTo}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
@@ -221,6 +232,8 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 14 },
   bold: { fontWeight: "600" },
   small: { fontSize: 13, lineHeight: 18 },
+  noteRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  underline: { textDecorationLine: "underline" },
   swatches: { flexDirection: "row", gap: 10, paddingVertical: 2 },
   swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   swatchOn: { borderWidth: 3 },

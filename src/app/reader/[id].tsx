@@ -1,4 +1,4 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useFocusEffect, useLocalSearchParams, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useRef, useState, type ComponentRef } from "react";
 import { ActivityIndicator, AppState, BackHandler, PixelRatio, Pressable, StyleSheet, Text, View } from "react-native";
@@ -20,12 +20,10 @@ import { AmbientBands } from "@/reader/AmbientBands";
 import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
 import { ControlBars } from "@/reader/ControlBars";
-import { confirmRemoveFont, pickFont } from "@/reader/font-import";
 import { LightVeil } from "@/reader/LightVeil";
 import { useBrightness } from "@/reader/useBrightness";
 import { TurnOverlay, type TurnOverlayHandle } from "@/reader/TurnOverlay";
 import { useReduceMotion } from "@/reader/useReduceMotion";
-import { QuickPanel } from "@/reader/QuickPanel";
 import { chromeFor, ChromeProvider } from "@/reader/chrome";
 import { TocPanel } from "@/reader/TocPanel";
 import { gestureMap } from "@/settings/gestures";
@@ -77,7 +75,7 @@ export default function BookScreen() {
   const [toc, setToc] = useState<NavEntry[]>([]);
   const [tocHref, setTocHref] = useState<string | null>(null);
   const [tocOpen, setTocOpen] = useState(false);
-  const [lookOpen, setLookOpen] = useState(false);
+  /** True while Reading Look (or any screen) is on top of the reader; the book stays open underneath. */
   const lookOpenRef = useRef(false);
   const [backStack, setBackStack] = useState<{ depth: number; label: string | null }>({ depth: 0, label: null });
   const answered = useRef(false);
@@ -323,7 +321,8 @@ export default function BookScreen() {
   // then returns from a note's "Go to note", then leaves the book.
   useEffect(() => {
     const subscription = BackHandler.addEventListener("hardwareBackPress", () => {
-      if (!id) return false;
+      // Another screen is on top (Reading Look): its back closes it, not the book's history.
+      if (!id || lookOpenRef.current) return false;
       if (noteOpen.current) {
         post({ type: "close-note", id });
         noteOpen.current = false;
@@ -332,11 +331,6 @@ export default function BookScreen() {
       if (tocOpenRef.current) {
         tocOpenRef.current = false;
         setTocOpen(false);
-        return true;
-      }
-      if (lookOpenRef.current) {
-        lookOpenRef.current = false;
-        setLookOpen(false);
         return true;
       }
       if (backDepth.current > 0) {
@@ -352,6 +346,19 @@ export default function BookScreen() {
     });
     return () => subscription.remove();
   }, [id, post]);
+
+  // Reading Look (or any screen) on top: keep the place saved in case the system recycles
+  // the WebView, and take no turn pictures of a page nobody sees.
+  useFocusEffect(
+    useCallback(() => {
+      lookOpenRef.current = false;
+      return () => {
+        lookOpenRef.current = true;
+        flush();
+        void flushLibrary();
+      };
+    }, [flush]),
+  );
 
   // Save the position every so often while reading, not on every relocate.
   useEffect(() => {
@@ -370,9 +377,10 @@ export default function BookScreen() {
   const at = startFraction ?? fraction;
   const current = currentEntry(toc, tocHref, at);
 
-  function showLook(open: boolean) {
-    lookOpenRef.current = open;
-    setLookOpen(open);
+  /** Aa: Reading Look on top of the book (roadmap C1). The reader stays mounted, so the place is kept. */
+  function showLook() {
+    if (!id) return;
+    router.push({ pathname: "/look", params: { book: id } });
   }
 
   function showToc(open: boolean) {
@@ -429,7 +437,7 @@ export default function BookScreen() {
         showToc(true);
         return;
       case "look":
-        if (!fixedLayout) showLook(true);
+        if (!fixedLayout) showLook();
         return;
       case "prevChapter":
       case "nextChapter":
@@ -593,35 +601,17 @@ export default function BookScreen() {
             onChapter={stepChapter}
             onSeek={(value) => jumpTo({ fraction: value })}
             onScrub={setScrubbing}
-            onLook={() => showLook(true)}
+            onLook={showLook}
             onBottomHeight={setBottomHeight}
           />
         ) : null}
-        {phase === "reading" && !tocOpen && !lookOpen && !scrubbing ? (
+        {phase === "reading" && !tocOpen && !scrubbing ? (
           <BackPill
             depth={backStack.depth}
             label={backStack.label}
             bottom={controls ? Math.max(bottomHeight, insets.bottom) + 8 : insets.bottom + 24}
             onBack={() => post({ type: "back", id })}
             onDismiss={() => post({ type: "back", id, clear: true })}
-          />
-        ) : null}
-        {lookOpen ? (
-          <QuickPanel
-            settings={reader.settings}
-            chrome={reader.chrome}
-            scope={reader.scope}
-            profileName={reader.profileName}
-            overridden={reader.overridden}
-            bottomInset={insets.bottom}
-            userFonts={library.custom.fonts}
-            onAddFont={() => void pickFont((font) => reader.change("type.fontFamily", font.id))}
-            onRemoveFont={confirmRemoveFont}
-            onScope={reader.setScope}
-            onChange={reader.change}
-            onLayout={reader.layout}
-            onReset={reader.reset}
-            onClose={() => showLook(false)}
           />
         ) : null}
         {tocOpen ? (

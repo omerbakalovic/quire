@@ -16,7 +16,7 @@ test("steps honour 'not set' values in both directions", () => {
   assert.equal(stepValue("light.brightness", 0, 1), 0.5);
   assert.equal(stepValue("light.brightness", 0.05, -1), 0);
   assert.equal(stepValue("type.fontSize", 300, 1), 300);
-  assert.equal(stepValue("type.fontSize", 100, -1), 95);
+  assert.equal(stepValue("type.fontSize", 100, -1), 99, "text size moves in 1 % steps");
   assert.equal(stepValue("theme.id", 1, 1), null);
 });
 

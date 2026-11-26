@@ -58,7 +58,7 @@ export default function SettingsScreen() {
       <Toggle label={strings.showAuthor} value={look.showAuthor} onChange={(value) => set({ showAuthor: value })} />
       <Toggle label={strings.showProgress} value={look.showProgress} onChange={(value) => set({ showProgress: value })} />
       <Text style={styles.section}>{reading.title}</Text>
-      <Pressable onPress={() => router.push("/customize")} accessibilityRole="button" style={styles.row}>
+      <Pressable onPress={() => router.push("/look")} accessibilityRole="button" style={styles.row}>
         <Text style={styles.label}>{reading.open}</Text>
         <Text style={styles.chevron}>›</Text>
       </Pressable>

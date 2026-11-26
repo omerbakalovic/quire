@@ -10,7 +10,9 @@ export type MatrixCommand =
   | { seq: number; cmd: "settings"; tapZones: "reading" | "screen" }
   | { seq: number; cmd: "drain-imports" }
   | { seq: number; cmd: "add-font"; path: string }
-  | { seq: number; cmd: "reader"; action: string; args: Record<string, unknown> };
+  | { seq: number; cmd: "reader"; action: string; args: Record<string, unknown> }
+  /** Reading Look over the open book (open), or back to the book (close). */
+  | { seq: number; cmd: "look"; open: boolean; tab: string | null };
 
 const BOOK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 const ACTION = /^[a-z][a-z-]{0,39}$/;
@@ -44,6 +46,10 @@ export function parseMatrixCommand(raw: string): MatrixCommand | null {
     case "settings":
       return command.tapZones === "reading" || command.tapZones === "screen"
         ? { seq, cmd: "settings", tapZones: command.tapZones }
+        : null;
+    case "look":
+      return typeof command.open === "boolean"
+        ? { seq, cmd: "look", open: command.open, tab: typeof command.tab === "string" && ACTION.test(command.tab) ? command.tab : null }
         : null;
     case "reader": {
       if (typeof command.action !== "string" || !ACTION.test(command.action)) return null;

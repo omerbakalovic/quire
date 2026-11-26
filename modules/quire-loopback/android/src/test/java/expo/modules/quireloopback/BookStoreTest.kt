@@ -66,6 +66,27 @@ class BookStoreTest {
   }
 
   @Test
+  fun olderLibraryIsBackedUpOnceBeforeAnUpgrade() {
+    val store = BookStore(temp.root)
+    store.writeLibrary("{\"version\":1,\"books\":[\"old\"]}")
+    store.writeLibrary("{\"version\":1,\"books\":[\"older-still-v1\"]}")
+    assertNull(store.backupFile(1))
+    store.writeLibrary("{\"version\":2,\"books\":[\"new\"]}")
+    assertEquals("{\"version\":1,\"books\":[\"older-still-v1\"]}", store.backupFile(1)!!.readText())
+    store.writeLibrary("{\"version\":2,\"books\":[\"newer\"]}")
+    store.writeLibrary("{\"version\":1,\"books\":[\"downgrade\"]}")
+    store.writeLibrary("{\"version\":2,\"books\":[\"again\"]}")
+    assertEquals("{\"version\":1,\"books\":[\"older-still-v1\"]}", store.backupFile(1)!!.readText())
+  }
+
+  @Test
+  fun versionIsReadFromTheStart() {
+    assertEquals(2, BookStore.versionOf("{\"version\":2,\"x\":{\"version\":9}}"))
+    assertNull(BookStore.versionOf("{\"books\":[],\"version\":2}"))
+    assertNull(BookStore.versionOf("not json"))
+  }
+
+  @Test
   fun deleteRemovesBookAndCover() {
     val store = BookStore(temp.root)
     val book = store.importStream(ByteArrayInputStream("xyz".toByteArray()))

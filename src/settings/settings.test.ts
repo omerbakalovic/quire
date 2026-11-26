@@ -16,7 +16,9 @@ test("every registry entry's default passes its own validation", () => {
 });
 
 test("values are stepped, clamped, or dropped", () => {
-  assert.equal(cleanValue("type.fontSize", 103), 105);
+  assert.equal(cleanValue("type.fontSize", 103.4), 103);
+  assert.equal(cleanValue("type.fontSize", 105), 105, "sizes saved in the old 5 % steps stay valid");
+  assert.equal(cleanValue("page.marginX", 4.6), 5);
   assert.equal(cleanValue("type.fontSize", 9000), 300);
   assert.equal(cleanValue("type.fontSize", "120"), null);
   assert.equal(cleanValue("type.lineHeight", 1.43), 1.45);

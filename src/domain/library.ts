@@ -37,7 +37,8 @@ export type Settings = {
 };
 
 export type Library = {
-  version: 1;
+  /** 2 since the Reading Look hub (C1). Version 1 files parse unchanged; the native store keeps a backup of the last version 1 file. */
+  version: 2;
   flow: Flow;
   settings: Settings;
   /** How the shelf looks (src/domain/library-look.ts). */
@@ -52,7 +53,7 @@ export const DEFAULT_SETTINGS: Settings = { tapZones: "reading" };
 const BOOK_ID = /^[A-Za-z0-9_-]{1,80}$/;
 
 export function emptyLibrary(): Library {
-  return { version: 1, flow: "paginated", settings: { ...DEFAULT_SETTINGS }, look: DEFAULT_LOOK, custom: emptyCustomization(), books: [] };
+  return { version: 2, flow: "paginated", settings: { ...DEFAULT_SETTINGS }, look: DEFAULT_LOOK, custom: emptyCustomization(), books: [] };
 }
 
 function str(value: unknown): string | null {
@@ -113,7 +114,7 @@ export function parseLibrary(json: string | null | undefined): Library {
     books.push(book);
   }
   return {
-    version: 1,
+    version: 2,
     flow: raw.flow === "scrolled" ? "scrolled" : "paginated",
     settings: parseSettings(raw.settings),
     look: parseLook(raw.look),

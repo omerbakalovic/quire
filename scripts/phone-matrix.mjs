@@ -1681,8 +1681,13 @@ async function runLook(entry) {
     await waitRelocate(from, 3000, st.cfi);
   }
   const before = await state();
+  const lookFrom = log.mark();
   const answer = await send("look", { open: true });
   check(scope, "Aa's editor opens over the book", String(answer.route ?? "").startsWith("/look"), answer.route);
+  // The live preview (roadmap C2) opens the sample chapter in its own reader page.
+  const preview = await log.waitFor((line) => line.source === "preview" && ["opened", "failed", "refused"].includes(line.phase), { from: lookFrom, timeout: 15000 });
+  check(scope, "the preview opens the sample page", preview?.phase === "opened", preview ? `${preview.phase} ${preview.ms ?? preview.detail ?? preview.error ?? ""}` : "nothing in 15 s");
+  await sleep(600);
   await shot(dir, "look-text.png");
   await send("look", { open: true, tab: "page" });
   await shot(dir, "look-page.png");

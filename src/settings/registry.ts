@@ -66,7 +66,7 @@ export const ACTIONS = ["none", "prevPage", "nextPage", "bars", "contents", "loo
 const GESTURE = { type: "choice", choices: ACTIONS, group: "gestures", scopes: PROFILE_UP, relayout: false, depth: "standard" } as const;
 
 export const SETTINGS = [
-  { key: "type.fontSize", type: "number", default: 100, min: 60, max: 300, step: 5, group: "typography", scopes: ALL, relayout: true, depth: "quick" },
+  { key: "type.fontSize", type: "number", default: 100, min: 60, max: 300, step: 1, group: "typography", scopes: ALL, relayout: true, depth: "quick" },
   { key: "type.fontFamily", type: "font", default: "publisher", group: "typography", scopes: NOT_SESSION, relayout: true, depth: "quick" },
   { key: "type.lineHeight", type: "number", default: 0, min: 0, max: 2.4, step: 0.05, group: "typography", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "type.paragraphSpacing", type: "number", default: -1, min: -1, max: 2, step: 0.1, group: "typography", scopes: NOT_SESSION, relayout: true, depth: "standard" },

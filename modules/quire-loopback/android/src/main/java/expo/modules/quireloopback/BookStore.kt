@@ -77,6 +77,7 @@ class BookStore(private val root: File) {
   fun writeLibrary(json: String) {
     if (json.length > MAX_LIBRARY_CHARS) throw IOException("library index is too large")
     root.mkdirs()
+    backUpBeforeUpgrade(json)
     val temporary = File(root, "library.json.part")
     temporary.writeText(json)
     if (!temporary.renameTo(libraryFile)) {
@@ -85,7 +86,30 @@ class BookStore(private val root: File) {
     }
   }
 
+  /**
+   * Before the first write of a newer library format, keep the old file as
+   * `library.v{old}.backup.json` (docs/customization-roadmap.md, section 3).
+   * The backup is made once and never overwritten, so it always holds the
+   * last state an older build wrote.
+   */
+  private fun backUpBeforeUpgrade(json: String) {
+    if (!libraryFile.isFile) return
+    val next = versionOf(json) ?: return
+    val current = versionOf(libraryFile.readText()) ?: return
+    if (next <= current) return
+    val backup = File(root, "library.v$current.backup.json")
+    if (backup.exists()) return
+    libraryFile.copyTo(backup)
+  }
+
+  fun backupFile(version: Int): File? = File(root, "library.v$version.backup.json").takeIf { it.isFile }
+
   companion object {
+    private val VERSION = Regex("^\\s*\\{\\s*\"version\"\\s*:\\s*(\\d{1,4})")
+
+    /** The format version, read from the start of the file, where `serializeLibrary` puts it. */
+    fun versionOf(json: String): Int? = VERSION.find(json)?.groupValues?.get(1)?.toIntOrNull()
+
     const val MAX_BOOK_BYTES = 1024L * 1024 * 1024
     const val MAX_LIBRARY_CHARS = 16 * 1024 * 1024
   }

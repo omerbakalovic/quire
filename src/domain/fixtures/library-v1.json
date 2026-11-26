@@ -1,0 +1,10 @@
+{"version":1,"flow":"scrolled","settings":{"tapZones":"screen"},
+"look":{"style":"pills","showCovers":true,"showAuthor":false,"showProgress":true,"bookColors":{"aaaa1111bbbb2222cccc3333dddd4444":"#B5545C"},"coverColors":{"aaaa1111bbbb2222cccc3333dddd4444":"#334455","eeee5555ffff6666aaaa7777bbbb8888":"#998877"},"fileNames":{"aaaa1111bbbb2222cccc3333dddd4444":"moby.epub"}},
+"custom":{"global":{"type.fontSize":115,"type.fontFamily":"user-abcd1234","theme.id":"paper","layout.footer.center":["page"]},
+"profiles":[{"id":"night","name":"Night","values":{"theme.id":"night","light.dimmer":0.3,"type.fontSize":130}},{"id":"commute","name":"Commute","values":{"type.lineHeight":1.6}}],
+"activeProfile":"night",
+"books":{"aaaa1111bbbb2222cccc3333dddd4444":{"type.fontSize":90,"theme.id":"light"},"eeee5555ffff6666aaaa7777bbbb8888":{"page.marginX":8}},
+"fonts":[{"id":"user-abcd1234","label":"My Serif","file":"user-abcd1234.ttf"}]},
+"books":[
+{"id":"aaaa1111bbbb2222cccc3333dddd4444","hash":"aaaa1111bbbb2222cccc3333dddd4444aaaa1111bbbb2222cccc3333dddd4444","size":1000,"title":"Moby-Dick","authors":["Herman Melville"],"language":"en","publisher":null,"series":null,"seriesIndex":null,"coverUri":null,"addedAt":1,"lastOpenedAt":5,"cfi":"epubcfi(/6/14!/4/2/10,/1:0,/1:20)","fraction":0.31,"sectionIndex":7,"sectionFraction":0.5},
+{"id":"eeee5555ffff6666aaaa7777bbbb8888","hash":"eeee5555ffff6666aaaa7777bbbb8888eeee5555ffff6666aaaa7777bbbb8888","size":2000,"title":"Frankenstein","authors":["Mary Shelley"],"language":"en","publisher":null,"series":null,"seriesIndex":null,"coverUri":null,"addedAt":2,"lastOpenedAt":null,"cfi":null,"fraction":null,"sectionIndex":null,"sectionFraction":null}]}

@@ -70,3 +70,61 @@ test("removing a book forgets its overrides", () => {
   assert.deepEqual(forgetBook(custom, "b1").books, {});
   assert.equal(forgetBook(custom, "zz"), custom);
 });
+
+test("profiles can be renamed, duplicated, updated and restored after a delete", async () => {
+  const m = await import("./customization.ts");
+  let custom = m.parseCustomization({
+    global: { "type.fontSize": 110 },
+    profiles: [
+      { id: "night", name: "Night", values: { "theme.id": "night" } },
+      { id: "day", name: "Day", values: {} },
+    ],
+    activeProfile: "night",
+  });
+  custom = m.renameProfile(custom, "night", "  Late night ");
+  assert.equal(custom.profiles[0].name, "Late night");
+  assert.equal(m.renameProfile(custom, "night", "   "), custom);
+
+  const dup = m.duplicateProfile(custom, "night", "Late night copy");
+  assert.equal(dup.id, "late-night-copy");
+  assert.deepEqual(dup.custom.profiles.map((p) => p.id), ["night", "late-night-copy", "day"]);
+  assert.deepEqual(dup.custom.profiles[1].values, { "theme.id": "night" });
+  assert.equal(m.profileIdFor(dup.custom, "Late night copy"), "late-night-copy-2");
+
+  custom = m.changeSetting(dup.custom, "global", "type.fontSize", 140, null);
+  custom = m.updateProfileFromCurrent(custom, "day");
+  assert.deepEqual(custom.profiles.find((p) => p.id === "day")?.values, { "type.fontSize": 140, "theme.id": "night" });
+
+  const before = custom;
+  const gone = m.deleteProfile(custom, "night");
+  assert.equal(gone.activeProfile, null);
+  const back = m.restoreProfile(gone, before.profiles[0], 0, true);
+  assert.deepEqual(back.profiles, before.profiles);
+  assert.equal(back.activeProfile, "night");
+});
+
+test("revert puts layers and the active profile back, but keeps fonts as they are", async () => {
+  const m = await import("./customization.ts");
+  const snapshot = m.parseCustomization({
+    global: { "type.fontSize": 110, "type.fontFamily": "user-abcd1234" },
+    profiles: [{ id: "night", name: "Night", values: { "theme.id": "night" } }],
+    activeProfile: null,
+    books: { book1: { "page.marginX": 6 } },
+    fonts: [{ id: "user-abcd1234", label: "Mine", file: "user-abcd1234.ttf" }],
+  });
+  let now = m.changeSetting(snapshot, "global", "type.fontSize", 150, null);
+  now = m.setActiveProfile(now, "night");
+  now = m.changeSetting(now, "book", "page.marginX", 10, "book1");
+  now = m.renameProfile(now, "night", "Dark");
+  now = m.removeUserFont(now, "user-abcd1234");
+  assert.equal(m.changedSince(now, snapshot), true);
+
+  const reverted = m.revertTo(now, snapshot);
+  assert.equal(reverted.global["type.fontSize"], 110);
+  assert.equal(reverted.global["type.fontFamily"], undefined, "a deleted font is not brought back as a dangling value");
+  assert.equal(reverted.activeProfile, null);
+  assert.equal(reverted.profiles[0].name, "Night");
+  assert.deepEqual(reverted.books, { book1: { "page.marginX": 6 } });
+  assert.deepEqual(reverted.fonts, []);
+  assert.equal(m.changedSince(snapshot, snapshot), false);
+});

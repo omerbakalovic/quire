@@ -158,3 +158,87 @@ export function removeUserFont(custom: Customization, id: string): Customization
     books,
   };
 }
+
+/** A free profile id made from a name: "Night" → "night", then "night-2", "night-3"… */
+export function profileIdFor(custom: Customization, name: string): string {
+  const base = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 40) || "profile";
+  let id = base;
+  for (let n = 2; custom.profiles.some((p) => p.id === id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+export function renameProfile(custom: Customization, id: string, name: string): Customization {
+  const label = name.trim().slice(0, 60);
+  if (!label || !custom.profiles.some((p) => p.id === id)) return custom;
+  return { ...custom, profiles: custom.profiles.map((p) => (p.id === id ? { ...p, name: label } : p)) };
+}
+
+/** Copy a profile under a new name, right after the original. Returns the copy's id, or null when nothing changed. */
+export function duplicateProfile(custom: Customization, id: string, name: string): { custom: Customization; id: string | null } {
+  const index = custom.profiles.findIndex((p) => p.id === id);
+  if (index < 0 || custom.profiles.length >= MAX_PROFILES) return { custom, id: null };
+  const label = name.trim().slice(0, 60) || custom.profiles[index].name;
+  const copyId = profileIdFor(custom, label);
+  const copy: Profile = { id: copyId, name: label, values: { ...custom.profiles[index].values } };
+  const profiles = [...custom.profiles.slice(0, index + 1), copy, ...custom.profiles.slice(index + 1)];
+  return { custom: { ...custom, profiles }, id: copyId };
+}
+
+/**
+ * The values "+ New profile" and "Update from current" save: what is in use
+ * now from global and the active profile, without this book's overrides.
+ */
+export function currentProfileValues(custom: Customization): Values {
+  const active = custom.profiles.find((p) => p.id === custom.activeProfile);
+  return cleanLayer("profile", { ...custom.global, ...(active?.values ?? {}) });
+}
+
+/** Put a profile's values back to what is in use now (global plus the active profile). */
+export function updateProfileFromCurrent(custom: Customization, id: string): Customization {
+  if (!custom.profiles.some((p) => p.id === id)) return custom;
+  const values = currentProfileValues(custom);
+  return { ...custom, profiles: custom.profiles.map((p) => (p.id === id ? { ...p, values } : p)) };
+}
+
+/** Put a profile back where it was, for Undo after a delete. */
+export function restoreProfile(custom: Customization, profile: Profile, index: number, wasActive: boolean): Customization {
+  if (custom.profiles.some((p) => p.id === profile.id) || custom.profiles.length >= MAX_PROFILES) return custom;
+  const at = Math.max(0, Math.min(index, custom.profiles.length));
+  const profiles = [...custom.profiles.slice(0, at), { ...profile, values: cleanLayer("profile", profile.values) }, ...custom.profiles.slice(at)];
+  return { ...custom, profiles, activeProfile: wasActive ? profile.id : custom.activeProfile };
+}
+
+/**
+ * Revert (docs/customization-roadmap.md, 2.6): every layer, the profiles and
+ * the active profile go back to a snapshot taken when the editor opened.
+ * Fonts stay as they are now, since their files were imported or deleted;
+ * a value naming a font that is gone falls back to the book's fonts.
+ */
+export function revertTo(current: Customization, snapshot: Customization): Customization {
+  const known = new Set(current.fonts.map((f) => f.id));
+  const keep = (values: Values): Values => {
+    const font = values["type.fontFamily"];
+    if (typeof font !== "string" || !font.startsWith("user-") || known.has(font)) return values;
+    const next = { ...values };
+    delete next["type.fontFamily"];
+    return next;
+  };
+  const books: Record<string, Values> = {};
+  for (const [id, values] of Object.entries(snapshot.books)) {
+    const next = keep(values);
+    if (Object.keys(next).length > 0) books[id] = next;
+  }
+  return {
+    global: keep(snapshot.global),
+    profiles: snapshot.profiles.map((p) => ({ ...p, values: keep(p.values) })),
+    activeProfile: snapshot.activeProfile,
+    books,
+    fonts: current.fonts,
+  };
+}
+
+/** Whether anything Revert would undo has changed since the snapshot. */
+export function changedSince(current: Customization, snapshot: Customization): boolean {
+  const strip = (c: Customization) => JSON.stringify({ g: c.global, p: c.profiles, a: c.activeProfile, b: c.books });
+  return strip(current) !== strip(snapshot);
+}

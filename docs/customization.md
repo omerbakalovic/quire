@@ -1,5 +1,7 @@
 # Customization design
 
+The overhaul planned on 2026-11-26 (Reading Look hub, live preview, app-wide themes, bars editor, library look, reading bookmark) is in [customization-roadmap.md](customization-roadmap.md).
+
 Status: partly implemented as of 2026-11-23, through `m4-bars` at `cec1b25`. This document describes the target design for Milestones 4, 5, 7 and 8, not a list of shipped features. It covers Quire's appearance and behaviour, rearrangeable reader controls, and planned page-turn animations.
 
 ## Implementation status

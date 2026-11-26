@@ -16,7 +16,8 @@ Remaining work and verification:
 
 - Recheck the latest controls on a device: crowded rows in portrait/landscape, slider dragging, Back pill placement, empty slots and fixed-layout books.
 - Recheck profile/book scope, successive font/size/theme changes, restart/rotation/flow restore, Android back order and external-link confirmation. Earlier partial phone runs below do not establish that the latest integrated state passes all of these.
-- Page-turn effects are not implemented. Start with the planned Skia capture/performance spike; registry choices alone do not activate effects.
+- Page-turn effects: Fade and Slide on the Skia overlay are merged (PR #9); see the M4 section below. Curl, Flip and Burn and the turn measurements are still open.
+- The customization overhaul (Reading Look hub, live preview, app-wide themes, colour picker, bars editor, library look, reading bookmark) is planned in [docs/customization-roadmap.md](docs/customization-roadmap.md). None of it is built yet.
 - Theme editing, preset sharing, assignable gestures and the rest of [the customization design](docs/customization.md) remain open. SQLite migration, library folders/tags and later product milestones also remain open.
 - iOS is not implemented by the Android-only loopback module and has not been validated.
 

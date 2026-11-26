@@ -30,6 +30,13 @@ import {
   addUserFont,
   changeSetting,
   deleteProfile,
+  duplicateProfile,
+  renameProfile as renameProfileIn,
+  restoreProfile as restoreProfileIn,
+  revertTo,
+  updateProfileFromCurrent,
+  type Customization,
+  type Profile,
   forgetBook as forgetBookSettings,
   removeUserFont,
   setActiveProfile,
@@ -188,6 +195,33 @@ export function saveProfile(id: string, name: string, values: Values): Promise<v
 export function removeProfile(id: string): Promise<void> {
   const custom = deleteProfile(library.custom, id);
   return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+export function renameProfile(id: string, name: string): Promise<void> {
+  const custom = renameProfileIn(library.custom, id, name);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+/** Copy a profile; resolves to the copy's id, or null when the list is full. */
+export async function copyProfile(id: string, name: string): Promise<string | null> {
+  const result = duplicateProfile(library.custom, id, name);
+  if (result.id) await commit({ ...library, custom: result.custom });
+  return result.id;
+}
+
+export function refreshProfile(id: string): Promise<void> {
+  return commit({ ...library, custom: updateProfileFromCurrent(library.custom, id) });
+}
+
+/** Undo a profile delete. */
+export function restoreProfile(profile: Profile, index: number, wasActive: boolean): Promise<void> {
+  const custom = restoreProfileIn(library.custom, profile, index, wasActive);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+/** The editor's Revert: layers, profiles and the active profile as they were in the snapshot. */
+export function revertCustomization(snapshot: Customization): Promise<void> {
+  return commit({ ...library, custom: revertTo(library.custom, snapshot) });
 }
 
 export function chooseProfile(id: string | null): Promise<void> {

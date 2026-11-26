@@ -134,6 +134,7 @@ export default function LookScreen() {
             value={settings["type.fontSize"]}
             format={(v) => formatNumber("type.fontSize", v, { system: words.system, off: words.off, bookDefault: words.bookDefault })}
             onChange={(v) => change("type.fontSize", v)}
+            compact
           />
           {note(sizeOrigin)}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.swatches}>
@@ -212,7 +213,7 @@ export default function LookScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1 },
-  top: { paddingHorizontal: 16, paddingTop: 10, paddingBottom: 8, gap: 6, borderBottomWidth: StyleSheet.hairlineWidth },
+  top: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6, gap: 4, borderBottomWidth: StyleSheet.hairlineWidth },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 18 },
   headerLink: { fontSize: 16, fontWeight: "600" },
   chips: { flexDirection: "row", gap: 8, alignItems: "center" },
@@ -221,7 +222,7 @@ const styles = StyleSheet.create({
   bold: { fontWeight: "600" },
   small: { fontSize: 13, lineHeight: 18 },
   swatches: { flexDirection: "row", gap: 10, paddingVertical: 2 },
-  swatch: { width: 44, height: 44, borderRadius: 22, borderWidth: 2, alignItems: "center", justifyContent: "center" },
+  swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   swatchOn: { borderWidth: 3 },
   swatchText: { fontSize: 14, fontWeight: "600" },
   targetRow: { flexDirection: "row", alignItems: "center", gap: 10 },

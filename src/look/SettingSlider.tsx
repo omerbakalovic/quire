@@ -13,6 +13,8 @@ type Props = {
   /** The value as shown, e.g. "115 %". */
   format: (value: number) => string;
   onChange: (value: number) => void;
+  /** One row (label, value, − track +), for the editor's fixed top where height is scarce. */
+  compact?: boolean;
 };
 
 /** While the thumb moves, changes go out at most this often; the last one goes out on release. */
@@ -24,7 +26,7 @@ const SEND_EVERY_MS = 120;
  * and Android's adjustable role with increment and decrement for TalkBack.
  * Every value is cleaned by the registry, so it is always on a step and in range.
  */
-export function SettingSlider({ settingKey, label, value, format, onChange }: Props) {
+export function SettingSlider({ settingKey, label, value, format, onChange, compact = false }: Props) {
   const strings = t().look;
   const c = useChrome();
   const setting = settingFor(settingKey);
@@ -126,8 +128,8 @@ export function SettingSlider({ settingKey, label, value, format, onChange }: Pr
   };
 
   return (
-    <View style={styles.wrap}>
-      <View style={styles.head}>
+    <View style={compact ? styles.compact : styles.wrap}>
+      <View style={[styles.head, compact && styles.headCompact]}>
         <Text style={[styles.label, { color: c.ink }]}>{label}</Text>
         {typing === null ? (
           <Pressable
@@ -153,7 +155,7 @@ export function SettingSlider({ settingKey, label, value, format, onChange }: Pr
           />
         )}
       </View>
-      <View style={styles.row}>
+      <View style={[styles.row, compact && styles.grow]}>
         <Pressable onPress={() => nudge(-1)} style={styles.step} accessibilityRole="button" accessibilityLabel={t().book.decrease(label)}>
           <Text style={[styles.stepText, { color: c.ink }]}>−</Text>
         </Pressable>
@@ -184,6 +186,9 @@ export function SettingSlider({ settingKey, label, value, format, onChange }: Pr
 
 const styles = StyleSheet.create({
   wrap: { gap: 2 },
+  compact: { flexDirection: "row", alignItems: "center", gap: 6 },
+  headCompact: { gap: 8, justifyContent: "flex-start" },
+  grow: { flex: 1 },
   head: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", minHeight: 36 },
   label: { fontSize: 15 },
   value: { fontSize: 15, fontWeight: "600", minWidth: 72, textAlign: "center", paddingVertical: 4, borderWidth: 1, borderRadius: 6 },

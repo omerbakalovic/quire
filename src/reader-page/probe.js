@@ -136,7 +136,9 @@ function linkAt(view, x, y) {
 function freePoint(view, x, height) {
   for (const k of [0.5, 0.42, 0.58, 0.34, 0.66, 0.26, 0.74]) {
     const y = height * k;
-    if (!linkAt(view, x, y) && !linkAt(view, x, y - 24) && !linkAt(view, x, y + 24)) return { x: Math.round(x), y: Math.round(y) };
+    // A finger is wider than a point: keep clear of links around it, not only under it.
+    const clear = [-40, -20, 0, 20, 40].every((dy) => [-24, 0, 24].every((dx) => !linkAt(view, x + dx, y + dy)));
+    if (clear) return { x: Math.round(x), y: Math.round(y) };
   }
   return null;
 }

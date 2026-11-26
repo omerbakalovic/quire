@@ -943,7 +943,22 @@ function zonePoint(st, zone) {
   return toPx(st, st.viewport.width * fraction, st.viewport.height * 0.5);
 }
 
-const tap = ([x, y]) => input(`tap ${x} ${y}`);
+/**
+ * A tap on the page. If it hit a web link after all, the app asks "Open this
+ * link?" in a system dialog; a later tap in a side zone could land on its Open
+ * button and leave the app (phone run 16 opened a Creative Commons page). So
+ * the dialog is closed with the back key before anything else is tapped.
+ */
+const tap = async ([x, y]) => {
+  const from = log.mark();
+  await input(`tap ${x} ${y}`);
+  const external = await log.waitFor((line) => line.source === "reader" && line.phase === "external-link", { from, timeout: 400 });
+  if (external) {
+    say(`a tap at ${x},${y} hit a web link (${String(external.href ?? "").slice(0, 80)}); closing the dialog with the back key`);
+    await input("keyevent 4");
+    await sleep(300);
+  }
+};
 
 let OUT = "";
 

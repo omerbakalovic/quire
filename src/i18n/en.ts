@@ -194,6 +194,7 @@ export const en = {
     coloursHelp: "A theme is a set of colours for the page and the controls. Profiles and books choose a theme by name.",
     origin: {
       here: "Set here",
+      hereNamed: (name: string) => `${name} is set here`,
       book: "This book's own value is in use",
       profile: (name: string) => `${name} sets this, so it wins`,
       global: "From Everywhere",

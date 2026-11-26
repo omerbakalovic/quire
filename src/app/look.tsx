@@ -104,7 +104,7 @@ export default function LookScreen() {
     if (origin.kind !== "here") return null;
     return (
       <View style={styles.noteRow}>
-        <Text style={[styles.small, { color: chrome.muted }]}>{strings.origin.here}</Text>
+        <Text style={[styles.small, { color: chrome.muted }]}>{strings.origin.hereNamed(name)}</Text>
         <Pressable onPress={() => change(key, null)} accessibilityRole="button" accessibilityLabel={t().customize.resetLabel(name)} hitSlop={8}>
           <Text style={[styles.small, styles.underline, { color: chrome.accent }]}>{t().customize.reset}</Text>
         </Pressable>
@@ -169,9 +169,10 @@ export default function LookScreen() {
           {note(themeOrigin, "theme.id", strings.theme)}
           <View style={styles.targetRow}>
             <Text style={[styles.small, { color: chrome.muted }]}>{strings.savingTo}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chips}>
+            {/* Wraps rather than scrolls, so "This book" is never hidden off the edge (phone run 16). */}
+            <View style={[styles.chips, styles.wrap]}>
               {targetsFor(custom, bookId).map((option) => chip(option, targetName(option), option === target, () => setTarget(option)))}
-            </ScrollView>
+            </View>
           </View>
         </View>
         <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist">
@@ -239,6 +240,7 @@ const styles = StyleSheet.create({
   swatchOn: { borderWidth: 3 },
   swatchText: { fontSize: 14, fontWeight: "600" },
   targetRow: { flexDirection: "row", alignItems: "center", gap: 10 },
+  wrap: { flex: 1, flexWrap: "wrap" },
   tabs: { flexDirection: "row", borderBottomWidth: StyleSheet.hairlineWidth },
   tab: { flex: 1, minHeight: 44, alignItems: "center", justifyContent: "center", borderBottomWidth: 2, borderBottomColor: "transparent" },
   tabText: { fontSize: 13 },

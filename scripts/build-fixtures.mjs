@@ -330,4 +330,53 @@ writeTree("font-obfuscation", {
   "OEBPS/fonts/dummy.ttf": "quire-font-placeholder",
 });
 
+// Body text set in px, as many retail books do: Aa > Size has to grow it (emulator run 11).
+const pxChapter = (n) => `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="en">
+<head><title>Px ${n}</title><style>
+html { font-size: 16px; }
+body { font-size: 16px; }
+p { font-size: 16px; line-height: 22px; margin: 0 0 8px; }
+h1 { font-size: 28px; line-height: 34px; }
+.small { font: 12px/16px serif; }
+</style></head>
+<body>
+<h1>Px chapter ${n}</h1>
+<p class="small">PX-SMALL-${n} set with the font shorthand.</p>
+<p style="font-size: 18px">PX-INLINE-${n} set inline.</p>
+${padding(`PX-${n}`, 40)}
+</body></html>
+`;
+
+writeTree("px-sizes", {
+  mimetype: "application/epub+zip",
+  "META-INF/container.xml": container,
+  "OEBPS/content.opf": `<?xml version="1.0" encoding="utf-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:identifier id="uid">urn:uuid:quire-px-sizes</dc:identifier>
+    <dc:title>Quire Px Sizes Fixture</dc:title>
+    <dc:language>en</dc:language>
+    <meta property="dcterms:modified">2026-11-25T00:00:00Z</meta>
+  </metadata>
+  <manifest>
+    <item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>
+    <item id="c1" href="chapter-1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="c2" href="chapter-2.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine><itemref idref="c1"/><itemref idref="c2"/></spine>
+</package>
+`,
+  "OEBPS/nav.xhtml": `<?xml version="1.0" encoding="utf-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops" lang="en">
+<head><title>Contents</title></head>
+<body><nav epub:type="toc"><ol>
+<li><a href="chapter-1.xhtml">Px chapter 1</a></li>
+<li><a href="chapter-2.xhtml">Px chapter 2</a></li>
+</ol></nav></body></html>
+`,
+  "OEBPS/chapter-1.xhtml": pxChapter(1),
+  "OEBPS/chapter-2.xhtml": pxChapter(2),
+});
+
 console.log("Built fixtures in test-books/fixtures");

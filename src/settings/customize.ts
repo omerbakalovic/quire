@@ -39,8 +39,7 @@ export type Row =
 
 export type Section = { group: Group; rows: Row[] };
 
-// Page turns join the screen with the animation work; until then nothing honours them.
-const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "behaviour"];
+const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "gestures", "turns", "behaviour"];
 
 /**
  * The rows for editing one layer. `set` is true when that layer holds the
@@ -86,6 +85,8 @@ export function formatNumber(key: SettingKey, value: number, words: NumberWords)
       return value >= 0 ? `${value.toFixed(1)} em` : words.bookDefault;
     case "page.maxWidth":
       return `${value} px`;
+    case "turn.duration":
+      return `${value} ms`;
     case "light.brightness":
       return value > 0 ? percent(value) : words.system;
     case "light.dimmer":

@@ -1043,12 +1043,12 @@ function words(text, count = 6) {
  * other. A page and a scrolled screen hold different amounts of text, so either
  * may contain the other's start.
  */
-function samePlace(a, b) {
+function samePlace(a, b, within = 0.0005) {
   if (!a || !b) return false;
   if (a.cfi && a.cfi === b.cfi) return true;
   if (a.section !== b.section) return false;
   // Front matter and covers have little or no text to compare; the same spot to within a page is the same place.
-  if (typeof a.fraction === "number" && typeof b.fraction === "number" && Math.abs(a.fraction - b.fraction) < 0.0005) return true;
+  if (typeof a.fraction === "number" && typeof b.fraction === "number" && Math.abs(a.fraction - b.fraction) < within) return true;
   const phrase = (st) => words(st.text, 5).join(" ");
   const contains = (st, text) => text.length > 0 && (st.pageText ?? st.text ?? "").includes(text);
   const startOf = (st) => (st.pageText ?? st.text ?? "").split(/\s+/).slice(0, 5).join(" ");
@@ -1404,7 +1404,8 @@ async function runBook(entry, index) {
     const scrolled = await setFlow("scrolled");
     row.shots.push(await shot(dir, "03-scroll.png"));
     check(scope, "Scroll shows text or an image", hasContent(scrolled), scrolled.text?.slice(0, 50));
-    check(scope, "Pages → Scroll keeps the place", samePlace(before, scrolled), `section ${before.section}→${scrolled.section}, ${before.fraction?.toFixed(3)}→${scrolled.fraction?.toFixed(3)}`);
+    // Scroll mode shows a little text above the anchor, so the switch may move up to about a screen (DECISIONS.md, page layout).
+    check(scope, "Pages → Scroll keeps the place", samePlace(before, scrolled, 0.002), `section ${before.section}→${scrolled.section}, ${before.fraction?.toFixed(3)}→${scrolled.fraction?.toFixed(3)}`);
     // In a chapter shorter than a screen and a half, two swipes scroll past its end onto blank paper.
     const short = scrolled.shortSection;
     await swipeForward(scrolled);
@@ -1846,13 +1847,15 @@ async function main() {
   if (!serial) await pickDevice();
   healthAdb = adbRunner(ADB, serial);
   if (!(await preflight())) return;
+  // Before the open shells: one of them runs as the app, which needs the app installed.
+  // `pm path` exits 1 for a package that is not there.
+  const installed = (await adb(["shell", `pm path ${PKG}`]).catch(() => "")).includes("package:");
+  if (opts.install || (!installed && serial.startsWith("emulator-"))) await installDebug();
+  else if (!installed) throw new Error(`${PKG} (Quire Dev) is not installed on ${serial}. Debug builds install under that id now; run \`npm run android\` once, or pass --install.`);
   await openShells();
   const device = `${(await shell("getprop ro.product.model")).trim()}, Android ${(await shell("getprop ro.build.version.release")).trim()} (${serial})`;
   const meta = { started, device, commit: await gitCommit(), mode: opts.quick ? "quick" : opts.only ? `only ${opts.only}` : "full" };
   say(device);
-  const installed = (await shell(`pm path ${PKG}`)).includes("package:");
-  if (opts.install || (!installed && serial.startsWith("emulator-"))) await installDebug();
-  else if (!installed) throw new Error(`${PKG} (Quire Dev) is not installed. Debug builds install under that id now; run \`npm run android\` once, or pass --install.`);
   await adb(["reverse", "tcp:8081", "tcp:8081"]);
   await pickInput();
   startWatchdog();
@@ -1872,6 +1875,7 @@ async function main() {
         }
         // A cold start, so the app runs Metro's current code and the reader page pushed below.
         await shell(`am force-stop ${PKG}`);
+        if (serial.startsWith("emulator-")) await pointAtMetro();
         await runAs(`rm -rf ${COMMANDS}`).catch(() => {});
         await pushReader();
         log.reset();
@@ -2045,6 +2049,19 @@ async function startEmulator() {
     await sleep(2000);
   }
   throw new Error(`the emulator did not finish booting within 6 minutes; see ${logFile}`);
+}
+
+/**
+ * An emulator reaches Metro on the computer at 10.0.2.2; adb reverse to its
+ * localhost did not work on the API 36 image. React Native reads the bundler
+ * host from "debug_http_host" in the app's default preferences, so it is set
+ * there while the app is stopped. Debug builds allow cleartext to 10.0.2.2
+ * (plugins/withLocalCleartext.js).
+ */
+async function pointAtMetro() {
+  const xml = `<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <string name="debug_http_host">10.0.2.2:8081</string>\n</map>\n`;
+  await runAs(`mkdir -p shared_prefs && echo ${b64(xml)} | base64 -d > shared_prefs/${PKG}_preferences.xml`);
+  say("emulator: the app loads its code from Metro at 10.0.2.2:8081");
 }
 
 /** Puts this checkout's debug build on the device (an emulator gets it without asking). */

@@ -78,3 +78,22 @@ export function originOf(layers: LayerValues, target: Target, key: SettingKey): 
 export function groupsFor(tab: Tab): readonly Group[] {
   return TAB_GROUPS[tab];
 }
+
+/** The least height the settings list keeps under the preview, and the least preview worth showing (dp). */
+export const MIN_SETTINGS_HEIGHT = 160;
+export const MIN_PREVIEW_HEIGHT = 120;
+
+/**
+ * The preview pane's height: 30 % of a portrait window or 40 % of a landscape
+ * one, but never so tall that the settings list under it gets less than
+ * MIN_SETTINGS_HEIGHT. `free` is the screen's height left after the fixed top,
+ * the preview toggle and the tabs (null before they are measured). 0 means
+ * there is no room for a useful preview.
+ */
+export function previewHeight(window: { width: number; height: number }, free: number | null): number {
+  const wanted = Math.round(window.height * (window.height > window.width ? 0.3 : 0.4));
+  if (free === null) return wanted;
+  const room = Math.floor(free - MIN_SETTINGS_HEIGHT);
+  const height = Math.min(wanted, room);
+  return height >= MIN_PREVIEW_HEIGHT ? height : 0;
+}

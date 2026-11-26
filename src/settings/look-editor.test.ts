@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { changeSetting, parseCustomization } from "./customization.ts";
-import { defaultTarget, editorLayers, isTab, originOf, TAB_GROUPS, TABS, targetsFor, validTarget } from "./look-editor.ts";
+import { defaultTarget, editorLayers, isTab, MIN_PREVIEW_HEIGHT, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TAB_GROUPS, TABS, targetsFor, validTarget } from "./look-editor.ts";
 import { SETTINGS } from "./registry.ts";
 
 const custom = parseCustomization({
@@ -39,4 +39,16 @@ test("every setting group belongs to exactly one tab", () => {
   for (const group of groups) assert.equal(seen.filter((g) => g === group).length, 1, group);
   assert.equal(isTab("colours"), true);
   assert.equal(isTab("../x"), false);
+});
+
+test("the preview keeps its share of the window when there is room", () => {
+  assert.equal(previewHeight({ width: 412, height: 915 }, null), 275);
+  assert.equal(previewHeight({ width: 412, height: 915 }, 600), 275);
+  assert.equal(previewHeight({ width: 915, height: 412 }, 400), 165);
+});
+
+test("the preview shrinks so the settings list keeps its least height, and goes when too small", () => {
+  assert.equal(previewHeight({ width: 412, height: 915 }, 400), 400 - MIN_SETTINGS_HEIGHT);
+  assert.equal(previewHeight({ width: 800, height: 360 }, 200), 0);
+  assert.equal(previewHeight({ width: 800, height: 360 }, MIN_SETTINGS_HEIGHT + MIN_PREVIEW_HEIGHT - 1), 0);
 });

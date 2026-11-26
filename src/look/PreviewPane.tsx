@@ -6,6 +6,7 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { classifyEncryption } from "@/domain/drm";
 import { t } from "@/i18n";
 import { AmbientBands } from "@/reader/AmbientBands";
+import { LightVeil } from "@/reader/LightVeil";
 import { lookFor, type Look } from "@/reader/look";
 import { previewOpenMessage } from "@/reader/open-message";
 import { appendNote, bookUrl, ensureLoopback, importBook, readerUrl, registerBook } from "@/renderer/book-url";
@@ -224,6 +225,8 @@ export function PreviewPane({ settings, fonts }: Props) {
               }}
             />
           ) : null}
+          {/* The reader's own dimmer and warm veils, above the page and its bands as in the reader. */}
+          {ready ? <LightVeil dimmer={settings["light.dimmer"]} warmth={settings["light.warmth"]} /> : null}
         </View>
       ) : null}
       {!ready && !failed ? (

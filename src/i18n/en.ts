@@ -207,6 +207,7 @@ export const en = {
     previewLabel: "Preview of a sample page in the current look",
     previewHide: "Hide preview",
     previewShow: "Show preview",
+    previewNoRoom: "No room for the preview in this window",
     previewFailed: "The sample page could not be opened. Your changes still apply to your books.",
     sampleTitle: "The Lighthouse",
     sampleAuthor: "Quire",

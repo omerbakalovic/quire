@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { findBook } from "@/domain/library";
@@ -13,7 +13,7 @@ import { SettingSlider } from "@/look/SettingSlider";
 import { ChromeProvider, chromeFor } from "@/reader/chrome";
 import { changedSince, resolvedFor, type Customization } from "@/settings/customization";
 import { formatNumber } from "@/settings/customize";
-import { defaultTarget, editorLayers, isTab, layerOf, originOf, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
+import { defaultTarget, editorLayers, isTab, layerOf, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
 import { THEMES, themeFor } from "@/settings/themes";
 
@@ -46,6 +46,14 @@ export default function LookScreen() {
 
   const window = useWindowDimensions();
   const [preview, setPreview] = useState(true);
+  // Heights of the screen and of everything fixed above the settings list, so the preview never squeezes the list out.
+  const [heights, setHeights] = useState({ screen: 0, top: 0, toggle: 0, tabs: 0 });
+  const measure = (part: keyof typeof heights) => (event: LayoutChangeEvent) => {
+    const height = event.nativeEvent.layout.height;
+    setHeights((old) => (old[part] === height ? old : { ...old, [part]: height }));
+  };
+  const free = heights.screen > 0 ? heights.screen - heights.top - heights.toggle - heights.tabs : null;
+  const paneHeight = previewHeight(window, free);
   const [tab, setTab] = useState<Tab>(isTab(params.tab) ? params.tab : "text");
   const [chosen, setTarget] = useState<Target>(() => defaultTarget(custom, bookId));
   const target = validTarget(custom, bookId, chosen);
@@ -117,7 +125,7 @@ export default function LookScreen() {
 
   return (
     <ChromeProvider chrome={chrome}>
-      <View style={[styles.screen, { backgroundColor: chrome.panel }]}>
+      <View style={[styles.screen, { backgroundColor: chrome.panel }]} onLayout={measure("screen")}>
         <Stack.Screen
           options={{
             title: strings.title,
@@ -140,7 +148,7 @@ export default function LookScreen() {
           }}
         />
         {/* The fixed top: always visible, so a quick change is Aa → change → Back. */}
-        <View style={[styles.top, { borderBottomColor: chrome.line }]}>
+        <View style={[styles.top, { borderBottomColor: chrome.line }]} onLayout={measure("top")}>
           <ProfileBar custom={custom} onNotice={showNotice} />
           <SettingSlider
             settingKey="type.fontSize"
@@ -179,15 +187,23 @@ export default function LookScreen() {
           </View>
         </View>
         {/* The live sample page (roadmap C2): the real reader page with the sample chapter. */}
-        <Pressable onPress={() => setPreview((v) => !v)} accessibilityRole="button" style={[styles.previewToggle, { borderBottomColor: chrome.line }]}>
-          <Text style={[styles.small, { color: chrome.muted }]}>{preview ? `${strings.previewHide} ▴` : `${strings.previewShow} ▾`}</Text>
+        <Pressable
+          onPress={() => setPreview((v) => !v)}
+          disabled={paneHeight === 0}
+          onLayout={measure("toggle")}
+          accessibilityRole="button"
+          style={[styles.previewToggle, { borderBottomColor: chrome.line }]}
+        >
+          <Text style={[styles.small, { color: chrome.muted }]}>
+            {paneHeight === 0 ? strings.previewNoRoom : preview ? `${strings.previewHide} ▴` : `${strings.previewShow} ▾`}
+          </Text>
         </Pressable>
-        {preview ? (
-          <View style={{ height: Math.round(window.height * (window.height > window.width ? 0.3 : 0.4)) }}>
+        {preview && paneHeight > 0 ? (
+          <View style={{ height: paneHeight }}>
             <PreviewPane settings={settings} fonts={custom.fonts} />
           </View>
         ) : null}
-        <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist">
+        <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist" onLayout={measure("tabs")}>
           {TABS.map((option) => (
             <Pressable
               key={option}

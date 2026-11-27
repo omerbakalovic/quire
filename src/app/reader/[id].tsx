@@ -295,7 +295,7 @@ export default function BookScreen() {
         return;
       case "external-link":
         note({ phase: "external-link", id, href: message.href });
-        confirmExternalLink(message.href, setNotice, { toolbar: reader.theme.page, controls: reader.theme.link });
+        confirmExternalLink(message.href, setNotice, { toolbar: reader.theme.page, controls: reader.theme.link, chrome: chromeFor(reader.theme) });
         return;
       case "debug": {
         const waiter = debugWaiters.current.get(message.reqId);
@@ -573,16 +573,16 @@ export default function BookScreen() {
         ) : null}
         {phase === "reading" ? <LightVeil dimmer={reader.settings["light.dimmer"]} warmth={reader.settings["light.warmth"]} /> : null}
       {phase === "starting" || phase === "opening" ? (
-          <View style={styles.overlay} pointerEvents="none">
-            <ActivityIndicator size="large" />
-            <Text style={styles.overlayText}>{strings.opening}</Text>
+          <View style={[styles.overlay, { backgroundColor: reader.look.page }]} pointerEvents="none">
+            <ActivityIndicator size="large" color={reader.look.muted} />
+            <Text style={[styles.overlayText, { color: reader.look.ink }]}>{strings.opening}</Text>
           </View>
         ) : null}
         {message ? (
-          <View style={styles.overlay}>
-            <Text style={styles.overlayText}>{message}</Text>
-            <Pressable onPress={() => router.back()} accessibilityRole="button" style={styles.button}>
-              <Text style={styles.buttonText}>{strings.back}</Text>
+          <View style={[styles.overlay, { backgroundColor: reader.look.page }]}>
+            <Text style={[styles.overlayText, { color: reader.look.ink }]}>{message}</Text>
+            <Pressable onPress={() => router.back()} accessibilityRole="button" style={[styles.button, { backgroundColor: chrome.controlOn }]}>
+              <Text style={[styles.buttonText, { color: chrome.controlOnInk }]}>{strings.back}</Text>
             </Pressable>
           </View>
         ) : null}
@@ -629,8 +629,8 @@ export default function BookScreen() {
           />
         ) : null}
         {notice ? (
-          <Pressable style={[styles.notice, { bottom: controls ? Math.max(bottomHeight, insets.bottom) + 8 : insets.bottom + 72 }]} onPress={() => setNotice(null)}>
-            <Text style={styles.noticeText}>{notice}</Text>
+          <Pressable style={[styles.notice, { backgroundColor: chrome.sheet, borderColor: chrome.line }, { bottom: controls ? Math.max(bottomHeight, insets.bottom) + 8 : insets.bottom + 72 }]} onPress={() => setNotice(null)}>
+            <Text style={[styles.noticeText, { color: chrome.sheetInk }]}>{notice}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -639,8 +639,8 @@ export default function BookScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: "#111" },
-  web: { flex: 1, backgroundColor: "#fff" },
+  screen: { flex: 1 },
+  web: { flex: 1 },
   page: { flex: 1 },
   overlay: {
     ...StyleSheet.absoluteFill,
@@ -648,20 +648,19 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     padding: 24,
     gap: 16,
-    backgroundColor: "#111",
   },
-  overlayText: { color: "#eee", fontSize: 16, textAlign: "center" },
-  button: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8, backgroundColor: "#333" },
-  buttonText: { color: "#fff", fontSize: 16 },
+  overlayText: { fontSize: 16, textAlign: "center" },
+  button: { paddingHorizontal: 20, paddingVertical: 12, borderRadius: 8 },
+  buttonText: { fontSize: 16 },
   notice: {
     position: "absolute",
     left: 16,
     right: 16,
     padding: 12,
     borderRadius: 8,
-    backgroundColor: "#333e",
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  noticeText: { color: "#fff", fontSize: 14, textAlign: "center" },
+  noticeText: { fontSize: 14, textAlign: "center" },
 });
 
 function secondsLeft(left: { chapter: number | null; book: number | null }) {

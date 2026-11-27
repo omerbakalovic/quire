@@ -123,8 +123,8 @@ export function forgetBook(look: LibraryLook, id: string): LibraryLook {
 }
 
 /** The pill's background: the reader's pick, else the cover's average, else neutral. */
-export function pillColor(look: LibraryLook, id: string): string {
-  return look.bookColors[id] ?? look.coverColors[id] ?? NEUTRAL_PILL;
+export function pillColor(look: LibraryLook, id: string, fallback: string = NEUTRAL_PILL): string {
+  return look.bookColors[id] ?? look.coverColors[id] ?? fallback;
 }
 
 /** Black or white text, whichever reads better on the background (WCAG relative luminance). */

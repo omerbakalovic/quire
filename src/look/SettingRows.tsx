@@ -82,6 +82,7 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
   const choiceName = (key: SettingKey, option: string): string => {
     if (key === "type.fontFamily") return fontLabel(option, book.fonts, custom.fonts);
     if (key === "theme.id") return book.themes[option] ?? option;
+    if (key === "app.theme") return option === "follow" ? strings.appThemeFollow : (book.themes[option] ?? option);
     if (key === "type.alignment") return book.aligns[option] ?? option;
     if (key === "turn.style") return strings.turns[option] ?? option;
     if (key.startsWith("gesture.")) return strings.actions[option] ?? option;
@@ -139,11 +140,11 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
               choiceName(row.key, option),
               row.value === option,
               () => onChange(row.key, option),
-              imported ? () => confirmRemoveFont(imported) : undefined,
+              imported ? () => confirmRemoveFont(imported, c) : undefined,
               imported ? book.fontRemoveHint : undefined,
             );
           })}
-          {fonts ? chip("add", `+ ${book.fontAdd}`, false, () => void pickFont((font) => onChange(row.key, font.id)), undefined, book.fontAddHint) : null}
+          {fonts ? chip("add", `+ ${book.fontAdd}`, false, () => void pickFont((font) => onChange(row.key, font.id), c), undefined, book.fontAddHint) : null}
         </View>
       </View>
     );

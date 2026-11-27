@@ -36,11 +36,10 @@ const styles = StyleSheet.create({
     maxWidth: "90%",
     borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    backgroundColor: "#2c2c2ef0",
     minHeight: 44,
   },
   main: { flexShrink: 1, flexDirection: "row", alignItems: "center", gap: 8, paddingLeft: 16, paddingRight: 8, minHeight: 44 },
-  text: { color: "#fff", fontSize: 15, flexShrink: 1 },
-  count: { color: "#aaa", fontSize: 12 },
+  text: { fontSize: 15, flexShrink: 1 },
+  count: { fontSize: 12 },
   x: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center", paddingRight: 4 },
 });

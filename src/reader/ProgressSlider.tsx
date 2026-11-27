@@ -130,9 +130,9 @@ const styles = StyleSheet.create({
   // Wide enough to drag; in a crowded control row it wraps to its own line instead.
   wrap: { flex: 1, minWidth: 120, justifyContent: "center" },
   hit: { height: 44, justifyContent: "center" },
-  track: { height: 4, borderRadius: 2, backgroundColor: "#555", overflow: "hidden" },
+  track: { height: 4, borderRadius: 2, overflow: "hidden" },
   ticks: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },
-  fill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 2, backgroundColor: "#ddd" },
+  fill: { position: "absolute", left: 0, top: 0, bottom: 0, borderRadius: 2 },
   tick: { position: "absolute", top: 16, width: 2, height: 12, marginLeft: -1, borderRadius: 1 },
   thumb: {
     position: "absolute",
@@ -141,7 +141,6 @@ const styles = StyleSheet.create({
     height: 18,
     marginLeft: -9,
     borderRadius: 9,
-    backgroundColor: "#fff",
   },
   bubble: {
     borderWidth: StyleSheet.hairlineWidth,
@@ -151,9 +150,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: "#2c2c2e",
     alignItems: "center",
   },
-  bubbleTitle: { color: "#fff", fontSize: 14, fontWeight: "600" },
-  bubbleSub: { color: "#bbb", fontSize: 12 },
+  bubbleTitle: { fontSize: 14, fontWeight: "600" },
+  bubbleSub: { fontSize: 12 },
 });

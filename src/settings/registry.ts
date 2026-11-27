@@ -37,6 +37,8 @@ const PROFILE_UP: Layer[] = ["profile", "global"];
 
 export const ALIGNMENTS = ["publisher", "start", "justify"] as const;
 export const THEME_IDS = ["light", "paper", "gray", "dark", "black", "night", "contrast"] as const;
+/** The app theme: "follow" uses the reading theme resolved from profile and global (roadmap 2.3). */
+export const APP_THEMES = ["follow", ...THEME_IDS] as const;
 export const TURN_STYLES = ["none", "slide", "fade"] as const;
 /**
  * What the header and footer bands can show while reading (docs/customization.md, 3.3).
@@ -76,6 +78,7 @@ export const SETTINGS = [
   { key: "page.marginX", type: "number", default: 4, min: 0, max: 20, step: 1, group: "page", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "page.maxWidth", type: "number", default: 720, min: 400, max: 1600, step: 20, group: "page", scopes: NOT_SESSION, relayout: true, depth: "advanced" },
   { key: "theme.id", type: "choice", default: "light", choices: THEME_IDS, group: "theme", scopes: ALL, relayout: false, depth: "quick" },
+  { key: "app.theme", type: "choice", default: "follow", choices: APP_THEMES, group: "theme", scopes: ["global"], relayout: false, depth: "standard" },
   // The reader's own screen brightness. 0 follows the system. Only the reader's window changes,
   // so leaving the reader or the app always gives the system value back.
   { key: "light.brightness", type: "number", default: 0, min: 0, max: 1, step: 0.05, group: "light", scopes: ALL, relayout: false, depth: "quick" },

@@ -323,6 +323,11 @@ export default function LookScreen() {
               onChoose={(id) => change("theme.id", id)}
               onNotice={showNotice}
               onActive={setHolding}
+              onReveal={(view) => {
+                const content = listRef.current?.getInnerViewRef();
+                if (!view || !content) return;
+                view.measureLayout(content, (_x, y) => listRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }));
+              }}
             />
           ) : null}
           {tab === "colours" && draft ? null : (

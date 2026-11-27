@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
 import { appThemeId, changeSetting, emptyCustomization, resolvedFor, saveProfile, setActiveProfile } from "./customization.ts";
@@ -71,7 +72,8 @@ function sources(dir: string): string[] {
 }
 
 test("no screen or reader control hard-codes a colour (C3); colours come from the theme", () => {
-  const root = new URL("../", import.meta.url).pathname;
+  // fileURLToPath, not .pathname: on Windows that gives "/C:/…" (emulator run 27).
+  const root = fileURLToPath(new URL("../", import.meta.url));
   const offenders: string[] = [];
   for (const dir of ["app", "reader", "look", "ui"]) {
     for (const file of sources(join(root, dir))) {

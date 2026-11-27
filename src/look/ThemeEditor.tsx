@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { type ComponentRef, useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, TextInput, View } from "react-native";
 
 import { t } from "@/i18n";
@@ -28,6 +28,8 @@ import { ThemedSwitch } from "@/ui/ThemedSwitch";
 
 import { ColorPicker } from "./ColorPicker";
 
+export type ViewRef = ComponentRef<typeof View>;
+
 type Props = {
   custom: Customization;
   /** The theme in use where Reading Look is saving. */
@@ -38,6 +40,8 @@ type Props = {
   onNotice: (text: string, undo?: () => void) => void;
   /** True while a picker handle is held, so the list stops scrolling. */
   onActive: (active: boolean) => void;
+  /** Scroll the list so this view is near its top: the opened picker, the editor's heading. */
+  onReveal: (view: ViewRef | null) => void;
 };
 
 /** Background tokens: their example is a filled box with their own text on it. */
@@ -63,13 +67,26 @@ function flagFor(flags: readonly ContrastFlag[], key: TokenKey): ContrastFlag | 
  * The Colours tab's theme list and theme editor (docs/customization-roadmap.md, C4).
  * Choosing a theme applies at once; editing works on a draft that only Save keeps.
  */
-export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotice, onActive }: Props) {
+export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotice, onActive, onReveal }: Props) {
   const c = useChrome();
   const strings = t().look.themes;
   const names = t().book.themes as Record<string, string>;
   const builtInName = (id: ThemeId) => names[id] ?? id;
   const nameOf = (id: string) => (isBuiltInTheme(id) ? builtInName(id) : (custom.themes.find((u) => u.id === id)?.name ?? id));
   const [open, setOpen] = useState<TokenKey | null>(null);
+  const rows = useRef(new Map<string, ViewRef>());
+  const top = useRef<ViewRef>(null);
+  // After the new layout is drawn (emulator run 27: the picker opened below the screen, the editor began past its name field).
+  const reveal = (view: () => ViewRef | null | undefined) => setTimeout(() => onReveal(view() ?? null), 120);
+  const pick = (key: TokenKey | null) => {
+    setOpen(key);
+    if (key) reveal(() => rows.current.get(key));
+  };
+  const startEditing = (next: Draft) => {
+    setOpen(null);
+    onDraft(next);
+    reveal(() => top.current);
+  };
 
   const edit = (id: string) => {
     const next = startDraft(id, custom.themes, builtInName, strings.copyWord);
@@ -77,8 +94,7 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
       onNotice(strings.full);
       return;
     }
-    setOpen(null);
-    onDraft(next);
+    startEditing(next);
     if (next.isNew) onNotice(strings.copyStarted(next.theme.name));
   };
 
@@ -87,8 +103,7 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
       onNotice(strings.full);
       return;
     }
-    setOpen(null);
-    onDraft(duplicateDraft(id, custom.themes, builtInName, strings.copyWord));
+    startEditing(duplicateDraft(id, custom.themes, builtInName, strings.copyWord));
   };
 
   const remove = (id: string) => {
@@ -165,7 +180,7 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
   const swatches = swatchesFor(tokens, custom.recentColours);
 
   return (
-    <View style={styles.wrap}>
+    <View style={styles.wrap} ref={top}>
       <Text style={[styles.section, { color: c.muted }]} accessibilityRole="header">
         {strings.editing}
       </Text>
@@ -200,10 +215,17 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
             const changed = key in draft.theme.tokens;
             const isOpen = open === key;
             return (
-              <View key={key} style={[styles.tokenWrap, { borderBottomColor: c.line }]}>
+              <View
+                key={key}
+                ref={(view) => {
+                  if (view) rows.current.set(key, view);
+                  else rows.current.delete(key);
+                }}
+                style={[styles.tokenWrap, { borderBottomColor: c.line }]}
+              >
                 <View style={styles.tokenRow}>
                   <Pressable
-                    onPress={() => setOpen(isOpen ? null : key)}
+                    onPress={() => pick(isOpen ? null : key)}
                     accessibilityRole="button"
                     accessibilityState={{ expanded: isOpen }}
                     accessibilityLabel={strings.pickLabel(name, tokens[key])}

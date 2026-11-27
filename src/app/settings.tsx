@@ -1,8 +1,9 @@
 import { Stack, useRouter } from "expo-router";
 import { useEffect } from "react";
-import { Pressable, ScrollView, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { t } from "@/i18n";
+import { ThemedSwitch } from "@/ui/ThemedSwitch";
 import type { LibraryStyle, LookOptions } from "@/domain/library-look";
 import { loadLibrary, saveLook, saveSetting, saveSettings, useLibrary } from "@/library/store";
 import { useChrome } from "@/reader/chrome";
@@ -15,7 +16,7 @@ function Toggle({ label, value, onChange }: { label: string; value: boolean; onC
   return (
     <View style={styles.row}>
       <Text style={[styles.label, { color: c.appInk }]}>{label}</Text>
-      <Switch value={value} onValueChange={onChange} accessibilityLabel={label} />
+      <ThemedSwitch value={value} onValueChange={onChange} accessibilityLabel={label} />
     </View>
   );
 }
@@ -101,7 +102,7 @@ export default function SettingsScreen() {
       <Text style={[styles.section, muted]}>{strings.taps}</Text>
       <View style={styles.row}>
         <Text style={[styles.label, text]}>{strings.tapsFollowBook}</Text>
-        <Switch
+        <ThemedSwitch
           value={followBook}
           onValueChange={(value) => void saveSettings({ tapZones: value ? "reading" : "screen" })}
           accessibilityLabel={strings.tapsFollowBook}

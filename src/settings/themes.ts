@@ -106,11 +106,18 @@ const BASE: Record<ThemeId, BaseTokens> = {
   dark: { page: "#1f1f21", ink: "#dedcd6", inkMuted: "#9b9993", link: "#8ab4f8", selection: "#3d5a80", chrome: "#2a2a2d", chromeInk: "#eeeeee", accent: "#8ab4f8", dark: true },
   black: { page: "#000000", ink: "#cfcfcf", inkMuted: "#8a8a8a", link: "#7fa7e8", selection: "#2e4566", chrome: "#0d0d0d", chromeInk: "#e0e0e0", accent: "#7fa7e8", dark: true },
   night: { page: "#0b0906", ink: "#a8875a", inkMuted: "#6e5a3e", link: "#c08a4a", selection: "#3a2a14", chrome: "#120e09", chromeInk: "#a8875a", accent: "#c08a4a", dark: true },
-  contrast: { page: "#ffffff", ink: "#000000", inkMuted: "#222222", link: "#0000cc", selection: "#ffe066", chrome: "#000000", chromeInk: "#ffffff", accent: "#0000cc", dark: false },
+  // White bars with black ink, so the blue accent reads on them too (emulator run 24: blue on black bars was 1.9:1).
+  contrast: { page: "#ffffff", ink: "#000000", inkMuted: "#222222", link: "#0000cc", selection: "#ffe066", chrome: "#ffffff", chromeInk: "#000000", accent: "#0000cc", dark: false },
+};
+
+/** Tokens a built-in theme states beyond the base, where the derived value doesn't suit it. */
+const EXTRA: Partial<Record<ThemeId, Partial<ThemeTokens>>> = {
+  // A full black line between white bars and the white page, and black pills for books without a colour.
+  contrast: { chromeDivider: "#000000", pillDefault: "#000000" },
 };
 
 export const THEMES: Record<ThemeId, ThemeTokens> = Object.fromEntries(
-  Object.entries(BASE).map(([id, base]) => [id, expandTokens(base)]),
+  Object.entries(BASE).map(([id, base]) => [id, expandTokens({ ...base, ...EXTRA[id as ThemeId] })]),
 ) as Record<ThemeId, ThemeTokens>;
 
 export function themeFor(id: string): ThemeTokens {

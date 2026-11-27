@@ -510,7 +510,7 @@ export default function BookScreen() {
   return (
     <ChromeProvider chrome={chrome}>
       <View ref={screenRef} style={[styles.screen, { backgroundColor: reader.look.page }]} collapsable={false}>
-        <StatusBar style={chrome.dark ? "light" : "dark"} />
+        <StatusBar style={chrome.statusBar} />
         <Stack.Screen options={{ headerShown: false }} />
         <View
           ref={pageRef}

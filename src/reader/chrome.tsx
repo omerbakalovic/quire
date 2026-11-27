@@ -1,6 +1,6 @@
 import { createContext, useContext, type ReactNode } from "react";
 
-import { THEMES, withAlpha, type ThemeTokens } from "@/settings/themes";
+import { luminance, THEMES, withAlpha, type ThemeTokens } from "@/settings/themes";
 
 export { withAlpha };
 
@@ -39,11 +39,14 @@ export type Chrome = {
   divider: string;
   pillDefault: string;
   dark: boolean;
+  /** Status bar icons: light on a dark bar colour, dark on a light one (from the bar colour, not the theme's flag). */
+  statusBar: "light" | "dark";
 };
 
 export function chromeFor(theme: ThemeTokens): Chrome {
   return {
-    bar: withAlpha(theme.chrome, 0.95),
+    // Opaque: the page showing faintly through the bars looked noisy (emulator run 24).
+    bar: theme.chrome,
     panel: theme.chrome,
     ink: theme.chromeInk,
     muted: withAlpha(theme.chromeInk, 0.65),
@@ -67,6 +70,7 @@ export function chromeFor(theme: ThemeTokens): Chrome {
     divider: theme.appDivider,
     pillDefault: theme.pillDefault,
     dark: theme.dark,
+    statusBar: (luminance(theme.chrome.slice(0, 7)) ?? 1) < 0.4 ? "light" : "dark",
   };
 }
 

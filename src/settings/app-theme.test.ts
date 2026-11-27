@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { appThemeId, changeSetting, emptyCustomization, resolvedFor, saveProfile, setActiveProfile } from "./customization.ts";
 import { readingCss } from "./reading-css.ts";
 import { THEME_IDS } from "./registry.ts";
-import { expandTokens, THEMES, withAlpha, type BaseTokens, type ThemeTokens } from "./themes.ts";
+import { contrast, expandTokens, THEMES, withAlpha, type BaseTokens, type ThemeTokens } from "./themes.ts";
 
 // The built-in themes before tokens v2 (C3), copied here so the derivation can't drift silently.
 const BEFORE: Record<string, BaseTokens> = {
@@ -83,4 +83,26 @@ test("no screen or reader control hard-codes a colour (C3); colours come from th
     }
   }
   assert.deepEqual(offenders, []);
+});
+
+test("every built-in theme's text and accents are readable on what they sit on (emulator run 24)", () => {
+  const rgb = (hex: string) => hex.slice(0, 7);
+  for (const id of THEME_IDS) {
+    const t = THEMES[id];
+    const pairs: [string, string, string, number][] = [
+      ["ink on page", t.ink, t.page, 4.5],
+      ["chromeInk on chrome", t.chromeInk, t.chrome, 4.5],
+      ["sheetInk on sheet", t.sheetInk, t.sheet, 4.5],
+      ["appInk on appBackground", t.appInk, t.appBackground, 4.5],
+      ["accent on chrome", t.accent, t.chrome, 3],
+      ["accent on page", t.accent, t.page, 3],
+      ["accent on sheet", t.accent, t.sheet, 3],
+      ["danger on sheet", t.danger, t.sheet, 3],
+      ["controlOnInk on controlOn", t.controlOnInk, t.controlOn, 3],
+    ];
+    for (const [name, fg, bg, minimum] of pairs) {
+      const ratio = contrast(rgb(fg), rgb(bg)) ?? 0;
+      assert.ok(ratio >= minimum, `${id}: ${name} is ${ratio.toFixed(2)}:1, under ${minimum}:1`);
+    }
+  }
 });

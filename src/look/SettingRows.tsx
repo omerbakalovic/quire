@@ -1,6 +1,7 @@
-import { Pressable, StyleSheet, Switch, Text, View } from "react-native";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { t } from "@/i18n";
+import { ThemedSwitch } from "@/ui/ThemedSwitch";
 import { saveSettingsIn } from "@/library/store";
 import { useChrome } from "@/reader/chrome";
 import { confirmRemoveFont, pickFont } from "@/reader/font-import";
@@ -97,7 +98,7 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
       return (
         <View key={row.key} style={styles.row}>
           {label(row)}
-          <Switch value={row.value} onValueChange={(value) => onChange(row.key, value)} accessibilityLabel={title} />
+          <ThemedSwitch value={row.value} onValueChange={(value) => onChange(row.key, value)} accessibilityLabel={title} />
         </View>
       );
     }

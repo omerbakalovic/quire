@@ -20,7 +20,7 @@ export default function RootLayout() {
   const chrome = useMemo(() => chromeFor(themeFor(themeId)), [themeId]);
   return (
     <ChromeProvider chrome={chrome}>
-      <StatusBar style={chrome.dark ? "light" : "dark"} />
+      <StatusBar style={chrome.statusBar} />
       {__DEV__ ? <MatrixChannel /> : null}
       <Stack
         screenOptions={{

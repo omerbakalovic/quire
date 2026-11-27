@@ -83,6 +83,8 @@ export function SettingSlider({ settingKey, label, value, format, onChange, comp
       PanResponder.create({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: (_event, g) => isSideways(g.dx, g.dy),
+        // Leave the list's native scroll free to take a vertical swipe that starts here (emulator run 20).
+        onShouldBlockNativeResponder: () => false,
         // Until the thumb is sliding, a scroll of the editor may take the gesture.
         onPanResponderTerminationRequest: () => !sliding.current,
         onPanResponderGrant: () => {

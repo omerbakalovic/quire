@@ -1,6 +1,6 @@
 import { Stack, useLocalSearchParams, useRouter } from "expo-router";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Keyboard, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
+import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
+import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { findBook } from "@/domain/library";
@@ -58,9 +58,23 @@ export default function LookScreen() {
   const pinTop = free === null || free >= MIN_SETTINGS_HEIGHT;
   // The keyboard folds the preview away (kept loaded) so the field being typed into stays in view.
   const [keyboard, setKeyboard] = useState(false);
+  const listRef = useRef<ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
-    const shown = Keyboard.addListener("keyboardDidShow", () => setKeyboard(true));
-    const hidden = Keyboard.addListener("keyboardDidHide", () => setKeyboard(false));
+    const shown = Keyboard.addListener("keyboardDidShow", () => {
+      setKeyboard(true);
+      // Once the preview has folded, bring the field being typed into near the top of the list (emulator run 20).
+      setTimeout(() => {
+        const input = TextInput.State.currentlyFocusedInput();
+        const content = listRef.current?.getInnerViewRef();
+        if (!input || !content) return;
+        input.measureLayout(content, (_x, y) => listRef.current?.scrollTo({ y: Math.max(0, y - 96), animated: true }));
+      }, 80);
+    });
+    // Back closes the keyboard without leaving the field; leave it, so a typed value is kept as it is with Done.
+    const hidden = Keyboard.addListener("keyboardDidHide", () => {
+      setKeyboard(false);
+      TextInput.State.currentlyFocusedInput()?.blur();
+    });
     return () => {
       shown.remove();
       hidden.remove();
@@ -236,7 +250,7 @@ export default function LookScreen() {
             </Pressable>
           ))}
         </View>
-        <ScrollView contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={listRef} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 }]} keyboardShouldPersistTaps="handled">
           {pinTop ? null : fixedTop}
           <Text style={[styles.small, { color: chrome.muted }]}>{help}</Text>
           {bookOverrides > 0 ? (

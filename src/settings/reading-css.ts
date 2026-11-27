@@ -47,10 +47,13 @@ export function readingCss(settings: Resolved, theme: ThemeTokens, userFonts: re
   // Page tokens beyond the base (C4). Only written when a theme sets them apart from
   // what they derive from, so the built-in themes' CSS stays as it was.
   const strong = replace ? " !important" : "";
-  if (theme.heading && theme.heading !== theme.ink) rules.push(`h1, h2, h3, h4, h5, h6 { color: ${theme.heading}${strong}; }`);
-  if (theme.linkVisited && theme.linkVisited !== theme.link) rules.push(`a:visited, a:visited * { color: ${theme.linkVisited}${strong}; }`);
-  if (theme.imageCaption && theme.imageCaption !== theme.inkMuted) rules.push(`figcaption, figcaption * { color: ${theme.imageCaption}${strong}; }`);
-  if (theme.rule && theme.rule !== withAlpha(theme.inkMuted, 0.5)) rules.push(`hr { border-color: ${theme.rule}${strong}; color: ${theme.rule}${strong}; }`);
+  // ":root body" lifts these above the blanket replacement rule above (specificity 0,0,5),
+  // which would otherwise win over a plain h1 even with both important (Codex review on PR #17).
+  const lift = (selectors: string) => `:root body :is(${selectors})`;
+  if (theme.heading && theme.heading !== theme.ink) rules.push(`${lift("h1, h2, h3, h4, h5, h6")} { color: ${theme.heading}${strong}; }`);
+  if (theme.linkVisited && theme.linkVisited !== theme.link) rules.push(`${lift("a:visited, a:visited *")} { color: ${theme.linkVisited}${strong}; }`);
+  if (theme.imageCaption && theme.imageCaption !== theme.inkMuted) rules.push(`${lift("figcaption, figcaption *")} { color: ${theme.imageCaption}${strong}; }`);
+  if (theme.rule && theme.rule !== withAlpha(theme.inkMuted, 0.5)) rules.push(`${lift("hr")} { border-color: ${theme.rule}${strong}; color: ${theme.rule}${strong}; }`);
 
   // Text size. With the book's styles on, the page measures the book's own html and body
   // sizes and sets these variables to them times the scale (src/reader-page/font-scale.js),

@@ -179,7 +179,10 @@ test("book colours: auto is today's rule, keep never replaces, replace always do
 test("a user theme's own heading colour reaches the page; the built-ins' CSS has no heading rule", () => {
   assert.ok(!readingCss(defaults(), THEMES.light).includes("h1, h2"));
   const custom = themeFor(sepia.id, [{ ...sepia, tokens: { heading: "#884400" } }]);
-  assert.ok(readingCss(defaults(), custom).includes("h1, h2, h3, h4, h5, h6 { color: #884400; }"));
+  assert.ok(readingCss(defaults(), custom).includes(":root body :is(h1, h2, h3, h4, h5, h6) { color: #884400; }"));
+  // With the book's colours replaced, the heading rule must outrank the blanket rule (0,0,5): :root lifts it to 0,1,2.
+  const replaced = readingCss({ ...defaults(), "theme.bookColors": "replace" }, custom);
+  assert.ok(replaced.includes(":root body :is(h1, h2, h3, h4, h5, h6) { color: #884400 !important; }"));
 });
 
 test("the page reads computed colours and measures contrast as the theme does", () => {

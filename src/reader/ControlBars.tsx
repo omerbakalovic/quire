@@ -4,6 +4,7 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react
 import type { Flow } from "@/domain/library";
 import type { NavEntry } from "@/domain/navigation";
 import { t } from "@/i18n";
+import { barRows, type ZoneLayout } from "@/settings/bars";
 import type { Resolved } from "@/settings/registry";
 
 import { ProgressSlider } from "./ProgressSlider";
@@ -39,9 +40,10 @@ type Props = {
 export function ControlBars(props: Props) {
   const { settings, insets } = props;
   const c = useChrome();
-  const top = settings["layout.topBar"];
-  const upper = settings["layout.quickRow"];
-  const lower = settings["layout.bottomBar"];
+  const rows = barRows(settings);
+  const top = rows.top;
+  const upper = rows.quick;
+  const lower = rows.bottom;
   const side = { paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right };
 
   const onLayout = (event: LayoutChangeEvent) => props.onBottomHeight(event.nativeEvent.layout.height);
@@ -51,13 +53,13 @@ export function ControlBars(props: Props) {
     <>
       {top.length > 0 ? (
         <View style={[styles.bar, styles.top, side, { paddingTop: insets.top + 6, backgroundColor: c.bar }]}>
-          <Row items={top} {...props} />
+          <Row zones={top} {...props} />
         </View>
       ) : null}
       {hasBottom ? (
         <View onLayout={onLayout} style={[styles.bar, styles.bottom, side, { paddingBottom: insets.bottom + 8, backgroundColor: c.bar }]}>
-          {upper.length > 0 ? <Row items={upper} {...props} /> : null}
-          {lower.length > 0 ? <Row items={lower} {...props} /> : null}
+          {upper.length > 0 ? <Row zones={upper} {...props} /> : null}
+          {lower.length > 0 ? <Row zones={lower} {...props} /> : null}
         </View>
       ) : (
         <View onLayout={() => props.onBottomHeight(insets.bottom)} />
@@ -67,14 +69,26 @@ export function ControlBars(props: Props) {
 }
 
 /**
- * One row. A slider or the title takes the free space; without one, the
- * controls spread out. A row with more than fits the width wraps onto a second
- * line rather than pushing controls off the screen; the slider and the title
- * keep a minimum width, so they move down a line instead of shrinking to nothing.
+ * One row of zones (src/settings/bars.ts): start, centre and end, or one
+ * spread zone. A zone with a slider or the title takes the free space. A zone
+ * with more than fits wraps onto a second line rather than pushing controls off
+ * the screen; the slider and the title keep a minimum width, so they move down a
+ * line instead of shrinking to nothing.
  */
-function Row({ items, ...props }: Props & { items: readonly string[] }) {
-  const grows = items.includes("slider") || items.includes("title");
-  return <View style={[styles.row, !grows && styles.spread]}>{items.map((item) => <Control key={item} item={item} {...props} />)}</View>;
+function Row({ zones, ...props }: Props & { zones: ZoneLayout[] }) {
+  return (
+    <View style={styles.row}>
+      {zones.map((zone) =>
+        zone.items.length === 0 && !zone.grow ? null : (
+          <View key={zone.zone} style={[styles.zone, zone.grow && styles.grow, { justifyContent: zone.justify }]}>
+            {zone.items.map((item) => (
+              <Control key={item} item={item} {...props} />
+            ))}
+          </View>
+        ),
+      )}
+    </View>
+  );
 }
 
 function Control({ item, ...props }: Props & { item: string }): ReactNode {
@@ -160,8 +174,9 @@ const styles = StyleSheet.create({
   bar: { position: "absolute", left: 0, right: 0, gap: 4 },
   top: { top: 0, paddingBottom: 10 },
   bottom: { bottom: 0, paddingTop: 4 },
-  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
-  spread: { justifyContent: "space-between" },
+  row: { flexDirection: "row", alignItems: "center", columnGap: 6, minHeight: 44 },
+  zone: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
+  grow: { flex: 1, flexBasis: 0 },
   control: { minHeight: 44, justifyContent: "center" },
   label: { fontSize: 18, paddingVertical: 6 },
   icon: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },

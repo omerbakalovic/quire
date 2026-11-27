@@ -1,3 +1,4 @@
+import { migrateBars } from "./bars.ts";
 import { cleanValue, defaults, sameValue, settingFor, SETTINGS, type Layer, type Resolved, type SettingKey, type Value } from "./registry.ts";
 
 /**
@@ -17,7 +18,7 @@ export type Source = Layer | "default";
 export function cleanLayer(layer: Layer, raw: unknown): Values {
   const out: Values = {};
   if (!raw || typeof raw !== "object") return out;
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+  for (const [key, value] of Object.entries(migrateBars(raw as Record<string, unknown>))) {
     const setting = settingFor(key);
     if (!setting || !setting.scopes.includes(layer)) continue;
     const clean = cleanValue(key, value);

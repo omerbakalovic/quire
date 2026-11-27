@@ -72,12 +72,33 @@ const NONE: readonly string[] = [];
  * Bookmarks, search, annotations and profile switching join as they are built.
  */
 export const CONTROLS = ["back", "title", "contents", "look", "flow", "prevChapter", "slider", "nextChapter", "percent"] as const;
-export const CONTROL_SLOTS = ["layout.topBar", "layout.quickRow", "layout.bottomBar"] as const;
+/**
+ * The bars on a middle tap (C5): the top bar, and the bottom panel's upper
+ * (quick) and lower rows. Each is three zones, start, centre and end, like the
+ * header and footer lines.
+ */
+export const BARS = ["top", "quick", "bottom"] as const;
+export const ZONES = ["start", "center", "end"] as const;
+export const CONTROL_SLOTS = [
+  "layout.top.start",
+  "layout.top.center",
+  "layout.top.end",
+  "layout.quick.start",
+  "layout.quick.center",
+  "layout.quick.end",
+  "layout.bottom.start",
+  "layout.bottom.center",
+  "layout.bottom.end",
+] as const;
+/** How a bar places its controls: in its three zones, or spread evenly across the whole bar. */
+export const ARRANGEMENTS = ["zones", "spread"] as const;
 /**
  * What a gesture can do (3.5): the controls' actions, plus turning a page and
  * showing the bars. The page runs a turn itself; the rest go to the app.
  */
 export const ACTIONS = ["none", "prevPage", "nextPage", "bars", "contents", "look", "prevChapter", "nextChapter", "flow", "back"] as const;
+const ZONE = { catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
+const ARRANGE = { choices: ARRANGEMENTS, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
 const GESTURE = { type: "choice", choices: ACTIONS, group: "gestures", scopes: PROFILE_UP, relayout: false, depth: "standard" } as const;
 
 export const SETTINGS = [
@@ -110,9 +131,20 @@ export const SETTINGS = [
   { key: "layout.footer.right", type: "elements", default: NONE, catalog: AMBIENT, max: 3, group: "layout", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   // The bars on a middle tap. The defaults are the bars Quire had before they were configurable.
   // They float over the text, so changing them never repaginates.
-  { key: "layout.topBar", type: "elements", default: ["back", "title"], catalog: CONTROLS, max: 5, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
-  { key: "layout.quickRow", type: "elements", default: ["prevChapter", "slider", "nextChapter", "percent"], catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
-  { key: "layout.bottomBar", type: "elements", default: ["contents", "look", "flow"], catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" },
+  // Each bar is three zones (C5); the defaults put the controls where the single lists drew them.
+  { key: "layout.top.start", type: "elements", default: ["back", "title"], ...ZONE },
+  { key: "layout.top.center", type: "elements", default: NONE, ...ZONE },
+  { key: "layout.top.end", type: "elements", default: NONE, ...ZONE },
+  { key: "layout.quick.start", type: "elements", default: NONE, ...ZONE },
+  { key: "layout.quick.center", type: "elements", default: ["prevChapter", "slider", "nextChapter", "percent"], ...ZONE },
+  { key: "layout.quick.end", type: "elements", default: NONE, ...ZONE },
+  { key: "layout.bottom.start", type: "elements", default: NONE, ...ZONE },
+  { key: "layout.bottom.center", type: "elements", default: ["contents", "look", "flow"], ...ZONE },
+  { key: "layout.bottom.end", type: "elements", default: NONE, ...ZONE },
+  { key: "layout.top.arrange", type: "choice", default: "zones", ...ARRANGE },
+  { key: "layout.quick.arrange", type: "choice", default: "zones", ...ARRANGE },
+  // The lower row spread its controls across the bar before zones existed.
+  { key: "layout.bottom.arrange", type: "choice", default: "spread", ...ARRANGE },
   // Tap zones: thirds of the page. Left and right follow the "reading direction" setting.
   { key: "gesture.tapLeft", default: "prevPage", ...GESTURE },
   { key: "gesture.tapCenter", default: "bars", ...GESTURE },

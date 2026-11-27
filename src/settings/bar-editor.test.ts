@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { addElement, available, barDraftChanged, barDraftValues, defaultTapBars, draftFrom, moveAcross, moveAlong, placeOf, removeElement, setArrange, tapBarsAreDefault, withDraft } from "./bar-editor.ts";
+import { addElement, available, barDraftChanged, barDraftValues, defaultTapBars, draftFrom, moveAcross, moveAlong, placeOf, rebased, removeElement, setArrange, tapBarsAreDefault, withDraft } from "./bar-editor.ts";
 import { barRows } from "./bars.ts";
 import { defaults } from "./registry.ts";
 
@@ -78,4 +78,16 @@ test("restoring the default tap bars leaves the header and footer lines as they 
   assert.equal(tapBarsAreDefault(restored), true);
   assert.deepEqual(restored["layout.header.left"], ["clock"]);
   assert.deepEqual(barDraftValues(restored, settings), { "layout.header.left": ["clock"] });
+});
+
+test("a draft carries only its own edits to settings that changed under it", () => {
+  const a = defaults();
+  const draft = moveAlong(draftFrom(a), "back", "controls", 1).draft;
+  const b = { ...a, "layout.header.right": ["clock"] } as typeof a;
+  const over = rebased({ base: draftFrom(a), draft }, b);
+  assert.ok(over);
+  assert.deepEqual(over["layout.header.right"], ["clock"]);
+  assert.deepEqual(over["layout.top.start"], ["title", "back"]);
+  assert.deepEqual(barDraftValues(over, b), { "layout.top.start": ["title", "back"] });
+  assert.equal(rebased(null, b), null);
 });

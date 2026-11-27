@@ -17,7 +17,7 @@ import { appThemeId, changedSince, resolvedFor, type Customization } from "@/set
 import { formatNumber } from "@/settings/customize";
 import { defaultTarget, editorLayers, isTab, layerOf, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
-import { barDraftChanged, barDraftValues, withDraft, type BarDraft } from "@/settings/bar-editor";
+import { barDraftChanged, barDraftValues, draftFrom, rebased, withDraft, type BarDraft, type BarEdit } from "@/settings/bar-editor";
 import type { Values } from "@/settings/layers";
 import { draftChanged, themesWithDraft, type Draft } from "@/settings/theme-editor";
 import { themeFor } from "@/settings/themes";
@@ -114,7 +114,10 @@ export default function LookScreen() {
   const [listHeight, setListHeight] = useState(0);
   const scrollY = useRef(0);
   // The Bars tab's draft (C5), the same way: the preview draws it with the bars shown.
-  const [barDraft, setBarDraft] = useState<BarDraft | null>(null);
+  // Kept with the values it started from, so a profile or layer change under it keeps only what was edited.
+  const [barEdit, setBarEdit] = useState<BarEdit | null>(null);
+  const barDraft = useMemo(() => rebased(barEdit, settings), [barEdit, settings]);
+  const setBarDraft = (next: BarDraft | null) => setBarEdit(next ? { base: draftFrom(settings), draft: next } : null);
   const previewSettings = useMemo(
     () => withDraft(draft ? { ...settings, "theme.id": draft.theme.id } : settings, barDraft),
     [settings, draft, barDraft],

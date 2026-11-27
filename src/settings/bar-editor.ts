@@ -160,3 +160,19 @@ export function defaultTapBars(draft: BarDraft): BarDraft {
 export function tapBarsAreDefault(draft: BarDraft): boolean {
   return TAP_BAR_KEYS.every((key) => sameValue(draft[key] as never, settingFor(key)?.default as never));
 }
+
+/** A draft and the saved values it started from. */
+export type BarEdit = { base: BarDraft; draft: BarDraft };
+
+/**
+ * The draft over the settings as they are now. They can change under an open
+ * draft (another profile chosen, or another layer to save to), so only the
+ * values the draft changed are carried over; the rest follow the settings, and
+ * Save never writes values nobody touched (Codex review of PR #18).
+ */
+export function rebased(edit: BarEdit | null, settings: Resolved): BarDraft | null {
+  if (!edit) return null;
+  const out = draftFrom(settings);
+  for (const key of BAR_KEYS) if (!sameValue(edit.draft[key] as never, edit.base[key] as never)) out[key] = edit.draft[key];
+  return out;
+}

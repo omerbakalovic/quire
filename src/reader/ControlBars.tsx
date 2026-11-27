@@ -112,7 +112,7 @@ function Row({ zones, ...props }: RowProps & { zones: ZoneLayout[] }) {
         ) : (
           <View
             key={zone.zone}
-            style={[styles.zone, zone.grow && styles.grow, { justifyContent: zone.justify, columnGap: gap }, props.outlines && [styles.outline, { borderColor: c.muted }]]}
+            style={[styles.zone, zone.grow ? [styles.grow, { minWidth: growMin(zone.items) }] : styles.fixed, { justifyContent: zone.justify, columnGap: gap }, props.outlines && [styles.outline, { borderColor: c.muted }]]}
           >
             {zone.items.map((item) => (
               <Control key={item} item={item} {...props} />
@@ -122,6 +122,17 @@ function Row({ zones, ...props }: RowProps & { zones: ZoneLayout[] }) {
       )}
     </View>
   );
+}
+
+/**
+ * The narrowest a growing zone may get: its slider or title's own minimum. With
+ * the row wrapping, zones that don't fit beside it move down a line rather than
+ * squeezing it until controls overlap (Codex review of PR #18).
+ */
+function growMin(items: string[]): number {
+  if (items.includes("title")) return 96;
+  if (items.includes("slider")) return 72;
+  return 0;
 }
 
 /** Where an empty zone's marker sits in its row: in the padding at either end, or across the middle. */
@@ -218,9 +229,11 @@ function Control({ item, ...props }: RowProps & { item: string }): ReactNode {
 const styles = StyleSheet.create({
   // No overflow clip: the slider's chapter bubble draws above the bar.
   bar: { position: "absolute", gap: 4 },
-  row: { flexDirection: "row", alignItems: "center", columnGap: 6, minHeight: 44 },
+  // Zones wrap as wholes when together they are wider than the bar; a zone alone wider than the bar wraps inside itself.
+  row: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
   zone: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
   grow: { flex: 1, flexBasis: 0 },
+  fixed: { flexShrink: 1, maxWidth: "100%" },
   outline: { borderWidth: 1, borderStyle: "dashed", borderRadius: 6, minWidth: 24 },
   marker: { position: "absolute", top: 4, bottom: 4, width: 8, minWidth: 8, borderRadius: 4 },
   control: { minHeight: 44, justifyContent: "center" },

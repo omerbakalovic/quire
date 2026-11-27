@@ -45,7 +45,8 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * Every handle has one-step accessibility actions, and the fields take exact values.
  */
 export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label, onActive, squareHeight = SQUARE }: Props) {
-  const height = clamp(squareHeight, MIN_SQUARE, SQUARE);
+  // The editor keeps the square at MIN_SQUARE or more where it can; the floor only guards a very short window.
+  const height = clamp(squareHeight, 72, SQUARE);
   const heightRef = useRef(height);
   heightRef.current = height;
   const c = useChrome();

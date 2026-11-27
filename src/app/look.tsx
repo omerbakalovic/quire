@@ -57,22 +57,24 @@ export default function LookScreen() {
   const free = heights.screen > 0 ? heights.screen - heights.top - heights.toggle - heights.tabs : null;
   const pinTop = free === null || free >= MIN_SETTINGS_HEIGHT;
   // The keyboard folds the preview away (kept loaded) so the field being typed into stays in view.
-  const [keyboard, setKeyboard] = useState(false);
+  // The keyboard's height while it is up, else 0. The window doesn't shrink for it (edge to edge), so the list
+  // gets that much extra room at its end, and a field near the end can still scroll above it (emulator run 21).
+  const [keyboard, setKeyboard] = useState(0);
   const listRef = useRef<ComponentRef<typeof ScrollView>>(null);
   useEffect(() => {
-    const shown = Keyboard.addListener("keyboardDidShow", () => {
-      setKeyboard(true);
+    const shown = Keyboard.addListener("keyboardDidShow", (event) => {
+      setKeyboard(Math.max(1, event.endCoordinates.height));
       // Once the preview has folded, bring the field being typed into near the top of the list (emulator run 20).
       setTimeout(() => {
         const input = TextInput.State.currentlyFocusedInput();
         const content = listRef.current?.getInnerViewRef();
         if (!input || !content) return;
         input.measureLayout(content, (_x, y) => listRef.current?.scrollTo({ y: Math.max(0, y - 96), animated: true }));
-      }, 80);
+      }, 150);
     });
     // Back closes the keyboard without leaving the field; leave it, so a typed value is kept as it is with Done.
     const hidden = Keyboard.addListener("keyboardDidHide", () => {
-      setKeyboard(false);
+      setKeyboard(0);
       TextInput.State.currentlyFocusedInput()?.blur();
     });
     return () => {
@@ -231,7 +233,7 @@ export default function LookScreen() {
           </Text>
         </Pressable>
         {preview && paneHeight > 0 ? (
-          <View style={{ height: keyboard ? 0 : paneHeight }}>
+          <View style={{ height: keyboard > 0 ? 0 : paneHeight }}>
             <PreviewPane settings={settings} fonts={custom.fonts} />
           </View>
         ) : null}
@@ -250,7 +252,7 @@ export default function LookScreen() {
             </Pressable>
           ))}
         </View>
-        <ScrollView ref={listRef} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={listRef} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
           {pinTop ? null : fixedTop}
           <Text style={[styles.small, { color: chrome.muted }]}>{help}</Text>
           {bookOverrides > 0 ? (

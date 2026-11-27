@@ -176,10 +176,11 @@ export function DragZones({ zones, full, onDrop, onActive, label, style, childre
     <View ref={box} style={style} {...responder.panHandlers}>
       {children(api)}
       {line ? <View pointerEvents="none" style={[styles.line, { left: line.x, top: line.y, width: line.w, backgroundColor: c.accent }]} /> : null}
+      {/* Kept inside the box: the list clips anything past it, and the label is what tells you a drag is on (emulator run 38). */}
       {drag && origin.current.w > 0 ? (
         <View
           pointerEvents="none"
-          style={[styles.ghost, { left: Math.max(0, Math.min(origin.current.w - 120, drag.x - 60)), top: drag.y - 52, backgroundColor: c.accent, opacity: drag.outside ? 0.5 : 1 }]}
+          style={[styles.ghost, { left: Math.max(0, Math.min(origin.current.w - 120, drag.x - 60)), top: Math.max(0, Math.min(origin.current.h - 36, drag.y - 52)), backgroundColor: c.accent, opacity: drag.outside ? 0.5 : 1 }]}
         >
           <Text style={[styles.ghostText, { color: c.onAccent }]} numberOfLines={1}>
             {label(drag.element)}

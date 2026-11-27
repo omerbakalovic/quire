@@ -9,8 +9,9 @@ export function LightVeil({ dimmer, warmth }: { dimmer: number; warmth: number }
   if (dimmer <= 0 && warmth <= 0) return null;
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      {warmth > 0 ? <View style={[StyleSheet.absoluteFill, { backgroundColor: "#ff8a00", opacity: warmth * 0.5 }]} /> : null}
-      {dimmer > 0 ? <View style={[StyleSheet.absoluteFill, { backgroundColor: "#000000", opacity: dimmer }]} /> : null}
+      {/* The veils are physical filters (a warm orange, black), the same in every theme. colour-ok */}
+      {warmth > 0 ? <View style={[StyleSheet.absoluteFill, { backgroundColor: "#ff8a00", opacity: warmth * 0.5 }]} /> : null /* colour-ok */}
+      {dimmer > 0 ? <View style={[StyleSheet.absoluteFill, { backgroundColor: "#000000", opacity: dimmer }]} /> : null /* colour-ok */}
     </View>
   );
 }

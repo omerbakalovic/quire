@@ -66,6 +66,15 @@ export function resolvedFor(custom: Customization, bookId: string | null, sessio
 }
 
 /**
+ * The theme for screens outside a book (roadmap 2.3): app.theme, or with
+ * "follow" the reading theme resolved from profile and global only.
+ */
+export function appThemeId(custom: Customization): string {
+  const settings = resolvedFor(custom, null);
+  return settings["app.theme"] === "follow" ? settings["theme.id"] : settings["app.theme"];
+}
+
+/**
  * Change one saved setting. "global" and "book" write those layers; "profile"
  * writes the active profile and does nothing when none is active.
  */

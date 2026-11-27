@@ -76,15 +76,15 @@ export function TocPanel({ toc, current, topInset, bottomInset, onSelect, onClos
 }
 
 const styles = StyleSheet.create({
-  shade: { ...StyleSheet.absoluteFill, flexDirection: "row", backgroundColor: "#0008" },
-  panel: { width: "86%", maxWidth: 420, backgroundColor: "#1c1c1e" },
+  shade: { ...StyleSheet.absoluteFill, flexDirection: "row" },
+  panel: { width: "86%", maxWidth: 420 },
   rest: { flex: 1 },
   header: { flexDirection: "row", alignItems: "center", paddingHorizontal: 16, paddingBottom: 8 },
-  title: { flex: 1, color: "#fff", fontSize: 18, fontWeight: "600" },
-  close: { color: "#ddd", fontSize: 18, padding: 6 },
-  empty: { color: "#bbb", padding: 16, fontSize: 15 },
+  title: { flex: 1, fontSize: 18, fontWeight: "600" },
+  close: { fontSize: 18, padding: 6 },
+  empty: { padding: 16, fontSize: 15 },
   row: { height: ROW, flexDirection: "row", alignItems: "center", paddingRight: 16, gap: 8 },
-  label: { flex: 1, color: "#eee", fontSize: 15 },
+  label: { flex: 1, fontSize: 15 },
   labelHere: { fontWeight: "700" },
-  percent: { color: "#999", fontSize: 12, minWidth: 36, textAlign: "right" },
+  percent: { fontSize: 12, minWidth: 36, textAlign: "right" },
 });

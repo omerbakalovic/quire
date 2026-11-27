@@ -1,11 +1,13 @@
 import { getDocumentAsync } from "expo-document-picker";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, Alert, AppState, FlatList, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, FlatList, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { sortedBooks, type LibraryBook } from "@/domain/library";
-import { editionLabels, NEUTRAL_PILL, PALETTE, pillColor, textOn, type LibraryLook } from "@/domain/library-look";
+import { editionLabels, PALETTE, pillColor, textOn, type LibraryLook } from "@/domain/library-look";
 import { t } from "@/i18n";
+import { useChrome } from "@/reader/chrome";
+import { confirm } from "@/ui/confirm";
 import {
   importFiles,
   loadLibrary,
@@ -58,10 +60,10 @@ function BookRow({
   const strings = t().library;
   const percent = book.fraction === null ? null : Math.round(book.fraction * 100);
   const author = book.authors.join(", ") || strings.unknownAuthor;
+  const c = useChrome();
   const pills = look.style === "pills";
-  const background = pills ? pillColor(look, book.id) : null;
-  const ink = background ? textOn(background) : null;
-  const inkStyle = ink ? { color: ink } : null;
+  const background = pills ? pillColor(look, book.id, c.pillDefault) : null;
+  const inkStyle = { color: background ? textOn(background) : c.appInk };
   const details = [
     look.showAuthor ? author : null,
     edition,
@@ -70,7 +72,7 @@ function BookRow({
   return (
     <Pressable
       style={({ pressed }) => [
-        pills ? styles.pill : styles.line,
+        pills ? styles.pill : [styles.line, { borderBottomColor: c.divider }],
         background ? { backgroundColor: background } : null,
         pressed && styles.pressed,
       ]}
@@ -81,7 +83,7 @@ function BookRow({
       accessibilityHint={strings.longPressHint}
     >
       {pills && look.showCovers && book.coverUri ? (
-        <Image source={{ uri: book.coverUri }} style={styles.cover} resizeMode="cover" />
+        <Image source={{ uri: book.coverUri }} style={[styles.cover, { backgroundColor: c.divider }]} resizeMode="cover" />
       ) : null}
       <View style={styles.meta}>
         <Text style={[styles.title, inkStyle]} numberOfLines={2}>
@@ -110,19 +112,20 @@ function BookSheet({
   onRemove: (book: LibraryBook) => void;
 }) {
   const strings = t().library;
+  const c = useChrome();
   if (!book) return null;
   const chosen = look.bookColors[book.id] ?? null;
   const cover = look.coverColors[book.id] ?? null;
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <Pressable style={styles.scrim} onPress={onClose} accessibilityLabel={strings.cancel}>
-        <Pressable style={styles.sheet} onPress={() => {}}>
-          <Text style={styles.sheetTitle} numberOfLines={2}>
+      <Pressable style={[styles.scrim, { backgroundColor: c.shade }]} onPress={onClose} accessibilityLabel={strings.cancel}>
+        <Pressable style={[styles.sheet, { backgroundColor: c.sheet }]} onPress={() => {}}>
+          <Text style={[styles.sheetTitle, { color: c.sheetInk }]} numberOfLines={2}>
             {book.title}
           </Text>
           {look.style === "pills" ? (
             <>
-              <Text style={styles.sheetLabel}>{strings.colour}</Text>
+              <Text style={[styles.sheetLabel, { color: c.sheetMuted }]}>{strings.colour}</Text>
               <View style={styles.swatches}>
                 <Pressable
                   onPress={() => void saveBookColor(book.id, null)}
@@ -132,11 +135,11 @@ function BookSheet({
                   style={[
                     styles.swatch,
                     styles.coverSwatch,
-                    { backgroundColor: cover ?? NEUTRAL_PILL },
-                    chosen === null && styles.swatchOn,
+                    { backgroundColor: cover ?? c.pillDefault, borderColor: c.line },
+                    chosen === null && [styles.swatchOn, { borderColor: c.accent }],
                   ]}
                 >
-                  <Text style={[styles.swatchText, { color: textOn(cover ?? NEUTRAL_PILL) }]}>{strings.coverShort}</Text>
+                  <Text style={[styles.swatchText, { color: textOn(cover ?? c.pillDefault) }]}>{strings.coverShort}</Text>
                 </Pressable>
                 {PALETTE.map((color) => (
                   <Pressable
@@ -145,19 +148,19 @@ function BookSheet({
                     accessibilityRole="button"
                     accessibilityLabel={color}
                     accessibilityState={{ selected: chosen === color }}
-                    style={[styles.swatch, { backgroundColor: color }, chosen === color && styles.swatchOn]}
+                    style={[styles.swatch, { backgroundColor: color, borderColor: c.line }, chosen === color && [styles.swatchOn, { borderColor: c.accent }]]}
                   />
                 ))}
               </View>
             </>
           ) : (
-            <Text style={styles.sheetHint}>{strings.colourNeedsPills}</Text>
+            <Text style={[styles.sheetHint, { color: c.sheetMuted }]}>{strings.colourNeedsPills}</Text>
           )}
           <Pressable onPress={() => onRemove(book)} accessibilityRole="button" style={styles.sheetRow}>
-            <Text style={styles.removeText}>{strings.removeBook}</Text>
+            <Text style={[styles.removeText, { color: c.danger }]}>{strings.removeBook}</Text>
           </Pressable>
           <Pressable onPress={onClose} accessibilityRole="button" style={styles.sheetRow}>
-            <Text style={styles.sheetDone}>{strings.done}</Text>
+            <Text style={[styles.sheetDone, { color: c.accent }]}>{strings.done}</Text>
           </Pressable>
         </Pressable>
       </Pressable>
@@ -167,6 +170,7 @@ function BookSheet({
 
 export default function LibraryScreen() {
   const strings = t().library;
+  const c = useChrome();
   const router = useRouter();
   const library = useLibrary();
   const [check] = useState(() => launchCheck());
@@ -218,7 +222,7 @@ export default function LibraryScreen() {
         return;
       }
       const onlyAdded = results.every((result) => result.outcome.kind === "added");
-      if (!onlyAdded || results.length > 1) Alert.alert(strings.summaryTitle, summarize(results));
+      if (!onlyAdded || results.length > 1) confirm({ title: strings.summaryTitle, body: summarize(results), buttons: [{ text: strings.ok }] });
     }
     void receive();
     const stop = onIncomingBooks(() => void receive());
@@ -265,15 +269,19 @@ export default function LibraryScreen() {
       "pick",
     );
     const onlyAdded = results.every((result) => result.outcome.kind === "added");
-    if (!onlyAdded || results.length > 1) Alert.alert(strings.summaryTitle, summarize(results));
+    if (!onlyAdded || results.length > 1) confirm({ title: strings.summaryTitle, body: summarize(results), buttons: [{ text: strings.ok }] });
   }
 
   function confirmRemove(book: LibraryBook) {
     setSheetFor(null);
-    Alert.alert(strings.deleteTitle, strings.deleteBody(book.title), [
-      { text: strings.cancel, style: "cancel" },
-      { text: strings.deleteConfirm, style: "destructive", onPress: () => void removeFromLibrary(book.id) },
-    ]);
+    confirm({
+      title: strings.deleteTitle,
+      body: strings.deleteBody(book.title),
+      buttons: [
+        { text: strings.cancel, style: "cancel" },
+        { text: strings.deleteConfirm, style: "destructive", onPress: () => void removeFromLibrary(book.id) },
+      ],
+    });
   }
 
   const books = sortedBooks(library);
@@ -281,17 +289,17 @@ export default function LibraryScreen() {
   const editions = editionLabels(books, look);
   const sheetBook = sheetFor ? (books.find((book) => book.id === sheetFor) ?? null) : null;
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { backgroundColor: c.background }]}>
       <Stack.Screen
         options={{
           title: strings.title,
           headerRight: () => (
             <View style={styles.headerButtons}>
               <Pressable onPress={() => router.push("/settings")} accessibilityRole="button" hitSlop={12}>
-                <Text style={styles.importButton}>{strings.settings}</Text>
+                <Text style={[styles.importButton, { color: c.accent }]}>{strings.settings}</Text>
               </Pressable>
               <Pressable onPress={pick} disabled={busy} accessibilityRole="button" hitSlop={12}>
-                <Text style={[styles.importButton, busy && styles.disabled]}>{busy ? strings.importing : strings.import}</Text>
+                <Text style={[styles.importButton, { color: c.accent }, busy && styles.disabled]}>{busy ? strings.importing : strings.import}</Text>
               </Pressable>
             </View>
           ),
@@ -299,22 +307,22 @@ export default function LibraryScreen() {
       />
       {!ready ? (
         <View style={styles.center}>
-          <ActivityIndicator />
-          <Text style={styles.hint}>{strings.loading}</Text>
+          <ActivityIndicator color={c.appMuted} />
+          <Text style={[styles.hint, { color: c.appInk }]}>{strings.loading}</Text>
         </View>
       ) : books.length === 0 ? (
         <View style={styles.center}>
-          <Text style={styles.welcome}>{strings.welcomeTitle}</Text>
-          <Text style={styles.hint}>{strings.empty}</Text>
+          <Text style={[styles.welcome, { color: c.appInk }]}>{strings.welcomeTitle}</Text>
+          <Text style={[styles.hint, { color: c.appInk }]}>{strings.empty}</Text>
           <Pressable
             onPress={pick}
             disabled={busy}
             accessibilityRole="button"
-            style={({ pressed }) => [styles.addButton, (pressed || busy) && styles.pressed]}
+            style={({ pressed }) => [styles.addButton, { backgroundColor: c.controlOn }, (pressed || busy) && styles.pressed]}
           >
-            <Text style={styles.addButtonText}>{strings.addBooks}</Text>
+            <Text style={[styles.addButtonText, { color: c.controlOnInk }]}>{strings.addBooks}</Text>
           </Pressable>
-          <Text style={styles.small}>{strings.openWithHint}</Text>
+          <Text style={[styles.small, { color: c.appInk }]}>{strings.openWithHint}</Text>
         </View>
       ) : (
         <FlatList
@@ -330,13 +338,13 @@ export default function LibraryScreen() {
               onLongPress={() => setSheetFor(item.id)}
             />
           )}
-          ListFooterComponent={<Text style={styles.footer}>{strings.removeHint}</Text>}
+          ListFooterComponent={<Text style={[styles.footer, { color: c.appInk }]}>{strings.removeHint}</Text>}
         />
       )}
       <BookSheet book={sheetBook} look={look} onClose={() => setSheetFor(null)} onRemove={confirmRemove} />
       {busy ? (
-        <View style={styles.busy} pointerEvents="none">
-          <ActivityIndicator size="large" />
+        <View style={[styles.busy, { backgroundColor: c.shade }]} pointerEvents="none">
+          <ActivityIndicator size="large" color={c.ink} />
         </View>
       ) : null}
     </View>
@@ -349,14 +357,13 @@ const styles = StyleSheet.create({
   hint: { fontSize: 16, textAlign: "center", opacity: 0.7, lineHeight: 22 },
   welcome: { fontSize: 22, fontWeight: "700", textAlign: "center" },
   small: { fontSize: 13, textAlign: "center", opacity: 0.55, lineHeight: 18, maxWidth: 320 },
-  addButton: { backgroundColor: "#1F3A5F", paddingHorizontal: 28, paddingVertical: 14, borderRadius: 24, marginVertical: 8 },
-  addButtonText: { color: "#fff", fontSize: 17, fontWeight: "600" },
+  addButton: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 24, marginVertical: 8 },
+  addButtonText: { fontSize: 17, fontWeight: "600" },
   footer: { fontSize: 13, textAlign: "center", opacity: 0.5, padding: 20 },
   line: {
     paddingHorizontal: 20,
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#8884",
   },
   pillList: { padding: 12, gap: 10 },
   pill: {
@@ -369,25 +376,25 @@ const styles = StyleSheet.create({
     minHeight: 56,
   },
   pressed: { opacity: 0.6 },
-  cover: { width: 40, height: 60, borderRadius: 6, backgroundColor: "#0002" },
+  cover: { width: 40, height: 60, borderRadius: 6 },
   meta: { flex: 1, justifyContent: "center", gap: 3 },
   title: { fontSize: 17, fontWeight: "600" },
   detail: { fontSize: 13, opacity: 0.7 },
-  scrim: { flex: 1, backgroundColor: "#0006", justifyContent: "flex-end" },
-  sheet: { backgroundColor: "#fff", borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, gap: 12 },
-  sheetTitle: { fontSize: 18, fontWeight: "700", color: "#000" },
-  sheetLabel: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", opacity: 0.6, color: "#000" },
-  sheetHint: { fontSize: 14, opacity: 0.7, color: "#000" },
+  scrim: { flex: 1, justifyContent: "flex-end" },
+  sheet: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 20, paddingBottom: 32, gap: 12 },
+  sheetTitle: { fontSize: 18, fontWeight: "700" },
+  sheetLabel: { fontSize: 13, fontWeight: "600", textTransform: "uppercase", opacity: 0.6 },
+  sheetHint: { fontSize: 14, opacity: 0.7 },
   swatches: { flexDirection: "row", flexWrap: "wrap", gap: 10 },
-  swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, borderColor: "#0002" },
+  swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 1 },
   coverSwatch: { width: 64, alignItems: "center", justifyContent: "center" },
   swatchText: { fontSize: 12, fontWeight: "600" },
-  swatchOn: { borderWidth: 3, borderColor: "#208AEF" },
+  swatchOn: { borderWidth: 3 },
   sheetRow: { minHeight: 48, justifyContent: "center" },
-  removeText: { fontSize: 16, color: "#C0392B", fontWeight: "600" },
-  sheetDone: { fontSize: 16, color: "#208AEF", fontWeight: "600" },
+  removeText: { fontSize: 16, fontWeight: "600" },
+  sheetDone: { fontSize: 16, fontWeight: "600" },
   headerButtons: { flexDirection: "row", gap: 8 },
-  importButton: { fontSize: 16, fontWeight: "600", color: "#208AEF", paddingHorizontal: 8 },
+  importButton: { fontSize: 16, fontWeight: "600", paddingHorizontal: 8 },
   disabled: { opacity: 0.5 },
-  busy: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center", backgroundColor: "#0003" },
+  busy: { ...StyleSheet.absoluteFill, alignItems: "center", justifyContent: "center" },
 });

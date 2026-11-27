@@ -16,7 +16,7 @@ import { allowReaderNavigation, READER_ORIGIN_WHITELIST } from "@/renderer/webvi
 import type { UserFont } from "@/settings/fonts";
 import { needsRelayout } from "@/settings/layers";
 import type { Resolved } from "@/settings/registry";
-import { themeFor } from "@/settings/themes";
+import { themeFor, withAlpha } from "@/settings/themes";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const SAMPLE = require("../../assets/sample/quire-sample.epub");
@@ -175,7 +175,7 @@ export function PreviewPane({ settings, fonts }: Props) {
   };
 
   return (
-    <View style={[styles.wrap, { backgroundColor: theme.dark ? "#00000033" : "#00000012" }]} onLayout={onLayout} accessibilityLabel={strings.previewLabel}>
+    <View style={[styles.wrap, { backgroundColor: withAlpha(theme.ink, theme.dark ? 0.06 : 0.07) }]} onLayout={onLayout} accessibilityLabel={strings.previewLabel}>
       {size.height > 0 ? (
         <View
           style={[

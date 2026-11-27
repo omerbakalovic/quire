@@ -945,7 +945,7 @@ function zonePoint(st, zone) {
 
 /**
  * A tap on the page. If it hit a web link after all, the app asks "Open this
- * link?" in a system dialog; a later tap in a side zone could land on its Open
+ * link?" in a dialog; a later tap in a side zone could land on its Open
  * button and leave the app (phone run 16 opened a Creative Commons page). So
  * the dialog is closed with the back key before anything else is tapped.
  */

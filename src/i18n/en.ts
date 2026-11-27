@@ -15,6 +15,7 @@ export const en = {
     coverShort: "Cover",
     colourNeedsPills: "Turn on Pills in Settings to give books colours.",
     removeBook: "Remove from library",
+    ok: "OK",
     done: "Done",
     unknownAuthor: "Unknown author",
     notStarted: "Not started",
@@ -42,6 +43,8 @@ export const en = {
     showCovers: "Show covers",
     showAuthor: "Show author",
     showProgress: "Show progress",
+    appTheme: "Library and Settings theme",
+    appThemeHelp: "Books use their reading theme. By default the rest of the app follows it; pick one here to keep, say, a dark library with paper pages.",
     taps: "Page turns",
     tapsFollowBook: "Tap sides follow the book's direction",
     tapsFollowBookOn:
@@ -77,6 +80,7 @@ export const en = {
       turns: "Page turns",
       behaviour: "Behaviour",
     } as Record<string, string>,
+    appThemeFollow: "Same as reading theme",
     names: {
       "type.fontSize": "Text size",
       "type.fontFamily": "Font",
@@ -88,6 +92,7 @@ export const en = {
       "page.marginX": "Side margins",
       "page.maxWidth": "Widest line",
       "theme.id": "Theme",
+      "app.theme": "Library and Settings theme",
       "light.brightness": "Brightness",
       "light.dimmer": "Dimmer",
       "light.warmth": "Warmth",

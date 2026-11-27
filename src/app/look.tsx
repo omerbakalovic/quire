@@ -11,7 +11,7 @@ import { ProfileBar } from "@/look/ProfileBar";
 import { SettingRows } from "@/look/SettingRows";
 import { SettingSlider } from "@/look/SettingSlider";
 import { ChromeProvider, chromeFor } from "@/reader/chrome";
-import { changedSince, resolvedFor, type Customization } from "@/settings/customization";
+import { appThemeId, changedSince, resolvedFor, type Customization } from "@/settings/customization";
 import { formatNumber } from "@/settings/customize";
 import { defaultTarget, editorLayers, isTab, layerOf, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
@@ -88,7 +88,8 @@ export default function LookScreen() {
   const target = validTarget(custom, bookId, chosen);
   const layers = useMemo(() => editorLayers(custom, bookId), [custom, bookId]);
   const settings = useMemo(() => resolvedFor(custom, bookId), [custom, bookId]);
-  const theme = themeFor(settings["theme.id"]);
+  // From a book the editor wears the book's theme; from Settings, the app theme (roadmap 2.3).
+  const theme = themeFor(bookId ? settings["theme.id"] : appThemeId(custom));
   const chrome = chromeFor(theme);
   const profile = custom.profiles.find((p) => p.id === custom.activeProfile) ?? null;
   const changed = changedSince(custom, snapshot.current);

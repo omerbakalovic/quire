@@ -75,8 +75,17 @@ export function DragZones({ zones, full, onDrop, onActive, label, style, childre
   /** The zone and slot under a point in the box. */
   const target = (element: string, x: number, y: number): Drag => {
     const rects = zoneRects.current;
-    let zone = rects.findIndex((r) => r && x >= r.x && x < r.x + r.w);
-    if (zone < 0) zone = x < (rects[0]?.x ?? 0) ? 0 : Math.max(0, rects.length - 1);
+    // The zone under the finger, or in a gap between zones the nearer one (Codex review of PR #19).
+    let zone = 0;
+    let best = Infinity;
+    rects.forEach((r, i) => {
+      if (!r) return;
+      const distance = x < r.x ? r.x - x : x > r.x + r.w ? x - (r.x + r.w) : 0;
+      if (distance < best) {
+        best = distance;
+        zone = i;
+      }
+    });
     const inZone = y - (rects[zone]?.y ?? 0);
     const others = (props.current.zones[zone] ?? []).filter((e) => e !== element);
     let index = 0;

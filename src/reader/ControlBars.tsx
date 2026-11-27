@@ -35,7 +35,7 @@ type Props = {
 };
 
 type RowProps = Props & {
-  /** A see-through bar: its text gets a soft halo in the page colour, so it reads over the book's text (emulator run 33). */
+  /** A see-through or bare bar: its text gets a soft halo in the bar colour, so it reads over the book's text (emulator runs 33, 34). */
   halo?: boolean;
 };
 
@@ -62,13 +62,13 @@ export function ControlBars(props: Props) {
     <>
       {top.length > 0 ? (
         <View style={[styles.bar, frameStyle(topFrame, c), { top: topFrame.edge }]}>
-          <Row zones={top} {...props} halo={topFrame.background === "none"} />
+          <Row zones={top} {...props} halo={topFrame.background !== "solid"} />
         </View>
       ) : null}
       {hasBottom ? (
         <View onLayout={onLayout} style={[styles.bar, frameStyle(bottomFrame, c), { bottom: bottomFrame.edge }]}>
-          {upper.length > 0 ? <Row zones={upper} {...props} halo={bottomFrame.background === "none"} /> : null}
-          {lower.length > 0 ? <Row zones={lower} {...props} halo={bottomFrame.background === "none"} /> : null}
+          {upper.length > 0 ? <Row zones={upper} {...props} halo={bottomFrame.background !== "solid"} /> : null}
+          {lower.length > 0 ? <Row zones={lower} {...props} halo={bottomFrame.background !== "solid"} /> : null}
         </View>
       ) : (
         <View onLayout={() => props.onBottomHeight(insets.bottom)} />
@@ -78,7 +78,7 @@ export function ControlBars(props: Props) {
 }
 
 function frameStyle(frame: BarFrame, c: Chrome) {
-  const background = frame.background === "solid" ? c.bar : frame.background === "translucent" ? withAlpha(c.bar.slice(0, 7), 0.82) : "transparent";
+  const background = frame.background === "solid" ? c.bar : frame.background === "translucent" ? withAlpha(c.bar.slice(0, 7), 0.9) : "transparent";
   return {
     left: frame.left,
     right: frame.right,
@@ -105,7 +105,11 @@ function Row({ zones, ...props }: RowProps & { zones: ZoneLayout[] }) {
   return (
     <View style={[styles.row, { columnGap: gap }]}>
       {zones.map((zone) =>
-        zone.items.length === 0 && !zone.grow && !props.outlines ? null : (
+        zone.items.length === 0 && !zone.grow ? (
+          // The book draws nothing here; the preview marks the spot without taking room, so its row breaks
+          // where the book's does (emulator run 34: the outlines' width wrapped a full row).
+          props.outlines ? <View key={zone.zone} pointerEvents="none" style={[styles.outline, styles.marker, markerAt(zone.zone), { borderColor: c.muted }]} /> : null
+        ) : (
           <View
             key={zone.zone}
             style={[styles.zone, zone.grow && styles.grow, { justifyContent: zone.justify, columnGap: gap }, props.outlines && [styles.outline, { borderColor: c.muted }]]}
@@ -118,6 +122,13 @@ function Row({ zones, ...props }: RowProps & { zones: ZoneLayout[] }) {
       )}
     </View>
   );
+}
+
+/** Where an empty zone's marker sits in its row: in the padding at either end, or across the middle. */
+function markerAt(zone: string) {
+  if (zone === "start") return { left: -10 };
+  if (zone === "end") return { right: -10 };
+  return { left: "50%" as const, marginLeft: -4 };
 }
 
 function Control({ item, ...props }: RowProps & { item: string }): ReactNode {
@@ -211,6 +222,7 @@ const styles = StyleSheet.create({
   zone: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
   grow: { flex: 1, flexBasis: 0 },
   outline: { borderWidth: 1, borderStyle: "dashed", borderRadius: 6, minWidth: 24 },
+  marker: { position: "absolute", top: 4, bottom: 4, width: 8, minWidth: 8, borderRadius: 4 },
   control: { minHeight: 44, justifyContent: "center" },
   label: { fontSize: 18, paddingVertical: 6 },
   labelCompact: { paddingVertical: 2 },

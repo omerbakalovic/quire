@@ -5,6 +5,7 @@
  * panel, reset, export and import are all driven from this list.
  */
 import { isFontId } from "./fonts.ts";
+import { isThemeId } from "./user-themes.ts";
 
 export type Layer = "session" | "book" | "profile" | "global";
 
@@ -28,7 +29,13 @@ export type ElementsSetting = Base & { type: "elements"; default: readonly strin
 /** A reading font: a built-in choice or an imported font's id (see fonts.ts). */
 export type FontSetting = Base & { type: "font"; default: string };
 
-export type Setting = NumberSetting | ChoiceSetting | BooleanSetting | FontSetting | ElementsSetting;
+/**
+ * A theme: a built-in id or a user theme's id (see user-themes.ts). With
+ * `follow`, the value "follow" is allowed too (the app theme follows the reading theme).
+ */
+export type ThemeSetting = Base & { type: "theme"; default: string; follow?: boolean };
+
+export type Setting = NumberSetting | ChoiceSetting | BooleanSetting | FontSetting | ThemeSetting | ElementsSetting;
 export type Value = number | string | boolean | readonly string[];
 
 const ALL: Layer[] = ["session", "book", "profile", "global"];
@@ -39,6 +46,12 @@ export const ALIGNMENTS = ["publisher", "start", "justify"] as const;
 export const THEME_IDS = ["light", "paper", "gray", "dark", "black", "night", "contrast"] as const;
 /** The app theme: "follow" uses the reading theme resolved from profile and global (roadmap 2.3). */
 export const APP_THEMES = ["follow", ...THEME_IDS] as const;
+/**
+ * The book's own colours (C4): auto keeps them on light themes and replaces them
+ * on dark ones; keep never replaces them, except a colour too faint on the page;
+ * replace always uses the theme's.
+ */
+export const BOOK_COLORS = ["auto", "keep", "replace"] as const;
 export const TURN_STYLES = ["none", "slide", "fade"] as const;
 /**
  * What the header and footer bands can show while reading (docs/customization.md, 3.3).
@@ -77,8 +90,9 @@ export const SETTINGS = [
   { key: "type.publisherStyles", type: "boolean", default: true, group: "typography", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "page.marginX", type: "number", default: 4, min: 0, max: 20, step: 1, group: "page", scopes: NOT_SESSION, relayout: true, depth: "standard" },
   { key: "page.maxWidth", type: "number", default: 720, min: 400, max: 1600, step: 20, group: "page", scopes: NOT_SESSION, relayout: true, depth: "advanced" },
-  { key: "theme.id", type: "choice", default: "light", choices: THEME_IDS, group: "theme", scopes: ALL, relayout: false, depth: "quick" },
-  { key: "app.theme", type: "choice", default: "follow", choices: APP_THEMES, group: "theme", scopes: ["global"], relayout: false, depth: "standard" },
+  { key: "theme.id", type: "theme", default: "light", group: "theme", scopes: ALL, relayout: false, depth: "quick" },
+  { key: "theme.bookColors", type: "choice", default: "auto", choices: BOOK_COLORS, group: "theme", scopes: NOT_SESSION, relayout: false, depth: "standard" },
+  { key: "app.theme", type: "theme", default: "follow", follow: true, group: "theme", scopes: ["global"], relayout: false, depth: "standard" },
   // The reader's own screen brightness. 0 follows the system. Only the reader's window changes,
   // so leaving the reader or the app always gives the system value back.
   { key: "light.brightness", type: "number", default: 0, min: 0, max: 1, step: 0.05, group: "light", scopes: ALL, relayout: false, depth: "quick" },
@@ -121,7 +135,7 @@ export type SettingValue<K extends SettingKey> =
     ? number
     : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "boolean" }
       ? boolean
-      : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "font" }
+      : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "font" | "theme" }
         ? string
         : Extract<(typeof SETTINGS)[number], { key: K }> extends { type: "elements" }
           ? readonly string[]
@@ -158,6 +172,8 @@ export function cleanValue(key: string, value: unknown): Value | null {
       return typeof value === "boolean" ? value : null;
     case "font":
       return isFontId(value) ? value : null;
+    case "theme":
+      return (setting.follow && value === "follow") || isThemeId(value) ? (value as string) : null;
     case "elements": {
       if (!Array.isArray(value)) return null;
       const out: string[] = [];

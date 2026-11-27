@@ -17,6 +17,7 @@ import type { UserFont } from "@/settings/fonts";
 import { needsRelayout } from "@/settings/layers";
 import type { Resolved } from "@/settings/registry";
 import { themeFor, withAlpha } from "@/settings/themes";
+import type { UserTheme } from "@/settings/user-themes";
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const SAMPLE = require("../../assets/sample/quire-sample.epub");
@@ -59,6 +60,8 @@ function note(payload: Record<string, unknown>) {
 type Props = {
   settings: Resolved;
   fonts: readonly UserFont[];
+  /** The reader's themes, with the theme editor's draft in place of the saved one. */
+  themes: readonly UserTheme[];
 };
 
 /**
@@ -68,7 +71,7 @@ type Props = {
  * and footer lines are the reader's own component. Side taps turn the sample's
  * pages; nothing else in it leaves the preview.
  */
-export function PreviewPane({ settings, fonts }: Props) {
+export function PreviewPane({ settings, fonts, themes }: Props) {
   const strings = t().look;
   const webRef = useRef<WebView<object>>(null);
   const [id, setId] = useState<string | null>(null);
@@ -77,12 +80,12 @@ export function PreviewPane({ settings, fonts }: Props) {
   const [ready, setReady] = useState(false);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const answered = useRef(false);
-  const sent = useRef<Resolved | null>(null);
+  const sent = useRef<{ settings: Resolved; look: Look } | null>(null);
   const pending = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastSent = useRef(0);
   const openedAt = useRef(0);
-  const look = useMemo(() => lookFor(settings, fonts), [settings, fonts]);
-  const theme = themeFor(settings["theme.id"]);
+  const look = useMemo(() => lookFor(settings, fonts, themes), [settings, fonts, themes]);
+  const theme = useMemo(() => themeFor(settings["theme.id"], themes), [settings, themes]);
   const screen = useWindowDimensions();
 
   const post = useCallback((message: object) => {
@@ -124,10 +127,10 @@ export function PreviewPane({ settings, fonts }: Props) {
   useEffect(() => {
     if (!ready || !id) return;
     const before = sent.current;
-    if (before === settings) return;
-    const relayout = before ? needsRelayout(before, settings) : false;
+    if (before?.look === look) return;
+    const relayout = before ? needsRelayout(before.settings, settings) : false;
     const send = (value: Look, layout: boolean) => {
-      sent.current = settings;
+      sent.current = { settings, look: value };
       lastSent.current = Date.now();
       post({ type: "look", id, look: value, relayout: layout });
     };
@@ -145,7 +148,7 @@ export function PreviewPane({ settings, fonts }: Props) {
       case "pong":
         if (message.id !== PING || answered.current) return;
         answered.current = true;
-        sent.current = settings;
+        sent.current = { settings, look };
         post(previewOpenMessage(id, bookUrl(id), look, { top: 0, bottom: 0, left: 0, right: 0 }));
         return;
       case "encryption": {

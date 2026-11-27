@@ -1,6 +1,9 @@
 import { cleanLayer, resolve, setValue, type LayerValues, type Values } from "./layers.ts";
 import { MAX_USER_FONTS, parseUserFonts, type UserFont } from "./fonts.ts";
 import type { Layer, Resolved, SettingKey } from "./registry.ts";
+import { isBuiltInTheme, type ThemeId } from "./themes.ts";
+import { normalizeHex } from "./colour.ts";
+import { cleanThemeName, cleanTokens, isUserThemeId, MAX_USER_THEMES, parseUserThemes, type UserTheme } from "./user-themes.ts";
 
 /**
  * The saved part of customization: global values, named reading profiles,
@@ -16,13 +19,17 @@ export type Customization = {
   books: Record<string, Values>;
   /** Fonts the reader imported; their files live in the app's font folder. */
   fonts: UserFont[];
+  /** Themes the reader made (C4); built-ins are not stored. */
+  themes: UserTheme[];
+  /** The colour picker's last picked colours, newest first, at most eight. */
+  recentColours: string[];
 };
 
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const MAX_PROFILES = 50;
 
 export function emptyCustomization(): Customization {
-  return { global: {}, profiles: [], activeProfile: null, books: {}, fonts: [] };
+  return { global: {}, profiles: [], activeProfile: null, books: {}, fonts: [], themes: [], recentColours: [] };
 }
 
 export function parseCustomization(value: unknown): Customization {
@@ -47,7 +54,15 @@ export function parseCustomization(value: unknown): Customization {
     }
   }
   const active = typeof raw.activeProfile === "string" && seen.has(raw.activeProfile) ? raw.activeProfile : null;
-  return { global: cleanLayer("global", raw.global), profiles, activeProfile: active, books, fonts: parseUserFonts(raw.fonts) };
+  return {
+    global: cleanLayer("global", raw.global),
+    profiles,
+    activeProfile: active,
+    books,
+    fonts: parseUserFonts(raw.fonts),
+    themes: parseUserThemes(raw.themes),
+    recentColours: parseRecent(raw.recentColours),
+  };
 }
 
 /** The layers for one book, plus any session values the reader holds in memory. */
@@ -225,11 +240,23 @@ export function restoreProfile(custom: Customization, profile: Profile, index: n
  */
 export function revertTo(current: Customization, snapshot: Customization): Customization {
   const known = new Set(current.fonts.map((f) => f.id));
+  const themes = new Set(current.themes.map((t) => t.id));
   const keep = (values: Values): Values => {
+    let next = values;
     const font = values["type.fontFamily"];
-    if (typeof font !== "string" || !font.startsWith("user-") || known.has(font)) return values;
-    const next = { ...values };
-    delete next["type.fontFamily"];
+    if (typeof font === "string" && font.startsWith("user-") && !known.has(font)) {
+      next = { ...next };
+      delete next["type.fontFamily"];
+    }
+    // A theme deleted since the snapshot: its base, which the snapshot still knows (rule 3.5).
+    for (const key of THEME_KEYS) {
+      const id = next[key];
+      if (!isUserThemeId(id) || themes.has(id)) continue;
+      next = { ...next };
+      const base = snapshot.themes.find((t) => t.id === id)?.base;
+      if (base) next[key] = base;
+      else delete next[key];
+    }
     return next;
   };
   const books: Record<string, Values> = {};
@@ -243,11 +270,77 @@ export function revertTo(current: Customization, snapshot: Customization): Custo
     activeProfile: snapshot.activeProfile,
     books,
     fonts: current.fonts,
+    themes: current.themes,
+    recentColours: current.recentColours,
   };
 }
 
-/** Whether anything Revert would undo has changed since the snapshot. */
+/** Whether anything Revert would undo has changed since the snapshot. Themes are saved by their own editor. */
 export function changedSince(current: Customization, snapshot: Customization): boolean {
   const strip = (c: Customization) => JSON.stringify({ g: c.global, p: c.profiles, a: c.activeProfile, b: c.books });
   return strip(current) !== strip(snapshot);
+}
+
+const THEME_KEYS = ["theme.id", "app.theme"] as const satisfies readonly SettingKey[];
+
+/**
+ * Add a theme, or replace the one with the same id (the editor's Save). Its
+ * tokens are cleaned; a full list or a bad id or base changes nothing.
+ */
+export function saveTheme(custom: Customization, theme: UserTheme): Customization {
+  if (!isUserThemeId(theme.id) || !isBuiltInTheme(theme.base)) return custom;
+  const clean: UserTheme = { id: theme.id, name: cleanThemeName(theme.name, "Theme"), base: theme.base, tokens: cleanTokens(theme.tokens) };
+  const exists = custom.themes.some((t) => t.id === theme.id);
+  if (!exists && custom.themes.length >= MAX_USER_THEMES) return custom;
+  const themes = exists ? custom.themes.map((t) => (t.id === theme.id ? clean : t)) : [...custom.themes, clean];
+  return { ...custom, themes };
+}
+
+export function renameTheme(custom: Customization, id: string, name: string): Customization {
+  const label = name.trim().slice(0, 60);
+  if (!label || !custom.themes.some((t) => t.id === id)) return custom;
+  return { ...custom, themes: custom.themes.map((t) => (t.id === id ? { ...t, name: label } : t)) };
+}
+
+/**
+ * Delete a theme. Every layer that chose it, and the app theme, go to its base
+ * built-in (rule 3.5), so nothing points at a theme that is gone.
+ */
+export function removeTheme(custom: Customization, id: string): Customization {
+  const theme = custom.themes.find((t) => t.id === id);
+  if (!theme) return custom;
+  const swap = (values: Values): Values => {
+    let next = values;
+    for (const key of THEME_KEYS) {
+      if (next[key] !== id) continue;
+      next = { ...next, [key]: theme.base satisfies ThemeId };
+    }
+    return next;
+  };
+  const books: Record<string, Values> = {};
+  for (const [bookId, values] of Object.entries(custom.books)) books[bookId] = swap(values);
+  return {
+    ...custom,
+    themes: custom.themes.filter((t) => t.id !== id),
+    global: swap(custom.global),
+    profiles: custom.profiles.map((p) => ({ ...p, values: swap(p.values) })),
+    books,
+  };
+}
+
+/** Put a deleted theme back where it was, for Undo. Layers that moved to its base stay there. */
+export function restoreTheme(custom: Customization, theme: UserTheme, index: number): Customization {
+  if (custom.themes.some((t) => t.id === theme.id) || custom.themes.length >= MAX_USER_THEMES) return custom;
+  const at = Math.max(0, Math.min(index, custom.themes.length));
+  return { ...custom, themes: [...custom.themes.slice(0, at), theme, ...custom.themes.slice(at)] };
+}
+
+function parseRecent(value: unknown): string[] {
+  const out: string[] = [];
+  for (const item of Array.isArray(value) ? value : []) {
+    const hex = normalizeHex(item);
+    if (hex && !out.includes(hex)) out.push(hex);
+    if (out.length >= 8) break;
+  }
+  return out;
 }

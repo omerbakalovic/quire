@@ -1,4 +1,5 @@
 import type { THEME_IDS } from "./registry.ts";
+import type { UserTheme } from "./user-themes.ts";
 
 /**
  * Theme tokens (docs/customization.md, section 2.5). A theme is a small
@@ -99,7 +100,7 @@ export function expandTokens(base: BaseTokens & Partial<ThemeTokens>): ThemeToke
   };
 }
 
-const BASE: Record<ThemeId, BaseTokens> = {
+export const BASE: Record<ThemeId, BaseTokens> = {
   light: { page: "#fdfdfb", ink: "#1a1a1a", inkMuted: "#5f5f5f", link: "#1f5fbf", selection: "#b5d3ff", chrome: "#f2f2f0", chromeInk: "#1a1a1a", accent: "#1f5fbf", dark: false },
   paper: { page: "#f4ecd8", ink: "#3b2f1e", inkMuted: "#6e5d45", link: "#7a4a12", selection: "#e3cfa0", chrome: "#ebe1c8", chromeInk: "#3b2f1e", accent: "#9a5b16", dark: false },
   gray: { page: "#d8d8d6", ink: "#1e1e1e", inkMuted: "#4a4a4a", link: "#1d4f9a", selection: "#a9c3e8", chrome: "#cacac8", chromeInk: "#1e1e1e", accent: "#1d4f9a", dark: false },
@@ -111,7 +112,7 @@ const BASE: Record<ThemeId, BaseTokens> = {
 };
 
 /** Tokens a built-in theme states beyond the base, where the derived value doesn't suit it. */
-const EXTRA: Partial<Record<ThemeId, Partial<ThemeTokens>>> = {
+export const EXTRA: Partial<Record<ThemeId, Partial<ThemeTokens>>> = {
   // A full black line between white bars and the white page, and black pills for books without a colour.
   contrast: { chromeDivider: "#000000", pillDefault: "#000000" },
 };
@@ -120,8 +121,28 @@ export const THEMES: Record<ThemeId, ThemeTokens> = Object.fromEntries(
   Object.entries(BASE).map(([id, base]) => [id, expandTokens({ ...base, ...EXTRA[id as ThemeId] })]),
 ) as Record<ThemeId, ThemeTokens>;
 
-export function themeFor(id: string): ThemeTokens {
-  return (THEMES as Record<string, ThemeTokens>)[id] ?? THEMES.light;
+/** Every token's name, in the order the Colours tab lists them. */
+export const TOKEN_KEYS = Object.keys(THEMES.light).filter((key) => key !== "dark") as Exclude<keyof ThemeTokens, "dark">[];
+
+export function isBuiltInTheme(id: unknown): id is ThemeId {
+  return typeof id === "string" && Object.prototype.hasOwnProperty.call(BASE, id);
+}
+
+/**
+ * A user theme's tokens: its base's stated colours with the user's changes on
+ * top, then everything derived from that. Tokens the user didn't change follow
+ * the base, so a theme picks up later improvements to its built-in.
+ */
+export function userThemeTokens(theme: Pick<UserTheme, "base" | "tokens">): ThemeTokens {
+  const base = isBuiltInTheme(theme.base) ? theme.base : "light";
+  return expandTokens({ ...BASE[base], ...EXTRA[base], ...theme.tokens });
+}
+
+/** A built-in or user theme by id. An unknown id (a deleted theme) draws as Light. */
+export function themeFor(id: string, themes: readonly UserTheme[] = []): ThemeTokens {
+  if (isBuiltInTheme(id)) return THEMES[id];
+  const user = themes.find((t) => t.id === id);
+  return user ? userThemeTokens(user) : THEMES.light;
 }
 
 function channel(value: number): number {
@@ -129,9 +150,9 @@ function channel(value: number): number {
   return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
-/** WCAG relative luminance of a #rrggbb colour; null for anything else. */
+/** WCAG relative luminance of a #rrggbb colour (an alpha byte is ignored); null for anything else. */
 export function luminance(hex: string): number | null {
-  const match = /^#([0-9a-f]{6})$/i.exec(hex);
+  const match = /^#([0-9a-f]{6})(?:[0-9a-f]{2})?$/i.exec(hex);
   if (!match) return null;
   const n = Number.parseInt(match[1], 16);
   return 0.2126 * channel((n >> 16) & 255) + 0.7152 * channel((n >> 8) & 255) + 0.0722 * channel(n & 255);
@@ -161,5 +182,35 @@ export function contrastWarnings(tokens: ThemeTokens, minimum = 4.5): ContrastWa
   check("ink", tokens.ink, tokens.page, minimum);
   check("link", tokens.link, tokens.page, Math.min(minimum, 3));
   check("chromeInk", tokens.chromeInk, tokens.chrome, minimum);
+  return out;
+}
+
+type ColourKey = Exclude<keyof ThemeTokens, "dark">;
+
+/** The pairs the Colours tab checks: text token on its background, and the ratio it should reach. */
+export const CONTRAST_PAIRS: readonly { fg: ColourKey; bg: ColourKey; minimum: number }[] = [
+  { fg: "ink", bg: "page", minimum: 4.5 },
+  { fg: "heading", bg: "page", minimum: 4.5 },
+  { fg: "link", bg: "page", minimum: 3 },
+  { fg: "inkMuted", bg: "page", minimum: 3 },
+  { fg: "chromeInk", bg: "chrome", minimum: 4.5 },
+  { fg: "controlInk", bg: "control", minimum: 4.5 },
+  { fg: "sheetInk", bg: "sheet", minimum: 4.5 },
+  { fg: "appInk", bg: "appBackground", minimum: 4.5 },
+  { fg: "appInkMuted", bg: "appBackground", minimum: 3 },
+];
+
+export type ContrastFlag = { fg: ColourKey; bg: ColourKey; ratio: number; minimum: number };
+
+/**
+ * The low-contrast tags of the Colours tab (C4). They flag, never block: a
+ * low-glare theme like Night is a fair choice, so the editor only says so.
+ */
+export function contrastFlags(tokens: ThemeTokens): ContrastFlag[] {
+  const out: ContrastFlag[] = [];
+  for (const pair of CONTRAST_PAIRS) {
+    const ratio = contrast(tokens[pair.fg], tokens[pair.bg]);
+    if (ratio !== null && ratio < pair.minimum) out.push({ ...pair, ratio: Math.floor(ratio * 10) / 10 });
+  }
   return out;
 }

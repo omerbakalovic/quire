@@ -17,7 +17,8 @@ import { ConfirmHost } from "@/ui/confirm";
 export default function RootLayout() {
   const library = useLibrary();
   const themeId = appThemeId(library.custom);
-  const chrome = useMemo(() => chromeFor(themeFor(themeId)), [themeId]);
+  const themes = library.custom.themes;
+  const chrome = useMemo(() => chromeFor(themeFor(themeId, themes)), [themeId, themes]);
   return (
     <ChromeProvider chrome={chrome}>
       <StatusBar style={chrome.statusBar} />

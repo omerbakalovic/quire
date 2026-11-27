@@ -36,7 +36,7 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
   const book = t().book;
   const layer = layerOf(target);
   const groups = TAB_GROUPS[tab];
-  const sections = sectionsFor(layers, layer, custom.fonts).filter((s) => groups.includes(s.group));
+  const sections = sectionsFor(layers, layer, custom.fonts, custom.themes).filter((s) => groups.includes(s.group));
   const resolved = resolve(layers);
   const profileName = custom.profiles.find((p) => p.id === custom.activeProfile)?.name ?? "";
   const presetNow = presetOf(resolved);
@@ -82,8 +82,11 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
 
   const choiceName = (key: SettingKey, option: string): string => {
     if (key === "type.fontFamily") return fontLabel(option, book.fonts, custom.fonts);
-    if (key === "theme.id") return book.themes[option] ?? option;
-    if (key === "app.theme") return option === "follow" ? strings.appThemeFollow : (book.themes[option] ?? option);
+    if (key === "theme.id" || key === "app.theme") {
+      if (option === "follow") return strings.appThemeFollow;
+      return (book.themes as Record<string, string>)[option] ?? custom.themes.find((u) => u.id === option)?.name ?? option;
+    }
+    if (key === "theme.bookColors") return strings.bookColors[option as "auto"] ?? option;
     if (key === "type.alignment") return book.aligns[option] ?? option;
     if (key === "turn.style") return strings.turns[option] ?? option;
     if (key.startsWith("gesture.")) return strings.actions[option] ?? option;
@@ -155,7 +158,8 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
     <View style={styles.wrap}>
       {tab === "colours" ? <Text style={[styles.help, { color: c.muted }]}>{look.coloursHelp}</Text> : null}
       {sections.map((section) => {
-        const rows = section.rows.filter((row) => !PINNED.includes(row.key) || tab === "colours");
+        // The theme itself is chosen in the theme list above (ThemeEditor) and the pinned row.
+        const rows = section.rows.filter((row) => !PINNED.includes(row.key));
         if (rows.length === 0) return null;
         return (
           <View key={section.group} style={styles.group}>

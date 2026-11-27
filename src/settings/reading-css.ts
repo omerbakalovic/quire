@@ -1,6 +1,9 @@
 import type { Resolved } from "./registry.ts";
 import { fontStack, type UserFont } from "./fonts.ts";
-import type { ThemeTokens } from "./themes.ts";
+import { withAlpha, type ThemeTokens } from "./themes.ts";
+
+/** The attribute book-colors.js puts on text too faint for the page; kept in step with it by a test. */
+export const FAINT_ATTR = "data-quire-faint";
 
 /**
  * The CSS the reader page injects into book content, from resolved settings
@@ -22,15 +25,35 @@ export function readingCss(settings: Resolved, theme: ThemeTokens, userFonts: re
     `html, body { background: ${theme.page} !important; color: ${theme.ink} !important; }`,
     `::selection { background: ${theme.selection}; }`,
   );
-  // On a dark theme, or with publisher styles off, the book's own colours would
-  // fight the theme (black text on a black page), so every element follows it.
-  // On light themes with publisher styles on, coloured callouts and tables keep their look.
-  if (theme.dark || force) {
+  // The book's own colours (theme.bookColors). Auto: on a dark theme, or with
+  // publisher styles off, they would fight the theme (black text on a black page),
+  // so every element follows it; on light themes with publisher styles on, coloured
+  // callouts and tables keep their look. Keep never replaces them, except text the
+  // page marks as too faint (src/reader-page/book-colors.js). Replace always does.
+  const mode = settings["theme.bookColors"];
+  const replace = mode === "replace" || (mode === "auto" && (theme.dark || force));
+  if (replace) {
     rules.push(
       `body *:not(a):not(img):not(svg):not(svg *) { color: inherit !important; background-color: transparent !important; border-color: ${theme.inkMuted}; }`,
       `a, a * { color: ${theme.link} !important; }`,
     );
   }
+  if (mode === "keep") {
+    rules.push(
+      `[${FAINT_ATTR}] { color: ${theme.ink} !important; }`,
+      `a[${FAINT_ATTR}], a [${FAINT_ATTR}] { color: ${theme.link} !important; }`,
+    );
+  }
+  // Page tokens beyond the base (C4). Only written when a theme sets them apart from
+  // what they derive from, so the built-in themes' CSS stays as it was.
+  const strong = replace ? " !important" : "";
+  // ":root body" lifts these above the blanket replacement rule above (specificity 0,0,5),
+  // which would otherwise win over a plain h1 even with both important (Codex review on PR #17).
+  const lift = (selectors: string) => `:root body :is(${selectors})`;
+  if (theme.heading && theme.heading !== theme.ink) rules.push(`${lift("h1, h2, h3, h4, h5, h6")} { color: ${theme.heading}${strong}; }`);
+  if (theme.linkVisited && theme.linkVisited !== theme.link) rules.push(`${lift("a:visited, a:visited *")} { color: ${theme.linkVisited}${strong}; }`);
+  if (theme.imageCaption && theme.imageCaption !== theme.inkMuted) rules.push(`${lift("figcaption, figcaption *")} { color: ${theme.imageCaption}${strong}; }`);
+  if (theme.rule && theme.rule !== withAlpha(theme.inkMuted, 0.5)) rules.push(`${lift("hr")} { border-color: ${theme.rule}${strong}; color: ${theme.rule}${strong}; }`);
 
   // Text size. With the book's styles on, the page measures the book's own html and body
   // sizes and sets these variables to them times the scale (src/reader-page/font-scale.js),

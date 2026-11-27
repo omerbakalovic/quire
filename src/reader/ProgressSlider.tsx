@@ -110,7 +110,7 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
         }}
       >
         <View style={[styles.track, { backgroundColor: c.track }]}>
-          <View style={[styles.fill, { width: `${shown * 100}%`, backgroundColor: c.accent }]} />
+          <View style={[styles.fill, { width: `${shown * 100}%`, backgroundColor: c.fill }]} />
         </View>
         {/* Ticks sit in their own layer: Android clips children to a rounded view, which hid all
             but a sliver of each tick inside the 4 px track (phone run 7b). They change colour
@@ -120,7 +120,7 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
             <View key={tick} style={[styles.tick, { left: `${tick * 100}%` }, { backgroundColor: tick <= shown ? c.onAccent : c.muted }]} />
           ))}
         </View>
-        <View style={[styles.thumb, { left: `${shown * 100}%`, backgroundColor: c.accent, borderColor: c.onAccent }]} />
+        <View style={[styles.thumb, { left: `${shown * 100}%`, backgroundColor: c.thumb, borderColor: c.onAccent }]} />
       </View>
     </View>
   );

@@ -9,7 +9,7 @@ const SAMPLE = fileURLToPath(new URL("../../assets/sample/quire-sample.epub", im
 
 /** Roadmap section 4, rule 2: the preview opens its sample through the reader's own open message. */
 test("the preview's open message is the reader's, with a fixed start and no bars", () => {
-  const look = { css: "p{}", gap: "4%", maxInlineSize: "720px", page: "#fff", ink: "#000", muted: "#555", link: "#00f", chrome: "#eee", chromeInk: "#000", fonts: [], band: 22, fontScale: 1.2 };
+  const look = { css: "p{}", gap: "4%", maxInlineSize: "720px", page: "#fff", ink: "#000", muted: "#555", link: "#00f", chrome: "#eee", chromeInk: "#000", fonts: [], band: 22, fontScale: 1.2, faintFix: false };
   const insets = { top: 0, bottom: 0, left: 0, right: 0 };
   const preview = previewOpenMessage("abc", "http://127.0.0.1:1/book/abc", look, insets);
   const reader = openMessage({ id: "abc", url: "http://127.0.0.1:1/book/abc", flow: "paginated", position: null, look, settings: { tapZones: "screen", gestures: PREVIEW_GESTURES, turns: false }, insets });

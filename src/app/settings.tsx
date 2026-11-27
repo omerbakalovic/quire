@@ -70,9 +70,9 @@ export default function SettingsScreen() {
       <Toggle label={strings.showProgress} value={look.showProgress} onChange={(value) => set({ showProgress: value })} />
       <Text style={[styles.section, muted]}>{strings.appTheme}</Text>
       <View style={styles.chips}>
-        {APP_THEMES.map((option) => {
+        {[...APP_THEMES, ...library.custom.themes.map((u) => u.id)].map((option) => {
           const on = appTheme === option;
-          const swatch = option === "follow" ? null : themeFor(option);
+          const swatch = option === "follow" ? null : themeFor(option, library.custom.themes);
           return (
             <Pressable
               key={option}
@@ -86,7 +86,7 @@ export default function SettingsScreen() {
               ]}
             >
               <Text style={[styles.chipText, { color: swatch ? swatch.ink : c.controlInk }]}>
-                {option === "follow" ? reading.appThemeFollow : (themeNames[option] ?? option)}
+                {option === "follow" ? reading.appThemeFollow : ((themeNames as Record<string, string>)[option] ?? library.custom.themes.find((u) => u.id === option)?.name ?? option)}
               </Text>
             </Pressable>
           );

@@ -1,21 +1,24 @@
-import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { Stack, useLocalSearchParams, usePreventRemove, useRouter } from "expo-router";
 import { type ComponentRef, useEffect, useMemo, useRef, useState } from "react";
 import { Keyboard, Pressable, ScrollView, StyleSheet, Text, TextInput, useWindowDimensions, View, type LayoutChangeEvent } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { findBook } from "@/domain/library";
 import { t } from "@/i18n";
-import { getLibrary, loadLibrary, revertCustomization, saveSetting, useLibrary } from "@/library/store";
+import { getLibrary, loadLibrary, revertCustomization, saveSetting, saveUserTheme, useLibrary } from "@/library/store";
 import { PreviewPane } from "@/look/PreviewPane";
 import { ProfileBar } from "@/look/ProfileBar";
 import { SettingRows } from "@/look/SettingRows";
 import { SettingSlider } from "@/look/SettingSlider";
+import { ThemeEditor } from "@/look/ThemeEditor";
 import { ChromeProvider, chromeFor } from "@/reader/chrome";
 import { appThemeId, changedSince, resolvedFor, type Customization } from "@/settings/customization";
 import { formatNumber } from "@/settings/customize";
 import { defaultTarget, editorLayers, isTab, layerOf, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
-import { THEMES, themeFor } from "@/settings/themes";
+import { draftChanged, themesWithDraft, type Draft } from "@/settings/theme-editor";
+import { themeFor } from "@/settings/themes";
+import { confirm } from "@/ui/confirm";
 
 /**
  * Reading Look (docs/customization-roadmap.md, C1): the one editor for the
@@ -89,10 +92,17 @@ export default function LookScreen() {
   const layers = useMemo(() => editorLayers(custom, bookId), [custom, bookId]);
   const settings = useMemo(() => resolvedFor(custom, bookId), [custom, bookId]);
   // From a book the editor wears the book's theme; from Settings, the app theme (roadmap 2.3).
-  const theme = themeFor(bookId ? settings["theme.id"] : appThemeId(custom));
+  const theme = themeFor(bookId ? settings["theme.id"] : appThemeId(custom), custom.themes);
   const chrome = chromeFor(theme);
   const profile = custom.profiles.find((p) => p.id === custom.activeProfile) ?? null;
   const changed = changedSince(custom, snapshot.current);
+
+  // The theme editor's draft (roadmap 2.6): the preview shows it, nothing else changes until Save.
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [holding, setHolding] = useState(false);
+  const [listHeight, setListHeight] = useState(0);
+  const previewSettings = useMemo(() => (draft ? { ...settings, "theme.id": draft.theme.id } : settings), [settings, draft]);
+  const previewThemes = useMemo(() => themesWithDraft(custom.themes, draft), [custom.themes, draft]);
 
   const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -109,6 +119,37 @@ export default function LookScreen() {
     touched.current = true;
     void saveSetting(layerOf(target), key, value, bookId);
   };
+
+  const saveDraft = async (current: Draft) => {
+    const name = current.theme.name.trim() || t().book.themes[current.theme.base];
+    await saveUserTheme({ ...current.theme, name });
+    // A new theme is put to use where Reading Look is saving, as picking it would.
+    if (current.isNew) change("theme.id", current.theme.id);
+    setDraft(null);
+    showNotice(strings.themes.saved(name));
+  };
+
+  // Leaving with unsaved theme changes asks first: Save, Discard or Keep editing.
+  const unsaved = draft !== null && draftChanged(draft);
+  usePreventRemove(unsaved, ({ repeat }) => {
+    if (!draft) return;
+    confirm({
+      title: strings.themes.leaveTitle(draft.theme.name.trim() || t().book.themes[draft.theme.base]),
+      buttons: [
+        { text: strings.themes.leaveKeep, style: "cancel" },
+        {
+          text: strings.themes.leaveDiscard,
+          style: "destructive",
+          onPress: () => {
+            setDraft(null);
+            repeat();
+          },
+        },
+        { text: strings.themes.leaveSave, onPress: () => void saveDraft(draft).then(repeat) },
+      ],
+      chrome,
+    });
+  });
 
   const revert = () => {
     void revertCustomization(snapshot.current);
@@ -168,17 +209,18 @@ export default function LookScreen() {
       />
       {note(sizeOrigin, "type.fontSize", strings.textSize)}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.swatches}>
-        {THEME_IDS.map((id) => {
-          const swatch = THEMES[id];
+        {[...THEME_IDS, ...custom.themes.map((u) => u.id)].map((id) => {
+          const swatch = themeFor(id, custom.themes);
           const on = settings["theme.id"] === id;
+          const name = (words.themes as Record<string, string>)[id] ?? custom.themes.find((u) => u.id === id)?.name ?? id;
           return (
             <Pressable
               key={id}
-              onPress={() => change("theme.id", id)}
+              onPress={() => (draft ? showNotice(strings.themes.locked) : change("theme.id", id))}
               accessibilityRole="button"
-              accessibilityLabel={`${strings.theme}: ${words.themes[id]}`}
+              accessibilityLabel={`${strings.theme}: ${name}`}
               accessibilityState={{ selected: on }}
-              style={[styles.swatch, { backgroundColor: swatch.page, borderColor: on ? chrome.accent : swatch.inkMuted }, on && styles.swatchOn]}
+              style={[styles.swatch, { backgroundColor: swatch.page, borderColor: on ? chrome.accent : swatch.inkMuted }, on && styles.swatchOn, draft && styles.dim]}
             >
               <Text style={[styles.swatchText, { color: swatch.ink }]}>Aa</Text>
             </Pressable>
@@ -206,12 +248,22 @@ export default function LookScreen() {
             headerTintColor: chrome.ink,
             headerRight: () => (
               <View style={styles.headerRight}>
-                {changed ? (
+                {draft ? (
+                  <>
+                    <Pressable onPress={() => setDraft(null)} accessibilityRole="button" hitSlop={8}>
+                      <Text style={[styles.headerLink, { color: chrome.ink }]}>{strings.themes.cancel}</Text>
+                    </Pressable>
+                    <Pressable onPress={() => void saveDraft(draft)} accessibilityRole="button" hitSlop={8}>
+                      <Text style={[styles.headerLink, { color: chrome.accent }]}>{strings.themes.save}</Text>
+                    </Pressable>
+                  </>
+                ) : null}
+                {!draft && changed ? (
                   <Pressable onPress={revert} accessibilityRole="button" accessibilityLabel={strings.revertLabel} hitSlop={8}>
                     <Text style={[styles.headerLink, { color: chrome.accent }]}>{strings.revert}</Text>
                   </Pressable>
                 ) : null}
-                {bookId ? (
+                {bookId && !draft ? (
                   <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={strings.close} hitSlop={8}>
                     <Text style={[styles.headerLink, { color: chrome.ink }]}>✕</Text>
                   </Pressable>
@@ -235,7 +287,7 @@ export default function LookScreen() {
         </Pressable>
         {preview && paneHeight > 0 ? (
           <View style={{ height: keyboard > 0 ? 0 : paneHeight }}>
-            <PreviewPane settings={settings} fonts={custom.fonts} />
+            <PreviewPane settings={previewSettings} fonts={custom.fonts} themes={previewThemes} />
           </View>
         ) : null}
         <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist" onLayout={measure("tabs")}>
@@ -253,7 +305,7 @@ export default function LookScreen() {
             </Pressable>
           ))}
         </View>
-        <ScrollView ref={listRef} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={listRef} scrollEnabled={!holding} onLayout={(event) => setListHeight(event.nativeEvent.layout.height)} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
           {pinTop ? null : fixedTop}
           <Text style={[styles.small, { color: chrome.muted }]}>{help}</Text>
           {bookOverrides > 0 ? (
@@ -263,7 +315,27 @@ export default function LookScreen() {
               </Text>
             </Pressable>
           ) : null}
-          <SettingRows tab={tab} layers={layers} target={target} custom={custom} bookId={bookId} onChange={change} />
+          {tab === "colours" ? (
+            <ThemeEditor
+              custom={custom}
+              current={settings["theme.id"]}
+              draft={draft}
+              onDraft={setDraft}
+              onChoose={(id) => change("theme.id", id)}
+              onNotice={showNotice}
+              onActive={setHolding}
+              // The part above the gesture bar: the list runs under it (emulator run 29).
+              listHeight={Math.max(0, listHeight - insets.bottom)}
+              onReveal={(view) => {
+                const content = listRef.current?.getInnerViewRef();
+                if (!view || !content) return;
+                view.measureLayout(content, (_x, y) => listRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }));
+              }}
+            />
+          ) : null}
+          {tab === "colours" && draft ? null : (
+            <SettingRows tab={tab} layers={layers} target={target} custom={custom} bookId={bookId} onChange={change} />
+          )}
         </ScrollView>
         {notice ? (
           <View style={[styles.notice, { bottom: insets.bottom + 16, backgroundColor: chrome.ink }]}>
@@ -302,6 +374,7 @@ const styles = StyleSheet.create({
   swatches: { flexDirection: "row", gap: 10, paddingVertical: 2 },
   swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 2, alignItems: "center", justifyContent: "center" },
   swatchOn: { borderWidth: 3 },
+  dim: { opacity: 0.4 },
   swatchText: { fontSize: 14, fontWeight: "600" },
   targetRow: { flexDirection: "row", alignItems: "center", gap: 10 },
   wrap: { flex: 1, flexWrap: "wrap" },

@@ -144,7 +144,8 @@ export function SettingSlider({ settingKey, label, value, format, onChange, comp
         <Text style={[styles.label, { color: c.ink }]}>{label}</Text>
         {typing === null ? (
           <Pressable
-            onPress={() => setTyping(String(max <= 1 ? Math.round(value * 100) : value))}
+            // An unset value ("Book's", stored as a sentinel such as -1) starts the box empty rather than showing the sentinel.
+            onPress={() => setTyping(UNSET[settingKey]?.value === value ? "" : String(max <= 1 ? Math.round(value * 100) : value))}
             accessibilityRole="button"
             accessibilityLabel={strings.typeValue(label, format(value))}
             hitSlop={8}

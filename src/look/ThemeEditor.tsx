@@ -259,8 +259,8 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
                     swatches={swatches}
                     label={name}
                     onActive={onActive}
-                    // Its row, the gaps and the hue strip take about 116 dp above and below the square (emulator run 28).
-                    squareHeight={listHeight > 0 ? listHeight - 116 : undefined}
+                    // Its row, the gaps and the hue strip take about 116 dp beside the square, the opacity strip 38 more (emulator runs 28, 29).
+                    squareHeight={listHeight > 0 ? listHeight - 116 - (ALPHA_TOKENS.has(key) ? 38 : 0) : undefined}
                   />
                 ) : null}
               </View>

@@ -324,7 +324,8 @@ export default function LookScreen() {
               onChoose={(id) => change("theme.id", id)}
               onNotice={showNotice}
               onActive={setHolding}
-              listHeight={listHeight}
+              // The part above the gesture bar: the list runs under it (emulator run 29).
+              listHeight={Math.max(0, listHeight - insets.bottom)}
               onReveal={(view) => {
                 const content = listRef.current?.getInnerViewRef();
                 if (!view || !content) return;

@@ -30,6 +30,9 @@ import { confirm } from "@/ui/confirm";
  * Everything else is in tabs. Opened from a book, the book stays open under
  * this screen and follows every change; Back returns to the same place.
  */
+/** The tab last open, for the next time Reading Look opens without one asked for. */
+let lastTab: Tab = "text";
+
 export default function LookScreen() {
   const params = useLocalSearchParams<{ book?: string; tab?: string }>();
   const router = useRouter();
@@ -89,7 +92,12 @@ export default function LookScreen() {
     };
   }, []);
   const paneHeight = previewHeight(window, free);
-  const [tab, setTab] = useState<Tab>(isTab(params.tab) ? params.tab : "text");
+  const [tab, setTabState] = useState<Tab>(isTab(params.tab) ? params.tab : lastTab);
+  // Reopened from the book's Aa, Reading Look comes back on the tab last used (emulator run 33).
+  const setTab = (next: Tab) => {
+    lastTab = next;
+    setTabState(next);
+  };
   const [chosen, setTarget] = useState<Target>(() => defaultTarget(custom, bookId));
   const target = validTarget(custom, bookId, chosen);
   const layers = useMemo(() => editorLayers(custom, bookId), [custom, bookId]);
@@ -104,6 +112,7 @@ export default function LookScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [holding, setHolding] = useState(false);
   const [listHeight, setListHeight] = useState(0);
+  const scrollY = useRef(0);
   // The Bars tab's draft (C5), the same way: the preview draws it with the bars shown.
   const [barDraft, setBarDraft] = useState<BarDraft | null>(null);
   const previewSettings = useMemo(
@@ -337,7 +346,7 @@ export default function LookScreen() {
             </Pressable>
           ))}
         </View>
-        <ScrollView ref={listRef} scrollEnabled={!holding} onLayout={(event) => setListHeight(event.nativeEvent.layout.height)} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={listRef} scrollEnabled={!holding} onScroll={(event) => (scrollY.current = event.nativeEvent.contentOffset.y)} scrollEventThrottle={32} onLayout={(event) => setListHeight(event.nativeEvent.layout.height)} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
           {pinTop ? null : fixedTop}
           <Text style={[styles.small, { color: chrome.muted }]}>{help}</Text>
           {bookOverrides > 0 ? (
@@ -365,7 +374,25 @@ export default function LookScreen() {
               }}
             />
           ) : null}
-          {tab === "bars" ? <BarsEditor settings={settings} draft={barDraft} onDraft={setBarDraft} onNotice={showNotice} /> : null}
+          {tab === "bars" ? (
+            <BarsEditor
+              settings={settings}
+              draft={barDraft}
+              onDraft={setBarDraft}
+              onNotice={showNotice}
+              onReveal={(view) => {
+                const content = listRef.current?.getInnerViewRef();
+                if (!view || !content) return;
+                // As little scrolling as shows the whole panel above the gesture bar, so the item stays in view too.
+                view.measureLayout(content, (_x, y, _w, height) => {
+                  const visible = Math.max(0, listHeight - insets.bottom);
+                  const bottom = y + height + 8 - visible;
+                  if (bottom > scrollY.current) listRef.current?.scrollTo({ y: Math.min(bottom, Math.max(0, y - 8)), animated: true });
+                  else if (y - 8 < scrollY.current) listRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+                });
+              }}
+            />
+          ) : null}
           {tab === "colours" && draft ? null : (
             <SettingRows tab={tab} layers={layers} target={target} custom={custom} bookId={bookId} onChange={change} />
           )}

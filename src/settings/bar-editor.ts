@@ -146,3 +146,17 @@ export function barDraftValues(draft: BarDraft, settings: Resolved): Partial<Rec
   for (const key of BAR_KEYS) if (!sameValue(draft[key] as never, settings[key] as never)) out[key] = draft[key];
   return out;
 }
+
+/** The three tap bars' zones and arrangements; the header and footer lines are the presets' (src/settings/layout.ts). */
+export const TAP_BAR_KEYS: readonly SettingKey[] = BAR_KEYS.filter((key) => !key.startsWith("layout.header.") && !key.startsWith("layout.footer."));
+
+/** The draft with the tap bars as Quire ships them (emulator run 33: a preset only sets the lines). */
+export function defaultTapBars(draft: BarDraft): BarDraft {
+  const out: BarDraft = { ...draft };
+  for (const key of TAP_BAR_KEYS) out[key] = settingFor(key)?.default as readonly string[] | string;
+  return out;
+}
+
+export function tapBarsAreDefault(draft: BarDraft): boolean {
+  return TAP_BAR_KEYS.every((key) => sameValue(draft[key] as never, settingFor(key)?.default as never));
+}

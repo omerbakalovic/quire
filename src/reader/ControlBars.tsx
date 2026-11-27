@@ -34,6 +34,11 @@ type Props = {
   outlines?: boolean;
 };
 
+type RowProps = Props & {
+  /** A see-through bar: its text gets a soft halo in the page colour, so it reads over the book's text (emulator run 33). */
+  halo?: boolean;
+};
+
 /**
  * The controls that appear on a tap in the middle of the page, drawn from the
  * layout slots (docs/customization.md, 3.2): a top bar, and a bottom bar with
@@ -57,13 +62,13 @@ export function ControlBars(props: Props) {
     <>
       {top.length > 0 ? (
         <View style={[styles.bar, frameStyle(topFrame, c), { top: topFrame.edge }]}>
-          <Row zones={top} {...props} />
+          <Row zones={top} {...props} halo={topFrame.background === "none"} />
         </View>
       ) : null}
       {hasBottom ? (
         <View onLayout={onLayout} style={[styles.bar, frameStyle(bottomFrame, c), { bottom: bottomFrame.edge }]}>
-          {upper.length > 0 ? <Row zones={upper} {...props} /> : null}
-          {lower.length > 0 ? <Row zones={lower} {...props} /> : null}
+          {upper.length > 0 ? <Row zones={upper} {...props} halo={bottomFrame.background === "none"} /> : null}
+          {lower.length > 0 ? <Row zones={lower} {...props} halo={bottomFrame.background === "none"} /> : null}
         </View>
       ) : (
         <View onLayout={() => props.onBottomHeight(insets.bottom)} />
@@ -94,7 +99,7 @@ function frameStyle(frame: BarFrame, c: Chrome) {
  * the screen; the slider and the title keep a minimum width, so they move down a
  * line instead of shrinking to nothing.
  */
-function Row({ zones, ...props }: Props & { zones: ZoneLayout[] }) {
+function Row({ zones, ...props }: RowProps & { zones: ZoneLayout[] }) {
   const c = useChrome();
   const gap = props.settings["bar.gap"];
   return (
@@ -115,10 +120,11 @@ function Row({ zones, ...props }: Props & { zones: ZoneLayout[] }) {
   );
 }
 
-function Control({ item, ...props }: Props & { item: string }): ReactNode {
+function Control({ item, ...props }: RowProps & { item: string }): ReactNode {
   const strings = t().book;
   const c = useChrome();
-  const ink = { color: c.ink };
+  const halo = props.halo ? { textShadowColor: c.bar.slice(0, 7), textShadowRadius: 6, textShadowOffset: { width: 0, height: 0 } } : null;
+  const ink = [{ color: c.ink }, halo];
   const size = CONTROL_TEXT[props.settings["bar.controlSize"]] ?? CONTROL_TEXT.medium;
   const icons = props.settings["bar.labels"] === "icons";
   const compact = props.settings["bar.height"] === "compact";
@@ -137,7 +143,7 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
             {props.title}
           </Text>
           {props.chapter ? (
-            <Text style={[styles.sub, { color: c.muted, fontSize: size.small }]} numberOfLines={1}>
+            <Text style={[styles.sub, { color: c.muted, fontSize: size.small }, halo]} numberOfLines={1}>
               {props.chapter}
             </Text>
           ) : null}
@@ -166,7 +172,7 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
               accessibilityState={{ selected: props.flow === option }}
               style={[styles.segmentItem, props.flow === option && { backgroundColor: c.accent }]}
             >
-              <Text style={[styles.segmentText, ink, { fontSize: size.small }, props.flow === option && [styles.segmentTextOn, { color: c.onAccent }]]}>
+              <Text style={[styles.segmentText, { color: c.ink }, props.flow !== option && halo, { fontSize: size.small }, props.flow === option && [styles.segmentTextOn, { color: c.onAccent }]]}>
                 {option === "paginated" ? strings.paginated : strings.scrolled}
               </Text>
             </Pressable>
@@ -191,7 +197,7 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
       return <ProgressSlider fraction={props.fraction} toc={props.toc} onCommit={props.onSeek} onScrub={props.onScrub} />;
     case "percent":
       return (
-        <Text style={[styles.percent, { color: c.muted, fontSize: size.small }]}>{props.fraction === null ? "" : `${Math.round(props.fraction * 100)}%`}</Text>
+        <Text style={[styles.percent, { color: c.muted, fontSize: size.small }, halo]}>{props.fraction === null ? "" : `${Math.round(props.fraction * 100)}%`}</Text>
       );
     default:
       return null;

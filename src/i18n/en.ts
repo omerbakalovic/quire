@@ -349,6 +349,8 @@ export const en = {
       saved: "Bars saved",
       leaveTitle: "Save changes to the bars?",
       leaveBoth: "Save your changes?",
+      linePresets: "Header and footer line presets",
+      defaultBars: "Default tap bars",
     },
     picker: {
       square: (label: string) => `${label}: saturation and brightness`,

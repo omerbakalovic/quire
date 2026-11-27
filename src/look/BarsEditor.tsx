@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { t } from "@/i18n";
@@ -6,6 +6,7 @@ import { useChrome } from "@/reader/chrome";
 import {
   addElement,
   available,
+  defaultTapBars,
   draftFrom,
   moveAcross,
   moveAlong,
@@ -13,6 +14,7 @@ import {
   REGIONS,
   removeElement,
   setArrange,
+  tapBarsAreDefault,
   type BarDraft,
   type EditResult,
   type Region,
@@ -22,12 +24,16 @@ import { arrangeKey, type Bar } from "@/settings/bars";
 import { LAYOUT_PRESETS, presetOf, presetValues } from "@/settings/layout";
 import { ARRANGEMENTS, type Resolved } from "@/settings/registry";
 
+import type { ViewRef } from "./ThemeEditor";
+
 type Props = {
   /** The saved look where Reading Look is saving. */
   settings: Resolved;
   draft: BarDraft | null;
   onDraft: (draft: BarDraft | null) => void;
   onNotice: (text: string) => void;
+  /** Bring a panel that just opened fully into view. */
+  onReveal: (view: ViewRef | null) => void;
 };
 
 type Selection = { element: string; kind: Region["kind"] } | null;
@@ -39,13 +45,31 @@ type Selection = { element: string; kind: Region["kind"] } | null;
  * below that takes it) and Remove; the same are accessibility actions on the
  * item. Every change goes into a draft that only Save keeps (roadmap 2.6).
  */
-export function BarsEditor({ settings, draft, onDraft, onNotice }: Props) {
+export function BarsEditor({ settings, draft, onDraft, onNotice, onReveal }: Props) {
   const c = useChrome();
   const strings = t().look.bars;
   const names = t().customize;
   const current = draft ?? draftFrom(settings);
   const [selected, setSelected] = useState<Selection>(null);
   const [adding, setAdding] = useState<{ region: RegionId; zone: number } | null>(null);
+  // The toolbar and the add panel open under their region, often below the screen edge (emulator run 33).
+  const toolbar = useRef<ViewRef>(null);
+  const addBox = useRef<ViewRef>(null);
+  const reveal = (view: { current: ViewRef | null }) => setTimeout(() => onReveal(view.current), 120);
+  const select = (next: Selection) => {
+    setSelected(next);
+    if (next) {
+      setAdding(null);
+      reveal(toolbar);
+    }
+  };
+  const openAdd = (next: { region: RegionId; zone: number } | null) => {
+    setAdding(next);
+    if (next) {
+      setSelected(null);
+      reveal(addBox);
+    }
+  };
 
   const nameOf = (element: string, kind: Region["kind"]) => (kind === "lines" ? names.elements[element] : names.controls[element]) ?? element;
   const zoneNames = (region: Region) => (region.kind === "lines" ? strings.lineZones : strings.zones);
@@ -59,7 +83,7 @@ export function BarsEditor({ settings, draft, onDraft, onNotice }: Props) {
   const act = (element: string, kind: Region["kind"], action: "earlier" | "later" | "up" | "down" | "remove") => {
     if (action === "remove") {
       onDraft(removeElement(current, element, kind));
-      setSelected(null);
+      select(null);
     } else if (action === "earlier" || action === "later") apply(moveAlong(current, element, kind, action === "earlier" ? -1 : 1));
     else apply(moveAcross(current, element, kind, action === "up" ? -1 : 1));
   };
@@ -84,6 +108,7 @@ export function BarsEditor({ settings, draft, onDraft, onNotice }: Props) {
   return (
     <View style={styles.wrap}>
       <Text style={[styles.help, { color: c.muted }]}>{strings.help}</Text>
+      <Text style={[styles.small, { color: c.muted }]}>{strings.linePresets}</Text>
       <View style={styles.chips}>
         {LAYOUT_PRESETS.map((option) =>
           chip(option, names.layoutPresets[option] ?? option, preset === option, () => onDraft({ ...current, ...(presetValues(option) as BarDraft) })),
@@ -119,7 +144,7 @@ export function BarsEditor({ settings, draft, onDraft, onNotice }: Props) {
                     {items.map((element) => {
                       const name = nameOf(element, region.kind);
                       const on = here?.element === element;
-                      return chip(element, name, on, () => setSelected(on ? null : { element, kind: region.kind }), {
+                      return chip(element, name, on, () => select(on ? null : { element, kind: region.kind }), {
                         accessibilityLabel: on ? strings.selected(name) : strings.itemLabel(name, zones[zone], regionName),
                         accessibilityActions: [
                           { name: "earlier", label: strings.earlier },
@@ -133,13 +158,13 @@ export function BarsEditor({ settings, draft, onDraft, onNotice }: Props) {
                       });
                     })}
                     {chip(`add-${key}`, strings.add, adding?.region === region.id && adding.zone === zone, () =>
-                      setAdding(adding?.region === region.id && adding.zone === zone ? null : { region: region.id, zone }), { accessibilityLabel: strings.addLabel(zones[zone], regionName) })}
+                      openAdd(adding?.region === region.id && adding.zone === zone ? null : { region: region.id, zone }), { accessibilityLabel: strings.addLabel(zones[zone], regionName) })}
                   </View>
                 );
               })}
             </View>
             {here ? (
-              <View style={styles.toolbar}>
+              <View ref={toolbar} style={styles.toolbar}>
                 {(
                   [
                     ["earlier", "◀"],
@@ -158,13 +183,13 @@ export function BarsEditor({ settings, draft, onDraft, onNotice }: Props) {
               </View>
             ) : null}
             {adding?.region === region.id ? (
-              <View style={styles.addBox}>
+              <View ref={addBox} style={styles.addBox}>
                 <Text style={[styles.small, { color: c.muted }]}>{strings.addTitle(zones[adding.zone])}</Text>
                 <View style={styles.chips}>
                   {available(current, region.id).map((element) =>
                     chip(`pick-${element}`, nameOf(element, region.kind), false, () => {
                       apply(addElement(current, region.id, adding.zone, element));
-                      setAdding(null);
+                      openAdd(null);
                     }),
                   )}
                   {available(current, region.id).length === 0 ? <Text style={[styles.small, { color: c.muted }]}>{strings.nothingToAdd}</Text> : null}
@@ -174,6 +199,9 @@ export function BarsEditor({ settings, draft, onDraft, onNotice }: Props) {
           </View>
         );
       })}
+      {tapBarsAreDefault(current) ? null : (
+        <View style={styles.chips}>{chip("default-bars", strings.defaultBars, false, () => onDraft(defaultTapBars(current)))}</View>
+      )}
     </View>
   );
 }

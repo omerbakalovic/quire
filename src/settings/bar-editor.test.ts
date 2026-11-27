@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { addElement, available, barDraftChanged, barDraftValues, draftFrom, moveAcross, moveAlong, placeOf, removeElement, setArrange, withDraft } from "./bar-editor.ts";
+import { addElement, available, barDraftChanged, barDraftValues, defaultTapBars, draftFrom, moveAcross, moveAlong, placeOf, removeElement, setArrange, tapBarsAreDefault, withDraft } from "./bar-editor.ts";
 import { barRows } from "./bars.ts";
 import { defaults } from "./registry.ts";
 
@@ -66,4 +66,16 @@ test("Save writes only what changed, and the preview draws the draft", () => {
   const values = barDraftValues(draft, settings);
   assert.deepEqual(Object.keys(values), ["layout.top.arrange"]);
   assert.equal(barRows(withDraft(settings, draft)).top[0].zone, "all");
+});
+
+test("restoring the default tap bars leaves the header and footer lines as they are", () => {
+  const settings = defaults();
+  let draft = draftFrom(settings);
+  assert.equal(tapBarsAreDefault(draft), true);
+  draft = { ...moveAlong(draft, "back", "controls", 1).draft, "layout.header.left": ["clock"], "layout.top.arrange": "spread" };
+  assert.equal(tapBarsAreDefault(draft), false);
+  const restored = defaultTapBars(draft);
+  assert.equal(tapBarsAreDefault(restored), true);
+  assert.deepEqual(restored["layout.header.left"], ["clock"]);
+  assert.deepEqual(barDraftValues(restored, settings), { "layout.header.left": ["clock"] });
 });

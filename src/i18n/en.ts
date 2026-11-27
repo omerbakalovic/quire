@@ -167,6 +167,7 @@ export const en = {
       back: "Back to library",
     } as Record<string, string>,
     gesturesHelp: "A sideways swipe always turns the page, and a long press always selects text. With the reading-direction setting on, a left or right tap turns toward that side of the page.",
+    barNoneHelp: "With no background, a bar's controls sit right on the book's text and can be hard to read. See-through keeps a faint view of the page.",
     gesturesNoBars: "No gesture shows the controls now, so Contents, Aa and the slider can't be reached in a book. Set one to \"Show the controls\".",
     layoutHelp: "What the top and bottom of the page show while you read, and the controls a tap in the middle brings up. Tap items to add or remove them; they appear in the order you tap.",
     layoutPreset: "Layout",

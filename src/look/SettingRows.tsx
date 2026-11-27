@@ -188,6 +188,10 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
                 {barsUnreachable(resolved) ? <Text style={[styles.help, styles.bold, { color: c.accent }]}>{strings.gesturesNoBars}</Text> : null}
               </>
             ) : null}
+            {section.group === "barStyle" && (resolved["bar.top.background"] === "none" || resolved["bar.bottom.background"] === "none") ? (
+              // Emulator run 35: with no background, a bar's text sits on the book's text.
+              <Text style={[styles.help, { color: c.muted }]}>{strings.barNoneHelp}</Text>
+            ) : null}
             {rows.map(draw)}
           </View>
         );

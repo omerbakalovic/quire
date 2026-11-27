@@ -112,7 +112,8 @@ function Row({ zones, ...props }: RowProps & { zones: ZoneLayout[] }) {
         ) : (
           <View
             key={zone.zone}
-            style={[styles.zone, zone.grow ? [styles.grow, { minWidth: growMin(zone.items) }] : styles.fixed, { justifyContent: zone.justify, columnGap: gap }, props.outlines && [styles.outline, { borderColor: c.muted }]]}
+            // The outline goes first: its own minWidth must not undercut a growing zone's (emulator run 36: the preview broke words).
+            style={[styles.zone, props.outlines && [styles.outline, { borderColor: c.muted }], zone.grow ? [styles.grow, { minWidth: Math.max(props.outlines ? 24 : 0, growMin(zone.items)) }] : styles.fixed, { justifyContent: zone.justify, columnGap: gap }]}
           >
             {zone.items.map((item) => (
               <Control key={item} item={item} {...props} />

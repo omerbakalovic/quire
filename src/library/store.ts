@@ -41,7 +41,13 @@ import {
   removeUserFont,
   setActiveProfile,
   saveProfile as saveProfileTo,
+  removeTheme,
+  renameTheme,
+  restoreTheme,
+  saveTheme,
 } from "@/settings/customization";
+import { pushRecent } from "@/settings/theme-editor";
+import type { UserTheme } from "@/settings/user-themes";
 import { MAX_USER_FONTS, newUserFontId, userFontLabel, type UserFont } from "@/settings/fonts";
 import { resetGroup } from "@/settings/layers";
 import type { Values } from "@/settings/layers";
@@ -281,4 +287,34 @@ export function saveLook(patch: Partial<LookOptions>): Promise<void> {
 /** null goes back to the cover's colour. */
 export function saveBookColor(id: string, color: string | null): Promise<void> {
   return changeLook((look) => setBookColor(look, id, color));
+}
+
+/** The theme editor's Save (C4): add or replace one of the reader's themes. */
+export function saveUserTheme(theme: UserTheme): Promise<void> {
+  const custom = saveTheme(library.custom, theme);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+export function renameUserTheme(id: string, name: string): Promise<void> {
+  const custom = renameTheme(library.custom, id, name);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+/** Delete a theme; whatever used it moves to its base built-in. */
+export function removeUserTheme(id: string): Promise<void> {
+  const custom = removeTheme(library.custom, id);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+/** Undo a theme delete. */
+export function restoreUserTheme(theme: UserTheme, index: number): Promise<void> {
+  const custom = restoreTheme(library.custom, theme, index);
+  return custom === library.custom ? writing : commit({ ...library, custom });
+}
+
+/** Remember a colour the picker set, for its recent swatches. */
+export function rememberColour(hex: string): Promise<void> {
+  const recentColours = pushRecent(library.custom.recentColours, hex);
+  if (recentColours.join() === library.custom.recentColours.join()) return writing;
+  return commit({ ...library, custom: { ...library.custom, recentColours } });
 }

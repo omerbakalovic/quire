@@ -2,6 +2,7 @@ import { cleanLayer, resolve, setValue, type LayerValues, type Values } from "./
 import { MAX_USER_FONTS, parseUserFonts, type UserFont } from "./fonts.ts";
 import type { Layer, Resolved, SettingKey } from "./registry.ts";
 import { isBuiltInTheme, type ThemeId } from "./themes.ts";
+import { normalizeHex } from "./colour.ts";
 import { cleanThemeName, cleanTokens, isUserThemeId, MAX_USER_THEMES, parseUserThemes, type UserTheme } from "./user-themes.ts";
 
 /**
@@ -20,13 +21,15 @@ export type Customization = {
   fonts: UserFont[];
   /** Themes the reader made (C4); built-ins are not stored. */
   themes: UserTheme[];
+  /** The colour picker's last picked colours, newest first, at most eight. */
+  recentColours: string[];
 };
 
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 const MAX_PROFILES = 50;
 
 export function emptyCustomization(): Customization {
-  return { global: {}, profiles: [], activeProfile: null, books: {}, fonts: [], themes: [] };
+  return { global: {}, profiles: [], activeProfile: null, books: {}, fonts: [], themes: [], recentColours: [] };
 }
 
 export function parseCustomization(value: unknown): Customization {
@@ -58,6 +61,7 @@ export function parseCustomization(value: unknown): Customization {
     books,
     fonts: parseUserFonts(raw.fonts),
     themes: parseUserThemes(raw.themes),
+    recentColours: parseRecent(raw.recentColours),
   };
 }
 
@@ -267,6 +271,7 @@ export function revertTo(current: Customization, snapshot: Customization): Custo
     books,
     fonts: current.fonts,
     themes: current.themes,
+    recentColours: current.recentColours,
   };
 }
 
@@ -328,4 +333,14 @@ export function restoreTheme(custom: Customization, theme: UserTheme, index: num
   if (custom.themes.some((t) => t.id === theme.id) || custom.themes.length >= MAX_USER_THEMES) return custom;
   const at = Math.max(0, Math.min(index, custom.themes.length));
   return { ...custom, themes: [...custom.themes.slice(0, at), theme, ...custom.themes.slice(at)] };
+}
+
+function parseRecent(value: unknown): string[] {
+  const out: string[] = [];
+  for (const item of Array.isArray(value) ? value : []) {
+    const hex = normalizeHex(item);
+    if (hex && !out.includes(hex)) out.push(hex);
+    if (out.length >= 8) break;
+  }
+  return out;
 }

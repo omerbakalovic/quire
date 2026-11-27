@@ -30,6 +30,7 @@ test("parsing keeps valid parts and drops the rest", () => {
     books: { b1: { "type.fontSize": 140 } },
     fonts: [],
     themes: [],
+    recentColours: [],
   });
   assert.deepEqual(parseCustomization(null), emptyCustomization());
   assert.deepEqual(parseCustomization(JSON.parse(JSON.stringify(custom))), custom, "round-trips");

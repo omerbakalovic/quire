@@ -158,7 +158,8 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
     <View style={styles.wrap}>
       {tab === "colours" ? <Text style={[styles.help, { color: c.muted }]}>{look.coloursHelp}</Text> : null}
       {sections.map((section) => {
-        const rows = section.rows.filter((row) => !PINNED.includes(row.key) || tab === "colours");
+        // The theme itself is chosen in the theme list above (ThemeEditor) and the pinned row.
+        const rows = section.rows.filter((row) => !PINNED.includes(row.key));
         if (rows.length === 0) return null;
         return (
           <View key={section.group} style={styles.group}>

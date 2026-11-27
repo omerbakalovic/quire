@@ -21,6 +21,8 @@ export type Chrome = {
   selected: string;
   line: string;
   track: string;
+  fill: string;
+  thumb: string;
   shade: string;
   // Controls
   control: string;
@@ -55,6 +57,8 @@ export function chromeFor(theme: ThemeTokens): Chrome {
     selected: withAlpha(theme.accent, 0.22),
     line: theme.chromeDivider,
     track: theme.sliderTrack,
+    fill: theme.sliderFill,
+    thumb: theme.sliderThumb,
     shade: theme.scrim,
     control: theme.control,
     controlInk: theme.controlInk,

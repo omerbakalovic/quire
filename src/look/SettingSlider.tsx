@@ -184,9 +184,9 @@ export function SettingSlider({ settingKey, label, value, format, onChange, comp
           onAccessibilityAction={(event) => nudge(event.nativeEvent.actionName === "increment" ? 1 : -1)}
         >
           <View style={[styles.track, { backgroundColor: c.track }]}>
-            <View style={[styles.fill, { width: `${fraction * 100}%`, backgroundColor: c.accent }]} />
+            <View style={[styles.fill, { width: `${fraction * 100}%`, backgroundColor: c.fill }]} />
           </View>
-          <View style={[styles.thumb, { left: `${fraction * 100}%`, backgroundColor: c.accent, borderColor: c.onAccent }]} />
+          <View style={[styles.thumb, { left: `${fraction * 100}%`, backgroundColor: c.thumb, borderColor: c.onAccent }]} />
         </View>
         <Pressable onPress={() => nudge(1)} style={styles.step} accessibilityRole="button" accessibilityLabel={t().book.increase(label)}>
           <Text style={[styles.stepText, { color: c.ink }]}>+</Text>

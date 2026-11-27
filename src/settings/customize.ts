@@ -40,7 +40,7 @@ export type Row =
 
 export type Section = { group: Group; rows: Row[] };
 
-const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "gestures", "turns", "behaviour"];
+const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "barStyle", "gestures", "turns", "behaviour"];
 
 /**
  * The rows for editing one layer. `set` is true when that layer holds the
@@ -94,6 +94,13 @@ export function formatNumber(key: SettingKey, value: number, words: NumberWords)
       return value >= 0 ? `${value.toFixed(1)} em` : words.bookDefault;
     case "page.maxWidth":
       return `${value} px`;
+    case "bar.top.width":
+    case "bar.bottom.width":
+      return `${value}%`;
+    case "bar.top.radius":
+    case "bar.bottom.radius":
+    case "bar.gap":
+      return `${value} dp`;
     case "turn.duration":
       return `${value} ms`;
     case "light.brightness":

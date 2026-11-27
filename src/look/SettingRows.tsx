@@ -90,6 +90,7 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
     if (key === "type.alignment") return book.aligns[option] ?? option;
     if (key === "turn.style") return strings.turns[option] ?? option;
     if (key.startsWith("gesture.")) return strings.actions[option] ?? option;
+    if (key.startsWith("bar.")) return strings.barChoices[option] ?? option;
     return option;
   };
 
@@ -160,6 +161,8 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
       {sections.map((section) => {
         // The theme itself is chosen in the theme list above (ThemeEditor) and the pinned row.
         const rows = section.rows.filter((row) => !PINNED.includes(row.key));
+        // The Bars tab edits the layout in its own editor, as a draft.
+        if (tab === "bars" && section.group === "layout") return null;
         if (rows.length === 0) return null;
         return (
           <View key={section.group} style={styles.group}>

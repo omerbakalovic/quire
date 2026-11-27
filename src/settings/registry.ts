@@ -9,7 +9,7 @@ import { isThemeId } from "./user-themes.ts";
 
 export type Layer = "session" | "book" | "profile" | "global";
 
-export type Group = "typography" | "page" | "theme" | "light" | "layout" | "gestures" | "turns" | "behaviour";
+export type Group = "typography" | "page" | "theme" | "light" | "layout" | "barStyle" | "gestures" | "turns" | "behaviour";
 
 type Base = {
   key: string;
@@ -92,12 +92,19 @@ export const CONTROL_SLOTS = [
 ] as const;
 /** How a bar places its controls: in its three zones, or spread evenly across the whole bar. */
 export const ARRANGEMENTS = ["zones", "spread"] as const;
+/** Bar style (C5): how the tap bars sit and look. They float over the text, so none of these repaginate. */
+export const BAR_PLACEMENTS = ["attached", "floating"] as const;
+export const BAR_BACKGROUNDS = ["solid", "translucent", "none"] as const;
+export const BAR_HEIGHTS = ["compact", "comfortable"] as const;
+export const CONTROL_SIZES = ["small", "medium", "large"] as const;
+export const CONTROL_LABELS = ["labels", "icons"] as const;
 /**
  * What a gesture can do (3.5): the controls' actions, plus turning a page and
  * showing the bars. The page runs a turn itself; the rest go to the app.
  */
 export const ACTIONS = ["none", "prevPage", "nextPage", "bars", "contents", "look", "prevChapter", "nextChapter", "flow", "back"] as const;
 const ZONE = { catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
+const STYLE = { group: "barStyle", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
 const ARRANGE = { choices: ARRANGEMENTS, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
 const GESTURE = { type: "choice", choices: ACTIONS, group: "gestures", scopes: PROFILE_UP, relayout: false, depth: "standard" } as const;
 
@@ -145,6 +152,19 @@ export const SETTINGS = [
   { key: "layout.quick.arrange", type: "choice", default: "zones", ...ARRANGE },
   // The lower row spread its controls across the bar before zones existed.
   { key: "layout.bottom.arrange", type: "choice", default: "spread", ...ARRANGE },
+  // Bar style: the defaults are the bars as they were drawn before C5.
+  { key: "bar.top.placement", type: "choice", default: "attached", choices: BAR_PLACEMENTS, ...STYLE },
+  { key: "bar.bottom.placement", type: "choice", default: "attached", choices: BAR_PLACEMENTS, ...STYLE },
+  { key: "bar.top.background", type: "choice", default: "solid", choices: BAR_BACKGROUNDS, ...STYLE },
+  { key: "bar.bottom.background", type: "choice", default: "solid", choices: BAR_BACKGROUNDS, ...STYLE },
+  { key: "bar.top.width", type: "number", default: 100, min: 50, max: 100, step: 5, ...STYLE },
+  { key: "bar.bottom.width", type: "number", default: 100, min: 50, max: 100, step: 5, ...STYLE },
+  { key: "bar.top.radius", type: "number", default: 0, min: 0, max: 28, step: 2, ...STYLE },
+  { key: "bar.bottom.radius", type: "number", default: 0, min: 0, max: 28, step: 2, ...STYLE },
+  { key: "bar.height", type: "choice", default: "comfortable", choices: BAR_HEIGHTS, ...STYLE },
+  { key: "bar.controlSize", type: "choice", default: "medium", choices: CONTROL_SIZES, ...STYLE },
+  { key: "bar.labels", type: "choice", default: "labels", choices: CONTROL_LABELS, ...STYLE },
+  { key: "bar.gap", type: "number", default: 6, min: 0, max: 24, step: 2, ...STYLE },
   // Tap zones: thirds of the page. Left and right follow the "reading direction" setting.
   { key: "gesture.tapLeft", default: "prevPage", ...GESTURE },
   { key: "gesture.tapCenter", default: "bars", ...GESTURE },

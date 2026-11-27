@@ -366,7 +366,7 @@ export default function LookScreen() {
             />
           ) : null}
           {tab === "bars" ? <BarsEditor settings={settings} draft={barDraft} onDraft={setBarDraft} onNotice={showNotice} /> : null}
-          {(tab === "colours" && draft) || tab === "bars" ? null : (
+          {tab === "colours" && draft ? null : (
             <SettingRows tab={tab} layers={layers} target={target} custom={custom} bookId={bookId} onChange={change} />
           )}
         </ScrollView>

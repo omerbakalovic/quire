@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { barRow, barRows, GROWERS, migrateBars, type ZoneLayout } from "./bars.ts";
+import { barFrame, barRow, barRows, GROWERS, migrateBars, type ZoneLayout } from "./bars.ts";
 import { parseCustomization, resolvedFor } from "./customization.ts";
 import { cleanLayer, resolve } from "./layers.ts";
 import { defaults, type Resolved } from "./registry.ts";
@@ -88,4 +88,16 @@ test("a control is drawn once, in the first bar that lists it", () => {
   const rows = barRows(settings);
   assert.deepEqual(rows.top.find((z) => z.zone === "end")?.items, ["contents"]);
   assert.deepEqual(rows.bottom[0].items, ["look", "flow"]);
+});
+
+test("bar style defaults frame the bars as before; floating and narrow bars stand clear", () => {
+  const insets = { top: 24, bottom: 16, left: 0, right: 0 };
+  const d = defaults();
+  const top = barFrame(d, "top", insets);
+  assert.deepEqual([top.edge, top.paddingTop, top.paddingBottom, top.paddingLeft, top.left, top.radius, top.background], [0, 30, 10, 16, "0%", 0, "solid"]);
+  const bottom = barFrame(d, "bottom", insets);
+  assert.deepEqual([bottom.edge, bottom.paddingTop, bottom.paddingBottom], [0, 4, 24]);
+  const styled = { ...d, "bar.bottom.placement": "floating", "bar.bottom.width": 80, "bar.bottom.radius": 16 } as Resolved;
+  const floating = barFrame(styled, "bottom", insets);
+  assert.deepEqual([floating.edge, floating.paddingBottom, floating.left, floating.right, floating.marginHorizontal, floating.radius], [24, 8, "10%", "10%", 12, 16]);
 });

@@ -14,7 +14,8 @@ export const TAB_GROUPS: Record<Tab, readonly Group[]> = {
   text: ["typography"],
   page: ["page", "light"],
   colours: ["theme"],
-  bars: ["layout"],
+  // The layout itself is the Bars editor (src/look/BarsEditor.tsx); the rows here are the bar style.
+  bars: ["layout", "barStyle"],
   turns: ["turns"],
   gestures: ["gestures", "behaviour"],
 };

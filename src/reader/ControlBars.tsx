@@ -4,11 +4,11 @@ import { Pressable, StyleSheet, Text, View, type LayoutChangeEvent } from "react
 import type { Flow } from "@/domain/library";
 import type { NavEntry } from "@/domain/navigation";
 import { t } from "@/i18n";
-import { barRows, type ZoneLayout } from "@/settings/bars";
+import { barFrame, barRows, CONTROL_TEXT, type BarFrame, type ZoneLayout } from "@/settings/bars";
 import type { Resolved } from "@/settings/registry";
 
 import { ProgressSlider } from "./ProgressSlider";
-import { useChrome } from "./chrome";
+import { useChrome, withAlpha, type Chrome } from "./chrome";
 
 type Props = {
   settings: Resolved;
@@ -46,20 +46,22 @@ export function ControlBars(props: Props) {
   const top = rows.top;
   const upper = rows.quick;
   const lower = rows.bottom;
-  const side = { paddingLeft: 16 + insets.left, paddingRight: 16 + insets.right };
+  const topFrame = barFrame(settings, "top", insets);
+  const bottomFrame = barFrame(settings, "bottom", insets);
 
-  const onLayout = (event: LayoutChangeEvent) => props.onBottomHeight(event.nativeEvent.layout.height);
+  // Pills and notices sit above the whole panel, the gap under a floating one included.
+  const onLayout = (event: LayoutChangeEvent) => props.onBottomHeight(event.nativeEvent.layout.height + bottomFrame.edge);
   const hasBottom = upper.length > 0 || lower.length > 0;
 
   return (
     <>
       {top.length > 0 ? (
-        <View style={[styles.bar, styles.top, side, { paddingTop: insets.top + 6, backgroundColor: c.bar }]}>
+        <View style={[styles.bar, frameStyle(topFrame, c), { top: topFrame.edge }]}>
           <Row zones={top} {...props} />
         </View>
       ) : null}
       {hasBottom ? (
-        <View onLayout={onLayout} style={[styles.bar, styles.bottom, side, { paddingBottom: insets.bottom + 8, backgroundColor: c.bar }]}>
+        <View onLayout={onLayout} style={[styles.bar, frameStyle(bottomFrame, c), { bottom: bottomFrame.edge }]}>
           {upper.length > 0 ? <Row zones={upper} {...props} /> : null}
           {lower.length > 0 ? <Row zones={lower} {...props} /> : null}
         </View>
@@ -68,6 +70,21 @@ export function ControlBars(props: Props) {
       )}
     </>
   );
+}
+
+function frameStyle(frame: BarFrame, c: Chrome) {
+  const background = frame.background === "solid" ? c.bar : frame.background === "translucent" ? withAlpha(c.bar.slice(0, 7), 0.82) : "transparent";
+  return {
+    left: frame.left,
+    right: frame.right,
+    marginHorizontal: frame.marginHorizontal,
+    paddingTop: frame.paddingTop,
+    paddingBottom: frame.paddingBottom,
+    paddingLeft: frame.paddingLeft,
+    paddingRight: frame.paddingRight,
+    borderRadius: frame.radius,
+    backgroundColor: background,
+  };
 }
 
 /**
@@ -79,13 +96,14 @@ export function ControlBars(props: Props) {
  */
 function Row({ zones, ...props }: Props & { zones: ZoneLayout[] }) {
   const c = useChrome();
+  const gap = props.settings["bar.gap"];
   return (
-    <View style={styles.row}>
+    <View style={[styles.row, { columnGap: gap }]}>
       {zones.map((zone) =>
         zone.items.length === 0 && !zone.grow && !props.outlines ? null : (
           <View
             key={zone.zone}
-            style={[styles.zone, zone.grow && styles.grow, { justifyContent: zone.justify }, props.outlines && [styles.outline, { borderColor: c.muted }]]}
+            style={[styles.zone, zone.grow && styles.grow, { justifyContent: zone.justify, columnGap: gap }, props.outlines && [styles.outline, { borderColor: c.muted }]]}
           >
             {zone.items.map((item) => (
               <Control key={item} item={item} {...props} />
@@ -101,21 +119,25 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
   const strings = t().book;
   const c = useChrome();
   const ink = { color: c.ink };
+  const size = CONTROL_TEXT[props.settings["bar.controlSize"]] ?? CONTROL_TEXT.medium;
+  const icons = props.settings["bar.labels"] === "icons";
+  const compact = props.settings["bar.height"] === "compact";
+  const label = [styles.label, ink, { fontSize: size.label }, compact && styles.labelCompact];
   switch (item) {
     case "back":
       return (
-        <Pressable onPress={props.onBack} accessibilityRole="button" hitSlop={10} style={styles.control}>
-          <Text style={[styles.label, ink]}>‹ {strings.back}</Text>
+        <Pressable onPress={props.onBack} accessibilityRole="button" accessibilityLabel={strings.back} hitSlop={10} style={[styles.control, icons && styles.icon]}>
+          <Text style={label}>{icons ? "‹" : `‹ ${strings.back}`}</Text>
         </Pressable>
       );
     case "title":
       return (
         <View style={styles.titleBox}>
-          <Text style={[styles.title, ink]} numberOfLines={1}>
+          <Text style={[styles.title, ink, { fontSize: size.title }]} numberOfLines={1} ellipsizeMode="middle">
             {props.title}
           </Text>
           {props.chapter ? (
-            <Text style={[styles.sub, { color: c.muted }]} numberOfLines={1}>
+            <Text style={[styles.sub, { color: c.muted, fontSize: size.small }]} numberOfLines={1}>
               {props.chapter}
             </Text>
           ) : null}
@@ -123,14 +145,14 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
       );
     case "contents":
       return (
-        <Pressable onPress={props.onContents} accessibilityRole="button" hitSlop={6} style={styles.control}>
-          <Text style={[styles.label, ink]}>☰ {strings.contents}</Text>
+        <Pressable onPress={props.onContents} accessibilityRole="button" accessibilityLabel={strings.contents} hitSlop={6} style={[styles.control, icons && styles.icon]}>
+          <Text style={label}>{icons ? "☰" : `☰ ${strings.contents}`}</Text>
         </Pressable>
       );
     case "look":
       return (
         <Pressable onPress={props.onLook} accessibilityRole="button" accessibilityLabel={strings.look} hitSlop={6} style={[styles.control, props.fixedLayout && styles.hidden]}>
-          <Text style={[styles.label, ink]}>Aa</Text>
+          <Text style={label}>Aa</Text>
         </Pressable>
       );
     case "flow":
@@ -144,7 +166,7 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
               accessibilityState={{ selected: props.flow === option }}
               style={[styles.segmentItem, props.flow === option && { backgroundColor: c.accent }]}
             >
-              <Text style={[styles.segmentText, ink, props.flow === option && [styles.segmentTextOn, { color: c.onAccent }]]}>
+              <Text style={[styles.segmentText, ink, { fontSize: size.small }, props.flow === option && [styles.segmentTextOn, { color: c.onAccent }]]}>
                 {option === "paginated" ? strings.paginated : strings.scrolled}
               </Text>
             </Pressable>
@@ -161,7 +183,7 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
           accessibilityLabel={dir === "prev" ? strings.prevChapter : strings.nextChapter}
           style={styles.icon}
         >
-          <Text style={[styles.label, ink]}>{dir === "prev" ? "«" : "»"}</Text>
+          <Text style={label}>{dir === "prev" ? "«" : "»"}</Text>
         </Pressable>
       );
     }
@@ -169,7 +191,7 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
       return <ProgressSlider fraction={props.fraction} toc={props.toc} onCommit={props.onSeek} onScrub={props.onScrub} />;
     case "percent":
       return (
-        <Text style={[styles.percent, { color: c.muted }]}>{props.fraction === null ? "" : `${Math.round(props.fraction * 100)}%`}</Text>
+        <Text style={[styles.percent, { color: c.muted, fontSize: size.small }]}>{props.fraction === null ? "" : `${Math.round(props.fraction * 100)}%`}</Text>
       );
     default:
       return null;
@@ -177,15 +199,15 @@ function Control({ item, ...props }: Props & { item: string }): ReactNode {
 }
 
 const styles = StyleSheet.create({
-  bar: { position: "absolute", left: 0, right: 0, gap: 4 },
-  top: { top: 0, paddingBottom: 10 },
-  bottom: { bottom: 0, paddingTop: 4 },
+  // No overflow clip: the slider's chapter bubble draws above the bar.
+  bar: { position: "absolute", gap: 4 },
   row: { flexDirection: "row", alignItems: "center", columnGap: 6, minHeight: 44 },
   zone: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
   grow: { flex: 1, flexBasis: 0 },
   outline: { borderWidth: 1, borderStyle: "dashed", borderRadius: 6, minWidth: 24 },
   control: { minHeight: 44, justifyContent: "center" },
   label: { fontSize: 18, paddingVertical: 6 },
+  labelCompact: { paddingVertical: 2 },
   icon: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },
   titleBox: { flex: 1, minWidth: 96, paddingHorizontal: 6 },
   title: { fontSize: 16, fontWeight: "600" },

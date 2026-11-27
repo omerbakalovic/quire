@@ -93,3 +93,56 @@ export function barRows(settings: Resolved): Record<Bar, ZoneLayout[]> {
 export function barItems(settings: Resolved, bar: Bar): string[] {
   return ZONES.flatMap((zone) => settings[zoneKey(bar, zone)] as readonly string[]);
 }
+
+type Insets = { top: number; bottom: number; left: number; right: number };
+
+export type BarFrame = {
+  left: `${number}%`;
+  right: `${number}%`;
+  /** Distance from its screen edge (the top bar from the top, the bottom panel from the bottom). */
+  edge: number;
+  marginHorizontal: number;
+  paddingTop: number;
+  paddingBottom: number;
+  paddingLeft: number;
+  paddingRight: number;
+  radius: number;
+  background: "solid" | "translucent" | "none";
+};
+
+const FLOAT_GAP = 8;
+
+/**
+ * Where a bar sits and how it is padded (bar style, C5). Attached, it runs to
+ * the screen edge and pads itself past the system bars, as before. Floating, it
+ * stands clear of them by a small gap, with side margins. Narrower than the
+ * screen, it is centred. The defaults give the bars Quire drew before.
+ */
+export function barFrame(settings: Resolved, which: "top" | "bottom", insets: Insets): BarFrame {
+  const width = settings[`bar.${which}.width`];
+  const floating = settings[`bar.${which}.placement`] === "floating";
+  const compact = settings["bar.height"] === "compact";
+  const side = (100 - width) / 2;
+  const inset = which === "top" ? insets.top : insets.bottom;
+  const near = which === "top" ? (compact ? 2 : 6) : compact ? 2 : 8;
+  const far = which === "top" ? (compact ? 4 : 10) : compact ? 0 : 4;
+  return {
+    left: `${side}%`,
+    right: `${side}%`,
+    edge: floating ? inset + FLOAT_GAP : 0,
+    marginHorizontal: floating ? 12 : 0,
+    paddingTop: which === "top" ? (floating ? near : inset + near) : far,
+    paddingBottom: which === "top" ? far : floating ? near : inset + near,
+    paddingLeft: (floating ? 12 : 16) + (floating || side > 0 ? 0 : insets.left),
+    paddingRight: (floating ? 12 : 16) + (floating || side > 0 ? 0 : insets.right),
+    radius: settings[`bar.${which}.radius`],
+    background: settings[`bar.${which}.background`],
+  };
+}
+
+/** Font sizes for the controls' labels at each control size; touch targets stay 44 dp whatever the size. */
+export const CONTROL_TEXT: Record<string, { label: number; title: number; small: number }> = {
+  small: { label: 15, title: 14, small: 12 },
+  medium: { label: 18, title: 16, small: 14 },
+  large: { label: 22, title: 19, small: 16 },
+};

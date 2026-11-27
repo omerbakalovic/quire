@@ -86,7 +86,8 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
   // picker itself goes to the top, its row just above (emulator runs 28 to 30).
   const strips = (key: TokenKey) => 56 + (ALPHA_TOKENS.has(key) ? 38 : 0);
   const roomy = (key: TokenKey) => listHeight <= 0 || listHeight - 56 - strips(key) >= MIN_SQUARE;
-  const squareFor = (key: TokenKey) => (listHeight <= 0 ? undefined : listHeight - strips(key) - (roomy(key) ? 56 : 0));
+  // Without its row in view, the picker names the colour it edits in one line (about 22 dp; emulator run 31).
+  const squareFor = (key: TokenKey) => (listHeight <= 0 ? undefined : listHeight - strips(key) - (roomy(key) ? 56 : 22));
   const pick = (key: TokenKey | null) => {
     setOpen(key);
     if (key) reveal(() => (roomy(key) ? rows.current.get(key) : picker.current));
@@ -259,6 +260,11 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
                 </View>
                 {isOpen ? (
                   <View ref={picker}>
+                  {roomy(key) ? null : (
+                    <Text style={[styles.small, styles.bold, { color: c.ink }]} numberOfLines={1}>
+                      {name} · {tokens[key]}
+                    </Text>
+                  )}
                   <ColorPicker
                     value={tokens[key]}
                     onChange={(hex) => onDraft(setDraftToken(draft, key, hex))}

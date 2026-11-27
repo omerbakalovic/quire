@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Alert, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Modal, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { useChrome, type Chrome } from "@/reader/chrome";
 
@@ -55,7 +55,12 @@ export function ConfirmHost() {
             <Text style={[styles.title, { color: c.sheetInk }]} accessibilityRole="header">
               {request.title}
             </Text>
-            {request.body ? <Text style={[styles.body, { color: c.sheetMuted }]}>{request.body}</Text> : null}
+            {/* A long message (many failed imports, a long URL) scrolls; the buttons stay on screen. */}
+            {request.body ? (
+              <ScrollView style={styles.bodyScroll}>
+                <Text style={[styles.body, { color: c.sheetMuted }]}>{request.body}</Text>
+              </ScrollView>
+            ) : null}
             <View style={styles.buttons}>
               {request.buttons.map((button) => (
                 <Pressable key={button.text} onPress={() => press(button)} accessibilityRole="button" hitSlop={6} style={styles.button}>
@@ -79,8 +84,9 @@ export function ConfirmHost() {
 
 const styles = StyleSheet.create({
   shade: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24 },
-  card: { width: "100%", maxWidth: 420, borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 20, gap: 10 },
+  card: { width: "100%", maxWidth: 420, maxHeight: "85%", borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 20, gap: 10 },
   title: { fontSize: 18, fontWeight: "700" },
+  bodyScroll: { flexGrow: 0, flexShrink: 1 },
   body: { fontSize: 15, lineHeight: 21 },
   buttons: { flexDirection: "row", justifyContent: "flex-end", flexWrap: "wrap", gap: 8, marginTop: 6 },
   button: { paddingHorizontal: 12, paddingVertical: 10 },

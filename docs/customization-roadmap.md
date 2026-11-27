@@ -337,7 +337,7 @@ Every milestone also checks: existing positions, profiles, overrides, fonts and 
 | Milestone | Status | Branch / PR | Verified |
 |---|---|---|---|
 | C1 Reading Look hub | Merged (PR #13); emulator and phone checked | PR #13 | Cloud: unit tests, type check, reader bundle, Android JS export. Emulator run 14 (x86_64 debug build, 2026-11-26): Kotlin 40/40 incl. the backup tests; quick matrix 134 checks, 2 failed (the known noteref turn stuck at 0.567, as in run 12, fixed by PR #11), all 6 Reading Look checks pass; `library.v1.backup.json` byte-identical to the old v1 file. Phone run 16 (arm64 Quire Dev, f08f5a9, Frankenstein): 36/36, backup made |
-| C2 Live preview | Built; emulator checked | `claude/project-thread-jxy4a7`, PR #14 | Cloud: unit tests incl. open-message parity and sample content, type check, Android JS export with the EPUB asset; desktop Chromium harness. Emulator run 17 (1e30d87, quick matrix): 135 checks, 2 failed (the same known noteref turns as run 14), all 7 Reading Look checks pass, preview opened in 1355 ms; memory +6.3 MB with the preview showing. Run 18 (ad5fede, look step only): 8/8, preview 1437 ms |
+| C2 Live preview | Built; emulator checked | `claude/project-thread-jxy4a7`, PR #14 | Cloud: unit tests incl. open-message parity and sample content, type check, Android JS export with the EPUB asset; desktop Chromium harness. Emulator run 17 (1e30d87, quick matrix): 135 checks, 2 failed (the same known noteref turns as run 14), all 7 Reading Look checks pass, preview opened in 1355 ms; memory +6.3 MB with the preview showing. Runs 18 to 22 (look step only): 8/8 each, preview 1.37 to 1.66 s |
 | C3 App-wide theme | Planned | | |
 | C4 Colours and custom themes | Planned | | |
 | C5 Bars editor | Planned | | |
@@ -364,7 +364,7 @@ Built: `assets/sample/quire-sample.epub` (6.4 KB, made by `npm run sample` from 
 
 Limitations: "Preview current book" is C8. The preview takes about 1.3 to 1.4 s to appear on the emulator (a spinner shows meanwhile); its first open per install also imports the sample.
 
-Verified on the emulator (runs 17, 18): the sample page fills the pane, centred, with whole lines; Dark applies to the preview and the editor; the Informative bar preset shows a header and footer inside the preview; Revert puts bars and theme back. Not checked yet: a phone pass, landscape, a 360 dp screen.
+Verified on the emulator (runs 17 to 22): the sample page fills the pane, centred, with whole lines; Dark applies to the preview and the editor; the Informative bar preset shows a header and footer inside the preview; dimmer and warmth veil the preview; Revert puts everything back. Fixes from those runs, all in this milestone: sliders only slide on a sideways drag and let vertical swipes scroll the list (15/15 swipes on tracks scrolled, no value changed); a tap on a track still jumps there; the preview gives way when the settings list would get under 160 dp, and in a short (landscape) window the top block scrolls with the list while the tabs stay fixed (list area ~141 px → ~760 px); while the keyboard is up the preview folds (still loaded, no reload) and the typed field scrolls above the keyboard; Back closing the keyboard keeps the typed value. Not checked yet: a phone pass, a 360 dp screen.
 
 ## 8. Checkpoints and handoff
 

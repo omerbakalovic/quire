@@ -6,6 +6,8 @@ import { WebView, type WebViewMessageEvent } from "react-native-webview";
 import { classifyEncryption } from "@/domain/drm";
 import { t } from "@/i18n";
 import { AmbientBands } from "@/reader/AmbientBands";
+import { ChromeProvider, chromeFor } from "@/reader/chrome";
+import { ControlBars } from "@/reader/ControlBars";
 import { LightVeil } from "@/reader/LightVeil";
 import { lookFor, type Look } from "@/reader/look";
 import { previewOpenMessage } from "@/reader/open-message";
@@ -41,6 +43,7 @@ function ensureSample(): Promise<string> {
 }
 
 const PING = "preview-ping";
+const noop = () => undefined;
 
 /**
  * The sample page is laid out at the screen's own width, so its lines break
@@ -62,6 +65,8 @@ type Props = {
   fonts: readonly UserFont[];
   /** The reader's themes, with the theme editor's draft in place of the saved one. */
   themes: readonly UserTheme[];
+  /** Draw the tap bars over the sample page too, with each zone outlined (the Bars tab). */
+  showBars?: boolean;
 };
 
 /**
@@ -71,7 +76,7 @@ type Props = {
  * and footer lines are the reader's own component. Side taps turn the sample's
  * pages; nothing else in it leaves the preview.
  */
-export function PreviewPane({ settings, fonts, themes }: Props) {
+export function PreviewPane({ settings, fonts, themes, showBars = false }: Props) {
   const strings = t().look;
   const webRef = useRef<WebView<object>>(null);
   const [id, setId] = useState<string | null>(null);
@@ -228,6 +233,32 @@ export function PreviewPane({ settings, fonts, themes }: Props) {
                 secondsLeftBook: 3 * 3600 + 20 * 60,
               }}
             />
+          ) : null}
+          {ready && showBars ? (
+            // The reader's own bars, drawn with sample values; they take no touches here.
+            <View style={StyleSheet.absoluteFill} pointerEvents="none">
+              <ChromeProvider chrome={chromeFor(theme)}>
+                <ControlBars
+                  settings={settings}
+                  insets={{ top: 0, bottom: 0, left: 0, right: 0 }}
+                  title={strings.sampleTitle}
+                  chapter={strings.sampleChapter}
+                  fraction={0.3}
+                  toc={[]}
+                  flow="paginated"
+                  fixedLayout={false}
+                  onBack={noop}
+                  onFlow={noop}
+                  onContents={noop}
+                  onChapter={noop}
+                  onSeek={noop}
+                  onScrub={noop}
+                  onLook={noop}
+                  onBottomHeight={noop}
+                  outlines
+                />
+              </ChromeProvider>
+            </View>
           ) : null}
           {/* The reader's own dimmer and warm veils, above the page and its bands as in the reader. */}
           {ready ? <LightVeil dimmer={settings["light.dimmer"]} warmth={settings["light.warmth"]} /> : null}

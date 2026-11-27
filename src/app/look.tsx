@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { findBook } from "@/domain/library";
 import { t } from "@/i18n";
-import { getLibrary, loadLibrary, revertCustomization, saveSetting, saveUserTheme, useLibrary } from "@/library/store";
+import { getLibrary, loadLibrary, revertCustomization, saveSetting, saveSettingsIn, saveUserTheme, useLibrary } from "@/library/store";
+import { BarsEditor } from "@/look/BarsEditor";
 import { PreviewPane } from "@/look/PreviewPane";
 import { ProfileBar } from "@/look/ProfileBar";
 import { SettingRows } from "@/look/SettingRows";
@@ -16,6 +17,8 @@ import { appThemeId, changedSince, resolvedFor, type Customization } from "@/set
 import { formatNumber } from "@/settings/customize";
 import { defaultTarget, editorLayers, isTab, layerOf, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
+import { barDraftChanged, barDraftValues, withDraft, type BarDraft } from "@/settings/bar-editor";
+import type { Values } from "@/settings/layers";
 import { draftChanged, themesWithDraft, type Draft } from "@/settings/theme-editor";
 import { themeFor } from "@/settings/themes";
 import { confirm } from "@/ui/confirm";
@@ -101,7 +104,12 @@ export default function LookScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [holding, setHolding] = useState(false);
   const [listHeight, setListHeight] = useState(0);
-  const previewSettings = useMemo(() => (draft ? { ...settings, "theme.id": draft.theme.id } : settings), [settings, draft]);
+  // The Bars tab's draft (C5), the same way: the preview draws it with the bars shown.
+  const [barDraft, setBarDraft] = useState<BarDraft | null>(null);
+  const previewSettings = useMemo(
+    () => withDraft(draft ? { ...settings, "theme.id": draft.theme.id } : settings, barDraft),
+    [settings, draft, barDraft],
+  );
   const previewThemes = useMemo(() => themesWithDraft(custom.themes, draft), [custom.themes, draft]);
 
   const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
@@ -129,23 +137,47 @@ export default function LookScreen() {
     showNotice(strings.themes.saved(name));
   };
 
-  // Leaving with unsaved theme changes asks first: Save, Discard or Keep editing.
-  const unsaved = draft !== null && draftChanged(draft);
-  usePreventRemove(unsaved, ({ repeat }) => {
-    if (!draft) return;
+  const saveBars = async (current: BarDraft) => {
+    touched.current = true;
+    await saveSettingsIn(layerOf(target), barDraftValues(current, settings) as Values, bookId);
+    setBarDraft(null);
+    showNotice(strings.bars.saved);
+  };
+
+  /** Header Save and the leave dialog's Save: whichever drafts are open. */
+  const saveAll = async () => {
+    if (draft) await saveDraft(draft);
+    if (barDraft) await saveBars(barDraft);
+  };
+  const cancelAll = () => {
+    setDraft(null);
+    setBarDraft(null);
+  };
+  const editing = draft !== null || barDraft !== null;
+
+  // Leaving with unsaved changes asks first: Save, Discard or Keep editing.
+  const themeUnsaved = draft !== null && draftChanged(draft);
+  const barsUnsaved = barDraft !== null && barDraftChanged(barDraft, settings);
+  usePreventRemove(themeUnsaved || barsUnsaved, ({ repeat }) => {
+    const title =
+      themeUnsaved && barsUnsaved
+        ? strings.bars.leaveBoth
+        : themeUnsaved && draft
+          ? strings.themes.leaveTitle(draft.theme.name.trim() || t().book.themes[draft.theme.base])
+          : strings.bars.leaveTitle;
     confirm({
-      title: strings.themes.leaveTitle(draft.theme.name.trim() || t().book.themes[draft.theme.base]),
+      title,
       buttons: [
         { text: strings.themes.leaveKeep, style: "cancel" },
         {
           text: strings.themes.leaveDiscard,
           style: "destructive",
           onPress: () => {
-            setDraft(null);
+            cancelAll();
             repeat();
           },
         },
-        { text: strings.themes.leaveSave, onPress: () => void saveDraft(draft).then(repeat) },
+        { text: strings.themes.leaveSave, onPress: () => void saveAll().then(repeat) },
       ],
       chrome,
     });
@@ -248,22 +280,22 @@ export default function LookScreen() {
             headerTintColor: chrome.ink,
             headerRight: () => (
               <View style={styles.headerRight}>
-                {draft ? (
+                {editing ? (
                   <>
-                    <Pressable onPress={() => setDraft(null)} accessibilityRole="button" hitSlop={8}>
+                    <Pressable onPress={cancelAll} accessibilityRole="button" hitSlop={8}>
                       <Text style={[styles.headerLink, { color: chrome.ink }]}>{strings.themes.cancel}</Text>
                     </Pressable>
-                    <Pressable onPress={() => void saveDraft(draft)} accessibilityRole="button" hitSlop={8}>
+                    <Pressable onPress={() => void saveAll()} accessibilityRole="button" hitSlop={8}>
                       <Text style={[styles.headerLink, { color: chrome.accent }]}>{strings.themes.save}</Text>
                     </Pressable>
                   </>
                 ) : null}
-                {!draft && changed ? (
+                {!editing && changed ? (
                   <Pressable onPress={revert} accessibilityRole="button" accessibilityLabel={strings.revertLabel} hitSlop={8}>
                     <Text style={[styles.headerLink, { color: chrome.accent }]}>{strings.revert}</Text>
                   </Pressable>
                 ) : null}
-                {bookId && !draft ? (
+                {bookId && !editing ? (
                   <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={strings.close} hitSlop={8}>
                     <Text style={[styles.headerLink, { color: chrome.ink }]}>✕</Text>
                   </Pressable>
@@ -287,7 +319,7 @@ export default function LookScreen() {
         </Pressable>
         {preview && paneHeight > 0 ? (
           <View style={{ height: keyboard > 0 ? 0 : paneHeight }}>
-            <PreviewPane settings={previewSettings} fonts={custom.fonts} themes={previewThemes} />
+            <PreviewPane settings={previewSettings} fonts={custom.fonts} themes={previewThemes} showBars={tab === "bars"} />
           </View>
         ) : null}
         <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist" onLayout={measure("tabs")}>
@@ -333,7 +365,8 @@ export default function LookScreen() {
               }}
             />
           ) : null}
-          {tab === "colours" && draft ? null : (
+          {tab === "bars" ? <BarsEditor settings={settings} draft={barDraft} onDraft={setBarDraft} onNotice={showNotice} /> : null}
+          {(tab === "colours" && draft) || tab === "bars" ? null : (
             <SettingRows tab={tab} layers={layers} target={target} custom={custom} bookId={bookId} onChange={change} />
           )}
         </ScrollView>

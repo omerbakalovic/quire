@@ -30,6 +30,8 @@ type Props = {
   onLook: () => void;
   /** Height of the bottom bars, so pills and notices sit above them. */
   onBottomHeight: (height: number) => void;
+  /** The Bars editor's preview: outline each zone, so empty ones show where they are. */
+  outlines?: boolean;
 };
 
 /**
@@ -76,11 +78,15 @@ export function ControlBars(props: Props) {
  * line instead of shrinking to nothing.
  */
 function Row({ zones, ...props }: Props & { zones: ZoneLayout[] }) {
+  const c = useChrome();
   return (
     <View style={styles.row}>
       {zones.map((zone) =>
-        zone.items.length === 0 && !zone.grow ? null : (
-          <View key={zone.zone} style={[styles.zone, zone.grow && styles.grow, { justifyContent: zone.justify }]}>
+        zone.items.length === 0 && !zone.grow && !props.outlines ? null : (
+          <View
+            key={zone.zone}
+            style={[styles.zone, zone.grow && styles.grow, { justifyContent: zone.justify }, props.outlines && [styles.outline, { borderColor: c.muted }]]}
+          >
             {zone.items.map((item) => (
               <Control key={item} item={item} {...props} />
             ))}
@@ -177,6 +183,7 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", alignItems: "center", columnGap: 6, minHeight: 44 },
   zone: { flexDirection: "row", flexWrap: "wrap", alignItems: "center", columnGap: 6, rowGap: 2, minHeight: 44 },
   grow: { flex: 1, flexBasis: 0 },
+  outline: { borderWidth: 1, borderStyle: "dashed", borderRadius: 6, minWidth: 24 },
   control: { minHeight: 44, justifyContent: "center" },
   label: { fontSize: 18, paddingVertical: 6 },
   icon: { minWidth: 44, minHeight: 44, alignItems: "center", justifyContent: "center" },

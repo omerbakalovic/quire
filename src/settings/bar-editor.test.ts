@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { addElement, available, barDraftChanged, barDraftValues, defaultTapBars, draftFrom, moveAcross, moveAlong, placeOf, rebased, removeElement, setArrange, tapBarsAreDefault, withDraft } from "./bar-editor.ts";
+import { addElement, available, barDraftChanged, barDraftValues, defaultTapBars, draftFrom, moveAcross, moveAlong, moveTo, dropFull, placeOf, rebased, removeElement, setArrange, tapBarsAreDefault, withDraft } from "./bar-editor.ts";
 import { barRows } from "./bars.ts";
 import { defaults } from "./registry.ts";
 
@@ -90,4 +90,22 @@ test("a draft carries only its own edits to settings that changed under it", () 
   assert.deepEqual(over["layout.top.start"], ["title", "back"]);
   assert.deepEqual(barDraftValues(over, b), { "layout.top.start": ["title", "back"] });
   assert.equal(rebased(null, b), null);
+});
+
+test("a drag drop reorders within a zone, moves across zones, and never leaves its region", () => {
+  const settings = defaults();
+  const draft = draftFrom(settings);
+  // Bottom row centre: contents, look, flow.
+  const reordered = moveTo(draft, "flow", "controls", "bottom", 1, 0);
+  assert.deepEqual(reordered.draft["layout.bottom.center"], ["flow", "contents", "look"]);
+  const across = moveTo(draft, "look", "controls", "bottom", 2, 0);
+  assert.deepEqual(across.draft["layout.bottom.center"], ["contents", "flow"]);
+  assert.deepEqual(across.draft["layout.bottom.end"], ["look"]);
+  assert.equal(moveTo(draft, "look", "controls", "top", 0, 0).refused, "edge");
+  assert.equal(moveTo(draft, "look", "controls", "bottom", 1, 1).draft, draft);
+  assert.deepEqual(moveTo(draft, "look", "controls", "bottom", 1, 99).draft["layout.bottom.center"], ["contents", "flow", "look"]);
+  const full = { ...draft, "layout.bottom.end": ["a", "b", "c", "d", "e", "f"] };
+  assert.equal(dropFull(full, "look", "controls", 2), true);
+  assert.equal(moveTo(full, "look", "controls", "bottom", 2, 0).refused, "full");
+  assert.equal(dropFull(full, "look", "controls", 1), false);
 });

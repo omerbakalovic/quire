@@ -383,6 +383,7 @@ export default function LookScreen() {
               draft={barDraft}
               onDraft={setBarDraft}
               onNotice={showNotice}
+              onActive={setHolding}
               onReveal={(view) => {
                 const content = listRef.current?.getInnerViewRef();
                 if (!view || !content) return;

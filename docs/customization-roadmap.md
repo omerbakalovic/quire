@@ -259,6 +259,8 @@ Scope, deliberately bounded:
 - **No free positioning.** Elements always sit in zones, so there are no overlaps, nothing moves on rotation or another screen size, and every touch target keeps its 44 dp. Free placement is listed under "Later, only if still wanted" (section 5, end) and is not planned.
 - Built with `react-native-gesture-handler` and Reanimated (already installed with Skia). A separate PR because gesture code is the riskiest UI code here.
 
+As built (2026-11-27): the drag happens on the Bars tab's zone boxes, not on the preview. The header and footer lines are drawn inside the page's WebView and the tap bars in the preview are a picture, so the editor's boxes, which show the same zones, are where items are picked up. It uses React Native's PanResponder rather than gesture-handler, which is not a direct dependency, so no new native module and no APK rebuild are needed. There is no haptic tick yet.
+
 Acceptance: reorder by drag works on 360 dp screens and in landscape; scrolling the editor does not start a drag; every result is also reachable with buttons and the list; TalkBack users never need dragging.
 
 ### C6. Library look
@@ -341,7 +343,7 @@ Every milestone also checks: existing positions, profiles, overrides, fonts and 
 | C3 App-wide theme | Merged (PR #16); emulator checked (runs 24, 25) | PR #16 | Cloud: unit tests (tokens v2 keep the built-in colours and the reader's control colours, page CSS unchanged on Light and Night, app theme resolution, no hard-coded colour in `src/app`, `src/reader`, `src/look`, `src/ui`), type check, reader bundle, Android JS export |
 | C4 Colours and custom themes | Merged (PR #17); emulator checked (runs 27 to 32) | PR #17 | Cloud: unit tests (hex to HSV and back over 10 000 colours, user theme parsing, theme resolution from the base, delete falls back to the base in every layer, Revert with a deleted theme, contrast flags, the three book colour modes, the page's faint-text marking), type check |
 | C5 Bars editor | Merged (PR #18); emulator checked (runs 33 to 37) | PR #18 | Cloud: unit tests (migration draws the same bars for old lists in every layer, zone layout, one place per control, editor moves and refusals, bar frames, default tap bars), type check, Android JS export. Emulator run 33 (14c6095): quick matrix 135 checks, 2 failed (the known noteref turns), default bars pixel-identical before and after; moves, add, Save, leave dialog and every bar style pass. Runs 34 and 35 recheck the fixes: panels scroll into view, a floating 80 % bar with large icons keeps one row in the book and the preview, see-through bars read cleanly, the last tab is remembered. Runs 36 and 37 check the Codex fixes: a crowded 50 % bar stacks its zones in the book and the preview with nothing overlapping, and an unsaved draft carried to another profile saves only its own edit |
-| C5b Drag to reorder within regions | Planned | | |
+| C5b Drag to reorder within regions | Merged (PR #19); emulator checked (run 38) | PR #19 | Cloud: unit tests (a drop reorders within a zone, crosses zones, never leaves its region, a full zone refuses), type check. Emulator run 38 (e002e89, injected long press and drag): reorder in a zone, into another zone, drop outside cancels, a swipe on a chip scrolls without dragging, long press alone and tap unchanged, landscape drag, Cancel leaves the bars pixel-identical |
 | C6 Library look | Planned | | |
 | C7 Reading bookmark | Planned | | |
 | C8 Preview current book | Later, optional | | |

@@ -131,6 +131,37 @@ export function moveAcross(draft: BarDraft, element: string, kind: Region["kind"
   return { draft: put(moved, target, [...list(moved, target), element]) };
 }
 
+/**
+ * A drop from a drag (C5b): to `index` in `zone` of the element's own region,
+ * where index counts the zone's items without the element. Another region is
+ * refused ("edge"): moving between regions is ▲ ▼'s job, so a drag never lands
+ * something where other rules apply. A full zone refuses unless it is the
+ * element's own.
+ */
+export function moveTo(draft: BarDraft, element: string, kind: Region["kind"], region: RegionId, zone: number, index: number): EditResult {
+  const at = placeOf(draft, element, kind);
+  if (!at) return { draft };
+  if (at.region !== region || zone < 0 || zone > 2) return { draft, refused: "edge" };
+  const r = regionOf(region);
+  const from = r.keys[at.zone];
+  const target = r.keys[zone];
+  if (zone !== at.zone && list(draft, target).length >= maxOf(target)) return { draft, refused: "full" };
+  const moved = put(draft, from, list(draft, from).filter((e) => e !== element));
+  const into = [...list(moved, target)];
+  const place = Math.max(0, Math.min(into.length, Math.round(index)));
+  if (zone === at.zone && place === at.index) return { draft };
+  into.splice(place, 0, element);
+  return { draft: put(moved, target, into) };
+}
+
+/** Whether a drop at `zone` would be refused for being full: what a drag shows in red. */
+export function dropFull(draft: BarDraft, element: string, kind: Region["kind"], zone: number): boolean {
+  const at = placeOf(draft, element, kind);
+  if (!at || at.zone === zone) return false;
+  const key = regionOf(at.region).keys[zone];
+  return list(draft, key).length >= maxOf(key);
+}
+
 export function setArrange(draft: BarDraft, bar: Bar, value: (typeof ARRANGEMENTS)[number]): BarDraft {
   return { ...draft, [arrangeKey(bar)]: value };
 }

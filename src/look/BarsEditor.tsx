@@ -8,8 +8,10 @@ import {
   available,
   defaultTapBars,
   draftFrom,
+  dropFull,
   moveAcross,
   moveAlong,
+  moveTo,
   placeOf,
   REGIONS,
   removeElement,
@@ -24,6 +26,7 @@ import { arrangeKey, type Bar } from "@/settings/bars";
 import { LAYOUT_PRESETS, presetOf, presetValues } from "@/settings/layout";
 import { ARRANGEMENTS, type Resolved } from "@/settings/registry";
 
+import { DragZones } from "./DragZones";
 import type { ViewRef } from "./ThemeEditor";
 
 type Props = {
@@ -34,6 +37,8 @@ type Props = {
   onNotice: (text: string) => void;
   /** Bring a panel that just opened fully into view. */
   onReveal: (view: ViewRef | null) => void;
+  /** True while an item is dragged, so the list stops scrolling under it. */
+  onActive: (active: boolean) => void;
 };
 
 type Selection = { element: string; kind: Region["kind"] } | null;
@@ -45,7 +50,7 @@ type Selection = { element: string; kind: Region["kind"] } | null;
  * below that takes it) and Remove; the same are accessibility actions on the
  * item. Every change goes into a draft that only Save keeps (roadmap 2.6).
  */
-export function BarsEditor({ settings, draft, onDraft, onNotice, onReveal }: Props) {
+export function BarsEditor({ settings, draft, onDraft, onNotice, onReveal, onActive }: Props) {
   const c = useChrome();
   const strings = t().look.bars;
   const names = t().customize;
@@ -88,20 +93,23 @@ export function BarsEditor({ settings, draft, onDraft, onNotice, onReveal }: Pro
     else apply(moveAcross(current, element, kind, action === "up" ? -1 : 1));
   };
 
-  const chip = (key: string, text: string, on: boolean, onPress: () => void, extra?: object) => (
-    <Pressable
-      key={key}
-      onPress={onPress}
-      accessibilityRole="button"
-      accessibilityState={{ selected: on }}
-      style={[styles.chip, { borderColor: c.line }, on && { backgroundColor: c.accent, borderColor: c.accent }]}
-      {...extra}
-    >
-      <Text style={[styles.chipText, { color: on ? c.onAccent : c.ink }, on && styles.bold]} numberOfLines={1}>
-        {text}
-      </Text>
-    </Pressable>
-  );
+  const chip = (key: string, text: string, on: boolean, onPress: () => void, extra?: object) => {
+    const { style: extraStyle, ...rest } = (extra ?? {}) as { style?: object };
+    return (
+      <Pressable
+        key={key}
+        onPress={onPress}
+        accessibilityRole="button"
+        accessibilityState={{ selected: on }}
+        style={[styles.chip, { borderColor: c.line }, on && { backgroundColor: c.accent, borderColor: c.accent }, extraStyle]}
+        {...rest}
+      >
+        <Text style={[styles.chipText, { color: on ? c.onAccent : c.ink }, on && styles.bold]} numberOfLines={1}>
+          {text}
+        </Text>
+      </Pressable>
+    );
+  };
 
   const preset = presetOf({ ...settings, ...current } as Resolved);
 
@@ -134,17 +142,31 @@ export function BarsEditor({ settings, draft, onDraft, onNotice, onReveal }: Pro
                 </View>
               ) : null}
             </View>
-            <View style={styles.zones}>
-              {region.keys.map((key, zone) => {
+            <DragZones
+              style={styles.zones}
+              zones={region.keys.map((key) => (current[key] as readonly string[] | undefined) ?? [])}
+              full={(element, zone) => dropFull(current, element, region.kind, zone)}
+              onDrop={(element, zone, index) => apply(moveTo(current, element, region.kind, region.id, zone, index))}
+              onActive={(active) => {
+                if (active) {
+                  setSelected(null);
+                  setAdding(null);
+                }
+                onActive(active);
+              }}
+              label={(element) => nameOf(element, region.kind)}
+            >
+              {(drag) => region.keys.map((key, zone) => {
                 const items = (current[key] as readonly string[] | undefined) ?? [];
                 return (
-                  <View key={key} style={[styles.zone, { borderColor: c.line }]}>
+                  <View key={key} {...drag.zoneProps(zone)} style={[styles.zone, { borderColor: c.line }, drag.zoneStyle(zone)]}>
                     <Text style={[styles.zoneTitle, { color: c.muted }]}>{zones[zone]}</Text>
                     {items.length === 0 ? <Text style={[styles.empty, { color: c.muted }]}>{strings.empty}</Text> : null}
                     {items.map((element) => {
                       const name = nameOf(element, region.kind);
                       const on = here?.element === element;
                       return chip(element, name, on, () => select(on ? null : { element, kind: region.kind }), {
+                        ...drag.chipProps(element, zone),
                         accessibilityLabel: on ? strings.selected(name) : strings.itemLabel(name, zones[zone], regionName),
                         accessibilityActions: [
                           { name: "earlier", label: strings.earlier },
@@ -158,11 +180,11 @@ export function BarsEditor({ settings, draft, onDraft, onNotice, onReveal }: Pro
                       });
                     })}
                     {chip(`add-${key}`, strings.add, adding?.region === region.id && adding.zone === zone, () =>
-                      openAdd(adding?.region === region.id && adding.zone === zone ? null : { region: region.id, zone }), { accessibilityLabel: strings.addLabel(zones[zone], regionName) })}
+                      openAdd(adding?.region === region.id && adding.zone === zone ? null : { region: region.id, zone }), { ...drag.endProps(zone), accessibilityLabel: strings.addLabel(zones[zone], regionName) })}
                   </View>
                 );
               })}
-            </View>
+            </DragZones>
             {here ? (
               <View ref={toolbar} style={styles.toolbar}>
                 {(

@@ -31,7 +31,8 @@ const BLACK = "#000000"; // colour-ok
 const CLEAR = "#00000000"; // colour-ok
 const CHECKER = "#cccccc"; // colour-ok
 const SQUARE = 176;
-const MIN_SQUARE = 96;
+/** Below this the square is too small to aim in; the editor scrolls the picker to the top instead. */
+export const MIN_SQUARE = 96;
 const STRIP = 28;
 const THROTTLE = 50;
 

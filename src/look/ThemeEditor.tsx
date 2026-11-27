@@ -26,7 +26,7 @@ import { MAX_USER_THEMES } from "@/settings/user-themes";
 import { confirm } from "@/ui/confirm";
 import { ThemedSwitch } from "@/ui/ThemedSwitch";
 
-import { ColorPicker } from "./ColorPicker";
+import { ColorPicker, MIN_SQUARE } from "./ColorPicker";
 
 export type ViewRef = ComponentRef<typeof View>;
 
@@ -80,9 +80,16 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
   const top = useRef<ViewRef>(null);
   // After the new layout is drawn (emulator run 27: the picker opened below the screen, the editor began past its name field).
   const reveal = (view: () => ViewRef | null | undefined) => setTimeout(() => onReveal(view() ?? null), 120);
+  const picker = useRef<ViewRef>(null);
+  // The square, hue strip and (for see-through tokens) opacity strip must fit above the gesture bar.
+  // With room, the token's row stays in view above them; in a short list under the preview the
+  // picker itself goes to the top, its row just above (emulator runs 28 to 30).
+  const strips = (key: TokenKey) => 56 + (ALPHA_TOKENS.has(key) ? 38 : 0);
+  const roomy = (key: TokenKey) => listHeight <= 0 || listHeight - 56 - strips(key) >= MIN_SQUARE;
+  const squareFor = (key: TokenKey) => (listHeight <= 0 ? undefined : listHeight - strips(key) - (roomy(key) ? 56 : 0));
   const pick = (key: TokenKey | null) => {
     setOpen(key);
-    if (key) reveal(() => rows.current.get(key));
+    if (key) reveal(() => (roomy(key) ? rows.current.get(key) : picker.current));
   };
   const startEditing = (next: Draft) => {
     setOpen(null);
@@ -251,6 +258,7 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
                   ) : null}
                 </View>
                 {isOpen ? (
+                  <View ref={picker}>
                   <ColorPicker
                     value={tokens[key]}
                     onChange={(hex) => onDraft(setDraftToken(draft, key, hex))}
@@ -259,9 +267,9 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
                     swatches={swatches}
                     label={name}
                     onActive={onActive}
-                    // Its row, the gaps and the hue strip take about 116 dp beside the square, the opacity strip 38 more (emulator runs 28, 29).
-                    squareHeight={listHeight > 0 ? listHeight - 116 - (ALPHA_TOKENS.has(key) ? 38 : 0) : undefined}
+                    squareHeight={squareFor(key)}
                   />
+                  </View>
                 ) : null}
               </View>
             );

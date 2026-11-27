@@ -21,6 +21,7 @@ import { BackPill } from "@/reader/BackPill";
 import { confirmExternalLink } from "@/reader/external-link";
 import { ControlBars } from "@/reader/ControlBars";
 import { LightVeil } from "@/reader/LightVeil";
+import { openMessage } from "@/reader/open-message";
 import { useBrightness } from "@/reader/useBrightness";
 import { TurnOverlay, type TurnOverlayHandle } from "@/reader/TurnOverlay";
 import { useReduceMotion } from "@/reader/useReduceMotion";
@@ -189,17 +190,17 @@ export default function BookScreen() {
         backDepth.current = 0;
         setBackStack({ depth: 0, label: null });
         reader.opened();
-        post({
-          type: "open",
-          id,
-          url: bookUrl(id),
-          flow: getLibrary().flow,
-          cfi: position?.cfi ?? null,
-          position,
-          look: reader.look,
-          settings: getLibrary().settings,
-          insets: { top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right },
-        });
+        post(
+          openMessage({
+            id,
+            url: bookUrl(id),
+            flow: getLibrary().flow,
+            position,
+            look: reader.look,
+            settings: getLibrary().settings,
+            insets: { top: insets.top, bottom: insets.bottom, left: insets.left, right: insets.right },
+          }),
+        );
         return;
       }
       case "encryption": {

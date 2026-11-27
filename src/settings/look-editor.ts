@@ -78,3 +78,30 @@ export function originOf(layers: LayerValues, target: Target, key: SettingKey): 
 export function groupsFor(tab: Tab): readonly Group[] {
   return TAB_GROUPS[tab];
 }
+
+/** The least height the settings list keeps under the preview, and the least preview worth showing (dp). */
+export const MIN_SETTINGS_HEIGHT = 160;
+export const MIN_PREVIEW_HEIGHT = 120;
+
+/**
+ * The preview pane's height: 30 % of a portrait window or 40 % of a landscape
+ * one, but never so tall that the settings list under it gets less than
+ * MIN_SETTINGS_HEIGHT. `free` is the screen's height left after the fixed top,
+ * the preview toggle and the tabs (null before they are measured). 0 means
+ * there is no room for a useful preview.
+ */
+export function previewHeight(window: { width: number; height: number }, free: number | null): number {
+  const wanted = Math.round(window.height * (window.height > window.width ? 0.3 : 0.4));
+  if (free === null) return wanted;
+  const room = Math.floor(free - MIN_SETTINGS_HEIGHT);
+  const height = Math.min(wanted, room);
+  return height >= MIN_PREVIEW_HEIGHT ? height : 0;
+}
+
+/** How far, in dp, a touch on a slider moves before it counts as a slide rather than a tap. */
+export const SLIDE_SLOP = 8;
+
+/** A move is a slide when it has gone past the slop and is clearly more sideways than up or down. */
+export function isSideways(dx: number, dy: number): boolean {
+  return Math.abs(dx) > SLIDE_SLOP && Math.abs(dx) > Math.abs(dy) * 1.5;
+}

@@ -42,6 +42,8 @@ type Props = {
   onActive: (active: boolean) => void;
   /** Scroll the list so this view is near its top: the opened picker, the editor's heading. */
   onReveal: (view: ViewRef | null) => void;
+  /** The settings list's visible height, so an opened picker's square and hue strip fit in it under the preview. */
+  listHeight: number;
 };
 
 /** Background tokens: their example is a filled box with their own text on it. */
@@ -67,7 +69,7 @@ function flagFor(flags: readonly ContrastFlag[], key: TokenKey): ContrastFlag | 
  * The Colours tab's theme list and theme editor (docs/customization-roadmap.md, C4).
  * Choosing a theme applies at once; editing works on a draft that only Save keeps.
  */
-export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotice, onActive, onReveal }: Props) {
+export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotice, onActive, onReveal, listHeight }: Props) {
   const c = useChrome();
   const strings = t().look.themes;
   const names = t().book.themes as Record<string, string>;
@@ -257,6 +259,8 @@ export function ThemeEditor({ custom, current, draft, onDraft, onChoose, onNotic
                     swatches={swatches}
                     label={name}
                     onActive={onActive}
+                    // Its row, the gaps and the hue strip take about 116 dp above and below the square (emulator run 28).
+                    squareHeight={listHeight > 0 ? listHeight - 116 : undefined}
                   />
                 ) : null}
               </View>

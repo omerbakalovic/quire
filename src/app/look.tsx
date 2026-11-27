@@ -100,6 +100,7 @@ export default function LookScreen() {
   // The theme editor's draft (roadmap 2.6): the preview shows it, nothing else changes until Save.
   const [draft, setDraft] = useState<Draft | null>(null);
   const [holding, setHolding] = useState(false);
+  const [listHeight, setListHeight] = useState(0);
   const previewSettings = useMemo(() => (draft ? { ...settings, "theme.id": draft.theme.id } : settings), [settings, draft]);
   const previewThemes = useMemo(() => themesWithDraft(custom.themes, draft), [custom.themes, draft]);
 
@@ -304,7 +305,7 @@ export default function LookScreen() {
             </Pressable>
           ))}
         </View>
-        <ScrollView ref={listRef} scrollEnabled={!holding} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={listRef} scrollEnabled={!holding} onLayout={(event) => setListHeight(event.nativeEvent.layout.height)} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
           {pinTop ? null : fixedTop}
           <Text style={[styles.small, { color: chrome.muted }]}>{help}</Text>
           {bookOverrides > 0 ? (
@@ -323,6 +324,7 @@ export default function LookScreen() {
               onChoose={(id) => change("theme.id", id)}
               onNotice={showNotice}
               onActive={setHolding}
+              listHeight={listHeight}
               onReveal={(view) => {
                 const content = listRef.current?.getInnerViewRef();
                 if (!view || !content) return;

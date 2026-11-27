@@ -1,4 +1,3 @@
-import { Canvas, LinearGradient, Rect, vec } from "@shopify/react-native-skia";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, Pressable, StyleSheet, Text, TextInput, View, type GestureResponderEvent, type LayoutChangeEvent } from "react-native";
 
@@ -19,6 +18,8 @@ type Props = {
   label: string;
   /** True while a handle is held, so the list around it stops scrolling. */
   onActive?: (active: boolean) => void;
+  /** The square's height; smaller when the list under the preview is short, so square and hue strip fit together. */
+  squareHeight?: number;
 };
 
 type State = Hsv & { a: number };
@@ -30,6 +31,7 @@ const BLACK = "#000000"; // colour-ok
 const CLEAR = "#00000000"; // colour-ok
 const CHECKER = "#cccccc"; // colour-ok
 const SQUARE = 176;
+const MIN_SQUARE = 96;
 const STRIP = 28;
 const THROTTLE = 50;
 
@@ -41,7 +43,10 @@ const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v
  * fields, and swatches of the theme's colours and the last ones picked.
  * Every handle has one-step accessibility actions, and the fields take exact values.
  */
-export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label, onActive }: Props) {
+export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label, onActive, squareHeight = SQUARE }: Props) {
+  const height = clamp(squareHeight, MIN_SQUARE, SQUARE);
+  const heightRef = useRef(height);
+  heightRef.current = height;
   const c = useChrome();
   const strings = t().look.picker;
   const [state, setState] = useState<State>(() => hexToHsv(value) ?? { h: 0, s: 0, v: 0, a: 1 });
@@ -104,7 +109,7 @@ export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label,
   };
 
   const square = useMemo(
-    () => drag((x, y, s) => ({ ...s, s: clamp(x / Math.max(1, widthRef.current), 0, 1), v: 1 - clamp(y / SQUARE, 0, 1) })),
+    () => drag((x, y, s) => ({ ...s, s: clamp(x / Math.max(1, widthRef.current), 0, 1), v: 1 - clamp(y / heightRef.current, 0, 1) })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [],
   );
@@ -137,7 +142,7 @@ export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label,
   return (
     <View style={styles.wrap} onLayout={onLayout}>
       <View
-        style={[styles.square, { borderColor: c.line }]}
+        style={[styles.square, { height, borderColor: c.line }]}
         {...square.panHandlers}
         accessible
         accessibilityRole="adjustable"
@@ -157,19 +162,12 @@ export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label,
           else if (name === "lessSaturation") step({ s: clamp(state.s - 0.01, 0, 1) });
         }}
       >
-        {width > 0 ? (
-          <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Rect x={0} y={0} width={width} height={SQUARE}>
-              <LinearGradient start={vec(0, 0)} end={vec(width, 0)} colors={[WHITE, pure]} />
-            </Rect>
-            <Rect x={0} y={0} width={width} height={SQUARE}>
-              <LinearGradient start={vec(0, 0)} end={vec(0, SQUARE)} colors={[CLEAR, BLACK]} />
-            </Rect>
-          </Canvas>
-        ) : null}
+        {/* View gradients, not a Skia canvas: a canvas opened below the screen edge stayed half drawn (emulator run 28). */}
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundImage: `linear-gradient(to right, ${WHITE}, ${pure})` }]} />
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundImage: `linear-gradient(to bottom, ${CLEAR}, ${BLACK})` }]} />
         <View
           pointerEvents="none"
-          style={[styles.ring, { left: state.s * width - 11, top: (1 - state.v) * SQUARE - 11, backgroundColor: solid, borderColor: state.v > 0.6 && state.s < 0.4 ? BLACK : WHITE }]}
+          style={[styles.ring, { left: state.s * width - 11, top: (1 - state.v) * height - 11, backgroundColor: solid, borderColor: state.v > 0.6 && state.s < 0.4 ? BLACK : WHITE }]}
         />
       </View>
 
@@ -183,13 +181,7 @@ export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label,
         accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
         onAccessibilityAction={(event) => step({ h: (state.h + (event.nativeEvent.actionName === "increment" ? 1 : 359)) % 360 })}
       >
-        {width > 0 ? (
-          <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-            <Rect x={0} y={0} width={width} height={STRIP}>
-              <LinearGradient start={vec(0, 0)} end={vec(width, 0)} colors={HUES} />
-            </Rect>
-          </Canvas>
-        ) : null}
+        <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundImage: `linear-gradient(to right, ${HUES.join(", ")})` }]} />
         <View pointerEvents="none" style={[styles.bar, { left: (state.h / 360) * width - 4, borderColor: WHITE, backgroundColor: pure }]} />
       </View>
 
@@ -204,18 +196,7 @@ export function ColorPicker({ value, onChange, onPicked, alpha, swatches, label,
           accessibilityActions={[{ name: "increment" }, { name: "decrement" }]}
           onAccessibilityAction={(event) => step({ a: clamp(Math.round((state.a + (event.nativeEvent.actionName === "increment" ? 0.01 : -0.01)) * 100) / 100, 0, 1) })}
         >
-          {width > 0 ? (
-            <Canvas style={StyleSheet.absoluteFill} pointerEvents="none">
-              {Array.from({ length: Math.ceil(width / 7) * 4 }, (_, i) => {
-                const col = Math.floor(i / 4);
-                const row = i % 4;
-                return (col + row) % 2 === 0 ? <Rect key={i} x={col * 7} y={row * 7} width={7} height={7} color={CHECKER} /> : null;
-              })}
-              <Rect x={0} y={0} width={width} height={STRIP}>
-                <LinearGradient start={vec(0, 0)} end={vec(width, 0)} colors={[`${solid}00`, solid]} />
-              </Rect>
-            </Canvas>
-          ) : null}
+          <View pointerEvents="none" style={[StyleSheet.absoluteFill, { backgroundColor: CHECKER, backgroundImage: `linear-gradient(to right, ${solid}00, ${solid})` }]} />
           <View pointerEvents="none" style={[styles.bar, { left: state.a * width - 4, borderColor: WHITE, backgroundColor: solid }]} />
         </View>
       ) : null}
@@ -302,7 +283,7 @@ function Field({ label, value, width, onSubmit, keyboard = "number-pad" }: { lab
 
 const styles = StyleSheet.create({
   wrap: { gap: 10, paddingVertical: 6 },
-  square: { height: SQUARE, borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
+  square: { borderRadius: 8, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
   ring: { position: "absolute", width: 22, height: 22, borderRadius: 11, borderWidth: 3 },
   strip: { height: STRIP, borderRadius: 6, borderWidth: StyleSheet.hairlineWidth, overflow: "hidden" },
   bar: { position: "absolute", top: 1, bottom: 1, width: 8, borderRadius: 4, borderWidth: 2 },

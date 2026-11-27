@@ -1,3 +1,4 @@
+import { applyFaintFix, setFaintFix } from "./book-colors.js";
 import { applyFontScale, setFontScale } from "./font-scale.js";
 import { fontCss } from "./fonts.js";
 import * as epub from "../../vendor/foliate-js/epub.js";
@@ -200,6 +201,7 @@ export async function applyLookTo(view, look) {
   // forced sizes (turning the book's styles back on at 130% would scale twice).
   view.renderer.setStyles?.(`${faces}\n${TABLE_CSS}\n${css}`);
   setFontScale(view, look);
+  setFaintFix(view, look);
   if (typeof look?.gap === "string" && /^\d{1,2}%$/.test(look.gap)) view.renderer.setAttribute("gap", look.gap);
   if (typeof look?.maxInlineSize === "string" && /^\d{3,4}px$/.test(look.maxInlineSize)) {
     view.renderer.setAttribute("max-inline-size", look.maxInlineSize);
@@ -224,6 +226,7 @@ export async function openBook(url, id, askDecision, { flow, lastLocation, posit
   view.addEventListener("load", (event) => {
     // Before wide tables are measured, so they see the final text size.
     applyFontScale(event.detail?.doc);
+    applyFaintFix(event.detail?.doc);
     wrapWideTables(event.detail?.doc, view);
   });
   onView?.(view);

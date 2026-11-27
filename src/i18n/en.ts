@@ -81,6 +81,7 @@ export const en = {
       behaviour: "Behaviour",
     } as Record<string, string>,
     appThemeFollow: "Same as reading theme",
+    bookColors: { auto: "Auto", keep: "Keep the book's", replace: "Use the theme's" } as Record<string, string>,
     names: {
       "type.fontSize": "Text size",
       "type.fontFamily": "Font",
@@ -93,6 +94,7 @@ export const en = {
       "page.maxWidth": "Widest line",
       "theme.id": "Theme",
       "app.theme": "Library and Settings theme",
+      "theme.bookColors": "Book colours",
       "light.brightness": "Brightness",
       "light.dimmer": "Dimmer",
       "light.warmth": "Warmth",

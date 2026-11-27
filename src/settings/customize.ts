@@ -1,6 +1,7 @@
 import { FONT_CHOICES, type UserFont } from "./fonts.ts";
 import { resolve, sourceOf, type LayerValues, type Source } from "./layers.ts";
-import { settingFor, SETTINGS, type Group, type Layer, type SettingKey, type Value } from "./registry.ts";
+import { settingFor, SETTINGS, THEME_IDS, type Group, type Layer, type SettingKey, type Value } from "./registry.ts";
+import type { UserTheme } from "./user-themes.ts";
 
 /**
  * The Customize screen, generated from the registry (docs/customization.md,
@@ -44,9 +45,14 @@ const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", 
 /**
  * The rows for editing one layer. `set` is true when that layer holds the
  * value, so the screen can offer a reset; `source` says where the value in
- * use comes from. Fonts are a choice of the built-ins plus imported fonts.
+ * use comes from. Fonts and themes are a choice of the built-ins plus the reader's own.
  */
-export function sectionsFor(layers: LayerValues, layer: Exclude<Layer, "session">, userFonts: readonly UserFont[] = []): Section[] {
+export function sectionsFor(
+  layers: LayerValues,
+  layer: Exclude<Layer, "session">,
+  userFonts: readonly UserFont[] = [],
+  userThemes: readonly UserTheme[] = [],
+): Section[] {
   const resolved = resolve(layers) as Record<string, Value>;
   const sections: Section[] = [];
   for (const group of GROUP_ORDER) {
@@ -63,6 +69,9 @@ export function sectionsFor(layers: LayerValues, layer: Exclude<Layer, "session"
         rows.push({ key, kind: "elements", value: value as readonly string[], catalog: setting.catalog, max: setting.max, set, source });
       } else if (setting.type === "font") {
         rows.push({ key, kind: "choice", value: value as string, options: [...FONT_CHOICES, ...userFonts.map((f) => f.id)], set, source });
+      } else if (setting.type === "theme") {
+        const options = [...("follow" in setting && setting.follow ? ["follow"] : []), ...THEME_IDS, ...userThemes.map((t) => t.id)];
+        rows.push({ key, kind: "choice", value: value as string, options, set, source });
       } else rows.push({ key, kind: "choice", value: value as string, options: setting.choices, set, source });
     }
     if (rows.length > 0) sections.push({ group, rows });

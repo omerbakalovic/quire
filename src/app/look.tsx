@@ -15,7 +15,7 @@ import { appThemeId, changedSince, resolvedFor, type Customization } from "@/set
 import { formatNumber } from "@/settings/customize";
 import { defaultTarget, editorLayers, isTab, layerOf, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
-import { THEMES, themeFor } from "@/settings/themes";
+import { themeFor } from "@/settings/themes";
 
 /**
  * Reading Look (docs/customization-roadmap.md, C1): the one editor for the
@@ -89,7 +89,7 @@ export default function LookScreen() {
   const layers = useMemo(() => editorLayers(custom, bookId), [custom, bookId]);
   const settings = useMemo(() => resolvedFor(custom, bookId), [custom, bookId]);
   // From a book the editor wears the book's theme; from Settings, the app theme (roadmap 2.3).
-  const theme = themeFor(bookId ? settings["theme.id"] : appThemeId(custom));
+  const theme = themeFor(bookId ? settings["theme.id"] : appThemeId(custom), custom.themes);
   const chrome = chromeFor(theme);
   const profile = custom.profiles.find((p) => p.id === custom.activeProfile) ?? null;
   const changed = changedSince(custom, snapshot.current);
@@ -168,15 +168,16 @@ export default function LookScreen() {
       />
       {note(sizeOrigin, "type.fontSize", strings.textSize)}
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.swatches}>
-        {THEME_IDS.map((id) => {
-          const swatch = THEMES[id];
+        {[...THEME_IDS, ...custom.themes.map((u) => u.id)].map((id) => {
+          const swatch = themeFor(id, custom.themes);
           const on = settings["theme.id"] === id;
+          const name = (words.themes as Record<string, string>)[id] ?? custom.themes.find((u) => u.id === id)?.name ?? id;
           return (
             <Pressable
               key={id}
               onPress={() => change("theme.id", id)}
               accessibilityRole="button"
-              accessibilityLabel={`${strings.theme}: ${words.themes[id]}`}
+              accessibilityLabel={`${strings.theme}: ${name}`}
               accessibilityState={{ selected: on }}
               style={[styles.swatch, { backgroundColor: swatch.page, borderColor: on ? chrome.accent : swatch.inkMuted }, on && styles.swatchOn]}
             >
@@ -235,7 +236,7 @@ export default function LookScreen() {
         </Pressable>
         {preview && paneHeight > 0 ? (
           <View style={{ height: keyboard > 0 ? 0 : paneHeight }}>
-            <PreviewPane settings={settings} fonts={custom.fonts} />
+            <PreviewPane settings={settings} fonts={custom.fonts} themes={custom.themes} />
           </View>
         ) : null}
         <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist" onLayout={measure("tabs")}>

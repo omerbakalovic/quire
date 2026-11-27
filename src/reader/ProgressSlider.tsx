@@ -127,8 +127,9 @@ export function ProgressSlider({ fraction, toc, onCommit, onScrub }: Props) {
 }
 
 const styles = StyleSheet.create({
-  // Wide enough to drag; in a crowded control row it wraps to its own line instead.
-  wrap: { flex: 1, minWidth: 120, justifyContent: "center" },
+  // Wide enough to drag; in a crowded control row it wraps to its own line instead. 72, not 120, so a
+  // floating bar at 80 % with large icons keeps « slider » % Aa on one line (emulator run 33).
+  wrap: { flex: 1, minWidth: 72, justifyContent: "center" },
   hit: { height: 44, justifyContent: "center" },
   track: { height: 4, borderRadius: 2, overflow: "hidden" },
   ticks: { position: "absolute", left: 0, right: 0, top: 0, bottom: 0 },

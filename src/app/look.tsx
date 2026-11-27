@@ -5,7 +5,8 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { findBook } from "@/domain/library";
 import { t } from "@/i18n";
-import { getLibrary, loadLibrary, revertCustomization, saveSetting, saveUserTheme, useLibrary } from "@/library/store";
+import { getLibrary, loadLibrary, revertCustomization, saveSetting, saveSettingsIn, saveUserTheme, useLibrary } from "@/library/store";
+import { BarsEditor } from "@/look/BarsEditor";
 import { PreviewPane } from "@/look/PreviewPane";
 import { ProfileBar } from "@/look/ProfileBar";
 import { SettingRows } from "@/look/SettingRows";
@@ -16,6 +17,8 @@ import { appThemeId, changedSince, resolvedFor, type Customization } from "@/set
 import { formatNumber } from "@/settings/customize";
 import { defaultTarget, editorLayers, isTab, layerOf, MIN_SETTINGS_HEIGHT, originOf, previewHeight, TABS, targetsFor, validTarget, type Tab, type Target } from "@/settings/look-editor";
 import { THEME_IDS, type SettingKey } from "@/settings/registry";
+import { barDraftChanged, barDraftValues, draftFrom, rebased, withDraft, type BarDraft, type BarEdit } from "@/settings/bar-editor";
+import type { Values } from "@/settings/layers";
 import { draftChanged, themesWithDraft, type Draft } from "@/settings/theme-editor";
 import { themeFor } from "@/settings/themes";
 import { confirm } from "@/ui/confirm";
@@ -27,6 +30,9 @@ import { confirm } from "@/ui/confirm";
  * Everything else is in tabs. Opened from a book, the book stays open under
  * this screen and follows every change; Back returns to the same place.
  */
+/** The tab last open, for the next time Reading Look opens without one asked for. */
+let lastTab: Tab = "text";
+
 export default function LookScreen() {
   const params = useLocalSearchParams<{ book?: string; tab?: string }>();
   const router = useRouter();
@@ -86,7 +92,12 @@ export default function LookScreen() {
     };
   }, []);
   const paneHeight = previewHeight(window, free);
-  const [tab, setTab] = useState<Tab>(isTab(params.tab) ? params.tab : "text");
+  const [tab, setTabState] = useState<Tab>(isTab(params.tab) ? params.tab : lastTab);
+  // Reopened from the book's Aa, Reading Look comes back on the tab last used (emulator run 33).
+  const setTab = (next: Tab) => {
+    lastTab = next;
+    setTabState(next);
+  };
   const [chosen, setTarget] = useState<Target>(() => defaultTarget(custom, bookId));
   const target = validTarget(custom, bookId, chosen);
   const layers = useMemo(() => editorLayers(custom, bookId), [custom, bookId]);
@@ -101,7 +112,16 @@ export default function LookScreen() {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [holding, setHolding] = useState(false);
   const [listHeight, setListHeight] = useState(0);
-  const previewSettings = useMemo(() => (draft ? { ...settings, "theme.id": draft.theme.id } : settings), [settings, draft]);
+  const scrollY = useRef(0);
+  // The Bars tab's draft (C5), the same way: the preview draws it with the bars shown.
+  // Kept with the values it started from, so a profile or layer change under it keeps only what was edited.
+  const [barEdit, setBarEdit] = useState<BarEdit | null>(null);
+  const barDraft = useMemo(() => rebased(barEdit, settings), [barEdit, settings]);
+  const setBarDraft = (next: BarDraft | null) => setBarEdit(next ? { base: draftFrom(settings), draft: next } : null);
+  const previewSettings = useMemo(
+    () => withDraft(draft ? { ...settings, "theme.id": draft.theme.id } : settings, barDraft),
+    [settings, draft, barDraft],
+  );
   const previewThemes = useMemo(() => themesWithDraft(custom.themes, draft), [custom.themes, draft]);
 
   const [notice, setNotice] = useState<{ text: string; undo?: () => void } | null>(null);
@@ -129,23 +149,47 @@ export default function LookScreen() {
     showNotice(strings.themes.saved(name));
   };
 
-  // Leaving with unsaved theme changes asks first: Save, Discard or Keep editing.
-  const unsaved = draft !== null && draftChanged(draft);
-  usePreventRemove(unsaved, ({ repeat }) => {
-    if (!draft) return;
+  const saveBars = async (current: BarDraft) => {
+    touched.current = true;
+    await saveSettingsIn(layerOf(target), barDraftValues(current, settings) as Values, bookId);
+    setBarDraft(null);
+    showNotice(strings.bars.saved);
+  };
+
+  /** Header Save and the leave dialog's Save: whichever drafts are open. */
+  const saveAll = async () => {
+    if (draft) await saveDraft(draft);
+    if (barDraft) await saveBars(barDraft);
+  };
+  const cancelAll = () => {
+    setDraft(null);
+    setBarDraft(null);
+  };
+  const editing = draft !== null || barDraft !== null;
+
+  // Leaving with unsaved changes asks first: Save, Discard or Keep editing.
+  const themeUnsaved = draft !== null && draftChanged(draft);
+  const barsUnsaved = barDraft !== null && barDraftChanged(barDraft, settings);
+  usePreventRemove(themeUnsaved || barsUnsaved, ({ repeat }) => {
+    const title =
+      themeUnsaved && barsUnsaved
+        ? strings.bars.leaveBoth
+        : themeUnsaved && draft
+          ? strings.themes.leaveTitle(draft.theme.name.trim() || t().book.themes[draft.theme.base])
+          : strings.bars.leaveTitle;
     confirm({
-      title: strings.themes.leaveTitle(draft.theme.name.trim() || t().book.themes[draft.theme.base]),
+      title,
       buttons: [
         { text: strings.themes.leaveKeep, style: "cancel" },
         {
           text: strings.themes.leaveDiscard,
           style: "destructive",
           onPress: () => {
-            setDraft(null);
+            cancelAll();
             repeat();
           },
         },
-        { text: strings.themes.leaveSave, onPress: () => void saveDraft(draft).then(repeat) },
+        { text: strings.themes.leaveSave, onPress: () => void saveAll().then(repeat) },
       ],
       chrome,
     });
@@ -248,22 +292,22 @@ export default function LookScreen() {
             headerTintColor: chrome.ink,
             headerRight: () => (
               <View style={styles.headerRight}>
-                {draft ? (
+                {editing ? (
                   <>
-                    <Pressable onPress={() => setDraft(null)} accessibilityRole="button" hitSlop={8}>
+                    <Pressable onPress={cancelAll} accessibilityRole="button" hitSlop={8}>
                       <Text style={[styles.headerLink, { color: chrome.ink }]}>{strings.themes.cancel}</Text>
                     </Pressable>
-                    <Pressable onPress={() => void saveDraft(draft)} accessibilityRole="button" hitSlop={8}>
+                    <Pressable onPress={() => void saveAll()} accessibilityRole="button" hitSlop={8}>
                       <Text style={[styles.headerLink, { color: chrome.accent }]}>{strings.themes.save}</Text>
                     </Pressable>
                   </>
                 ) : null}
-                {!draft && changed ? (
+                {!editing && changed ? (
                   <Pressable onPress={revert} accessibilityRole="button" accessibilityLabel={strings.revertLabel} hitSlop={8}>
                     <Text style={[styles.headerLink, { color: chrome.accent }]}>{strings.revert}</Text>
                   </Pressable>
                 ) : null}
-                {bookId && !draft ? (
+                {bookId && !editing ? (
                   <Pressable onPress={() => router.back()} accessibilityRole="button" accessibilityLabel={strings.close} hitSlop={8}>
                     <Text style={[styles.headerLink, { color: chrome.ink }]}>✕</Text>
                   </Pressable>
@@ -287,7 +331,7 @@ export default function LookScreen() {
         </Pressable>
         {preview && paneHeight > 0 ? (
           <View style={{ height: keyboard > 0 ? 0 : paneHeight }}>
-            <PreviewPane settings={previewSettings} fonts={custom.fonts} themes={previewThemes} />
+            <PreviewPane settings={previewSettings} fonts={custom.fonts} themes={previewThemes} showBars={tab === "bars"} />
           </View>
         ) : null}
         <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist" onLayout={measure("tabs")}>
@@ -305,7 +349,7 @@ export default function LookScreen() {
             </Pressable>
           ))}
         </View>
-        <ScrollView ref={listRef} scrollEnabled={!holding} onLayout={(event) => setListHeight(event.nativeEvent.layout.height)} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
+        <ScrollView ref={listRef} scrollEnabled={!holding} onScroll={(event) => (scrollY.current = event.nativeEvent.contentOffset.y)} scrollEventThrottle={32} onLayout={(event) => setListHeight(event.nativeEvent.layout.height)} contentContainerStyle={[styles.body, { paddingBottom: insets.bottom + 48 + keyboard }]} keyboardShouldPersistTaps="handled">
           {pinTop ? null : fixedTop}
           <Text style={[styles.small, { color: chrome.muted }]}>{help}</Text>
           {bookOverrides > 0 ? (
@@ -330,6 +374,25 @@ export default function LookScreen() {
                 const content = listRef.current?.getInnerViewRef();
                 if (!view || !content) return;
                 view.measureLayout(content, (_x, y) => listRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true }));
+              }}
+            />
+          ) : null}
+          {tab === "bars" ? (
+            <BarsEditor
+              settings={settings}
+              draft={barDraft}
+              onDraft={setBarDraft}
+              onNotice={showNotice}
+              onReveal={(view) => {
+                const content = listRef.current?.getInnerViewRef();
+                if (!view || !content) return;
+                // As little scrolling as shows the whole panel above the gesture bar, so the item stays in view too.
+                view.measureLayout(content, (_x, y, _w, height) => {
+                  const visible = Math.max(0, listHeight - insets.bottom);
+                  const bottom = y + height + 8 - visible;
+                  if (bottom > scrollY.current) listRef.current?.scrollTo({ y: Math.min(bottom, Math.max(0, y - 8)), animated: true });
+                  else if (y - 8 < scrollY.current) listRef.current?.scrollTo({ y: Math.max(0, y - 8), animated: true });
+                });
               }}
             />
           ) : null}

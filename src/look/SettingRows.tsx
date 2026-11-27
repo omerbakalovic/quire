@@ -90,6 +90,7 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
     if (key === "type.alignment") return book.aligns[option] ?? option;
     if (key === "turn.style") return strings.turns[option] ?? option;
     if (key.startsWith("gesture.")) return strings.actions[option] ?? option;
+    if (key.startsWith("bar.")) return strings.barChoices[option] ?? option;
     return option;
   };
 
@@ -160,6 +161,8 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
       {sections.map((section) => {
         // The theme itself is chosen in the theme list above (ThemeEditor) and the pinned row.
         const rows = section.rows.filter((row) => !PINNED.includes(row.key));
+        // The Bars tab edits the layout in its own editor, as a draft.
+        if (tab === "bars" && section.group === "layout") return null;
         if (rows.length === 0) return null;
         return (
           <View key={section.group} style={styles.group}>
@@ -184,6 +187,10 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
                 <Text style={[styles.help, { color: c.muted }]}>{strings.gesturesHelp}</Text>
                 {barsUnreachable(resolved) ? <Text style={[styles.help, styles.bold, { color: c.accent }]}>{strings.gesturesNoBars}</Text> : null}
               </>
+            ) : null}
+            {section.group === "barStyle" && (resolved["bar.top.background"] === "none" || resolved["bar.bottom.background"] === "none") ? (
+              // Emulator run 35: with no background, a bar's text sits on the book's text.
+              <Text style={[styles.help, { color: c.muted }]}>{strings.barNoneHelp}</Text>
             ) : null}
             {rows.map(draw)}
           </View>

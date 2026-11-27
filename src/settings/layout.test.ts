@@ -86,18 +86,18 @@ test("page in chapter leaves out the paginator's blank end pages", () => {
 
 test("the bars' defaults are the bars Quire had before, and presets leave them alone", () => {
   const d = defaults();
-  assert.deepEqual(d["layout.topBar"], ["back", "title"]);
-  assert.deepEqual(d["layout.quickRow"], ["prevChapter", "slider", "nextChapter", "percent"]);
-  assert.deepEqual(d["layout.bottomBar"], ["contents", "look", "flow"]);
-  const custom = resolve({ global: { "layout.bottomBar": ["contents"], ...presetValues("classic") } });
+  assert.deepEqual(d["layout.top.start"], ["back", "title"]);
+  assert.deepEqual(d["layout.quick.center"], ["prevChapter", "slider", "nextChapter", "percent"]);
+  assert.deepEqual(d["layout.bottom.center"], ["contents", "look", "flow"]);
+  const custom = resolve({ global: { "layout.bottom.center": ["contents"], ...presetValues("classic") } });
   assert.equal(presetOf(custom), "classic", "a preset is about the header and footer lines");
-  assert.deepEqual(custom["layout.bottomBar"], ["contents"]);
+  assert.deepEqual(custom["layout.bottom.center"], ["contents"]);
   assert.equal(needsRelayout(d, custom) , true, "the header and footer changed");
-  assert.equal(needsRelayout(d, resolve({ global: { "layout.topBar": [] } })), false, "bars float over the text");
+  assert.equal(needsRelayout(d, resolve({ global: { "layout.top.start": [] } })), false, "bars float over the text");
 });
 
-test("bar slots take controls only, and an empty bar is allowed", () => {
-  assert.deepEqual(cleanValue("layout.topBar", ["title", "clock", "back"]), ["title", "back"]);
-  assert.deepEqual(cleanValue("layout.topBar", []), []);
-  assert.deepEqual(cleanValue("layout.quickRow", ["slider", "slider", "percent"]), ["slider", "percent"]);
+test("bar zones take controls only, and an empty zone is allowed", () => {
+  assert.deepEqual(cleanValue("layout.top.start", ["title", "clock", "back"]), ["title", "back"]);
+  assert.deepEqual(cleanValue("layout.top.end", []), []);
+  assert.deepEqual(cleanValue("layout.quick.center", ["slider", "slider", "percent"]), ["slider", "percent"]);
 });

@@ -357,3 +357,7 @@ Skia (`@shopify/react-native-skia`, MIT, Shopify) draws the overlay, and Reanima
 The page turns itself, so the overlay has to be up before the page moves. The page asks ("turning"), the app shows the picture at progress 0, waits two frames for it to be on screen, and answers "turn-go". The page doesn't wait more than 150 ms, so a lost answer costs one plain turn, never a stuck page. A turn with no fresh picture (just after a jump or a look change) is a plain turn too. Built-in packs are checked in `npm test` by compiling them with CanvasKit, the same SkSL compiler, and drawing them at set progress values.
 
 Still to measure on the emulator and the Xiaomi 15T: APK size added, capture time, first-frame latency (tap to overlay), and frame times at 120 Hz.
+
+## Web links leave Quire for the default browser
+
+A web link in a book, after the reader confirms, goes to the phone's default browser through a plain Android view intent (`Linking.openURL`). The in-app browser tab from PR #15 (`expo-web-browser`, a Custom Tab) is gone, and so is the dependency. Omer, 2026-11-28: Quire runs locally first and asks no one to give up data, so the reader's own choice of browser (DuckDuckGo, say) decides how private a visited page is. Quire itself contacts no web service.

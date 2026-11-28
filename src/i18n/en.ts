@@ -385,7 +385,7 @@ export const en = {
     next: "Next page",
     back: "Library",
     externalTitle: "Open this link?",
-    externalBody: (where: string) => `It opens ${where} in a browser tab inside Quire. Back returns to this page.`,
+    externalBody: (where: string) => `It opens ${where} in your default browser. Quire sends nothing itself.`,
     externalMailBody: (where: string) => `It opens your mail app to write to ${where}.`,
     externalOpen: "Open",
     externalRefused: "This link can't be opened safely, so Quire leaves it alone.",

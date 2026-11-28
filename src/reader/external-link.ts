@@ -1,4 +1,3 @@
-import * as WebBrowser from "expo-web-browser";
 import { Linking } from "react-native";
 
 import { classifyExternalLink } from "@/domain/links";
@@ -6,14 +5,14 @@ import { t } from "@/i18n";
 import type { Chrome } from "@/reader/chrome";
 import { confirm } from "@/ui/confirm";
 
-type Colours = { toolbar?: string; controls?: string; chrome?: Chrome };
+type Colours = { chrome?: Chrome };
 
 /**
  * A link that leaves the book. Unsafe schemes are refused with a notice. After
- * the reader confirms, a web page opens in a browser tab inside Quire (a
- * Custom Tab in the app's own task), so Back or ✕ returns to the same page;
- * if no browser offers such tabs it falls back to the browser app. Mail links
- * open the mail app.
+ * the reader confirms, the link goes to the phone's own default app for it: a
+ * web page to the default browser, a mail link to the mail app. Quire has no
+ * browser of its own and no tie to any one browser, so which browser sees the
+ * page, and how private that is, stays the reader's choice (Omer, 2026-11-28).
  */
 export function confirmExternalLink(
   href: string,
@@ -40,20 +39,7 @@ export function confirmExternalLink(
       { text: strings.cancel, style: "cancel" },
       {
         text: strings.externalOpen,
-        onPress: () => {
-          if (mail) {
-            void leave();
-            return;
-          }
-          WebBrowser.openBrowserAsync(link.url, {
-            toolbarColor: colours.toolbar,
-            controlsColor: colours.controls,
-            showTitle: true,
-            enableBarCollapsing: true,
-            // In Quire's own task: Back closes the tab instead of switching apps.
-            createTask: false,
-          }).catch(() => void leave());
-        },
+        onPress: () => void leave(),
       },
     ],
   });

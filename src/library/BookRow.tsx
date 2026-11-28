@@ -27,8 +27,10 @@ export function BookRow({ book, look, shelf, edition, onOpen, onLongPress }: Pro
   const c = useChrome();
   const background = shelf.pills ? shelfPillColour(shelf, look.bookColors[book.id], look.coverColors[book.id], c.pillDefault) : null;
   const inkStyle = { color: background ? shelfInk(shelf, textOn(background)) : c.appInk };
-  // A long author list is what gets cut, never the edition or the progress (emulator run 40).
-  const rest = [edition, shelf.showProgress ? (percent === null ? strings.notStarted : strings.percentRead(percent)) : null].filter(Boolean);
+  // Long authors or a long edition label (a file name) are what get cut, never the progress
+  // (emulator run 40; Codex review of PR #21: the edition can be 255 characters).
+  const progress = shelf.showProgress ? (percent === null ? strings.notStarted : strings.percentRead(percent)) : null;
+  const parts = [shelf.showAuthor ? author : null, edition].filter((part): part is string => Boolean(part));
   const detailStyle = [styles.detail, inkStyle, { fontSize: shelf.detailSize }];
   return (
     <Pressable
@@ -64,16 +66,16 @@ export function BookRow({ book, look, shelf, edition, onOpen, onLongPress }: Pro
         <Text style={[styles.title, inkStyle, { fontSize: shelf.title.size, fontWeight: shelf.title.weight }]} numberOfLines={shelf.title.lines}>
           {book.title}
         </Text>
-        {shelf.showAuthor || rest.length > 0 ? (
+        {parts.length > 0 || progress ? (
           <View style={styles.details}>
-            {shelf.showAuthor ? (
-              <Text style={[detailStyle, styles.shrink]} numberOfLines={1}>
-                {author}
+            {parts.map((part, index) => (
+              <Text key={index} style={[detailStyle, styles.shrink]} numberOfLines={1}>
+                {index > 0 ? `  ·  ${part}` : part}
               </Text>
-            ) : null}
-            {rest.length > 0 ? (
+            ))}
+            {progress ? (
               <Text style={detailStyle} numberOfLines={1}>
-                {`${shelf.showAuthor ? "  ·  " : ""}${rest.join("  ·  ")}`}
+                {parts.length > 0 ? `  ·  ${progress}` : progress}
               </Text>
             ) : null}
           </View>

@@ -295,7 +295,7 @@ export default function BookScreen() {
         return;
       case "external-link":
         note({ phase: "external-link", id, href: message.href });
-        confirmExternalLink(message.href, setNotice, { toolbar: reader.theme.page, controls: reader.theme.link, chrome: chromeFor(reader.theme) });
+        confirmExternalLink(message.href, setNotice, { chrome: chromeFor(reader.theme) });
         return;
       case "debug": {
         const waiter = debugWaiters.current.get(message.reqId);

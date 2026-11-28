@@ -4,22 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
 
 import { t } from "@/i18n";
 import { ThemedSwitch } from "@/ui/ThemedSwitch";
-import type { LibraryStyle, LookOptions } from "@/domain/library-look";
-import { loadLibrary, saveLook, saveSetting, saveSettings, useLibrary } from "@/library/store";
+import { loadLibrary, saveSetting, saveSettings, useLibrary } from "@/library/store";
 import { useChrome } from "@/reader/chrome";
 import { resolvedFor } from "@/settings/customization";
 import { APP_THEMES } from "@/settings/registry";
 import { themeFor } from "@/settings/themes";
-
-function Toggle({ label, value, onChange }: { label: string; value: boolean; onChange: (value: boolean) => void }) {
-  const c = useChrome();
-  return (
-    <View style={styles.row}>
-      <Text style={[styles.label, { color: c.appInk }]}>{label}</Text>
-      <ThemedSwitch value={value} onValueChange={onChange} accessibilityLabel={label} />
-    </View>
-  );
-}
 
 /** Library look and global reader settings. The reading look has its own screen (customize.tsx). */
 export default function SettingsScreen() {
@@ -28,8 +17,6 @@ export default function SettingsScreen() {
   const router = useRouter();
   const library = useLibrary();
   const followBook = library.settings.tapZones === "reading";
-  const look = library.look;
-  const set = (patch: Partial<LookOptions>) => void saveLook(patch);
   const c = useChrome();
   const appTheme = resolvedFor(library.custom, null)["app.theme"];
   const themeNames = t().book.themes;
@@ -44,30 +31,11 @@ export default function SettingsScreen() {
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.content}>
       <Stack.Screen options={{ title: strings.title }} />
       <Text style={[styles.section, muted]}>{strings.library}</Text>
-      <View style={styles.row}>
-        <Text style={[styles.label, text]}>{strings.style}</Text>
-        <View style={[styles.segment, { borderColor: c.line }]}>
-          {(["minimal", "pills"] as LibraryStyle[]).map((option) => (
-            <Pressable
-              key={option}
-              onPress={() => void saveLook({ style: option })}
-              accessibilityRole="button"
-              accessibilityState={{ selected: look.style === option }}
-              style={[styles.segmentItem, look.style === option && { backgroundColor: c.controlOn }]}
-            >
-              <Text style={[styles.segmentText, { color: look.style === option ? c.controlOnInk : c.appInk }, look.style === option && styles.bold]}>
-                {option === "minimal" ? strings.styleMinimal : strings.stylePills}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-      <Text style={[styles.help, muted]}>{strings.styleHelp}</Text>
-      {look.style === "pills" ? (
-        <Toggle label={strings.showCovers} value={look.showCovers} onChange={(value) => set({ showCovers: value })} />
-      ) : null}
-      <Toggle label={strings.showAuthor} value={look.showAuthor} onChange={(value) => set({ showAuthor: value })} />
-      <Toggle label={strings.showProgress} value={look.showProgress} onChange={(value) => set({ showProgress: value })} />
+      <Pressable onPress={() => router.push({ pathname: "/look", params: { tab: "library" } })} accessibilityRole="button" style={styles.row}>
+        <Text style={[styles.label, text]}>{strings.libraryLook}</Text>
+        <Text style={[styles.chevron, muted]}>›</Text>
+      </Pressable>
+      <Text style={[styles.help, muted]}>{strings.libraryLookHelp}</Text>
       <Text style={[styles.section, muted]}>{strings.appTheme}</Text>
       <View style={styles.chips}>
         {[...APP_THEMES, ...library.custom.themes.map((u) => u.id)].map((option) => {

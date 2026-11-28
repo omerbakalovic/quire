@@ -9,7 +9,7 @@ import { isThemeId } from "./user-themes.ts";
 
 export type Layer = "session" | "book" | "profile" | "global";
 
-export type Group = "typography" | "page" | "theme" | "light" | "layout" | "barStyle" | "gestures" | "turns" | "behaviour";
+export type Group = "typography" | "page" | "theme" | "light" | "layout" | "barStyle" | "gestures" | "turns" | "behaviour" | "library";
 
 type Base = {
   key: string;
@@ -103,6 +103,20 @@ export const CONTROL_LABELS = ["labels", "icons"] as const;
  * showing the bars. The page runs a turn itself; the rest go to the app.
  */
 export const ACTIONS = ["none", "prevPage", "nextPage", "bars", "contents", "look", "prevChapter", "nextChapter", "flow", "back"] as const;
+/**
+ * The library shelf (C6). Its look follows the profile like the reading look,
+ * but never one book, so profile and Everywhere only. Defaults draw the shelf
+ * Quire drew before.
+ */
+export const SHELF_STYLES = ["minimal", "pills"] as const;
+export const COVER_SIZES = ["small", "medium", "large"] as const;
+export const COVER_SIDES = ["start", "end"] as const;
+export const TITLE_WEIGHTS = ["regular", "medium", "bold"] as const;
+/** Where an uncoloured pill gets its colour: its cover's average, or the theme's pill colour for every pill. */
+export const PILL_COLOURS = ["cover", "theme"] as const;
+/** The text on a pill: whichever of black and white reads better, or always light or dark. */
+export const PILL_INKS = ["auto", "light", "dark"] as const;
+const SHELF = { group: "library", scopes: PROFILE_UP, relayout: false, depth: "standard" } as const;
 const ZONE = { catalog: CONTROLS, max: 6, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
 const STYLE = { group: "barStyle", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
 const ARRANGE = { choices: ARRANGEMENTS, group: "layout", scopes: NOT_SESSION, relayout: false, depth: "standard" } as const;
@@ -165,6 +179,21 @@ export const SETTINGS = [
   { key: "bar.controlSize", type: "choice", default: "medium", choices: CONTROL_SIZES, ...STYLE },
   { key: "bar.labels", type: "choice", default: "labels", choices: CONTROL_LABELS, ...STYLE },
   { key: "bar.gap", type: "number", default: 6, min: 0, max: 24, step: 2, ...STYLE },
+  { key: "library.style", type: "choice", default: "minimal", choices: SHELF_STYLES, ...SHELF, depth: "quick" },
+  { key: "library.showCovers", type: "boolean", default: false, ...SHELF },
+  { key: "library.showAuthor", type: "boolean", default: true, ...SHELF },
+  { key: "library.showProgress", type: "boolean", default: true, ...SHELF },
+  { key: "library.pillColour", type: "choice", default: "cover", choices: PILL_COLOURS, ...SHELF },
+  { key: "library.pillInk", type: "choice", default: "auto", choices: PILL_INKS, ...SHELF },
+  { key: "library.pillPadding", type: "number", default: 14, min: 4, max: 28, step: 2, ...SHELF },
+  { key: "library.pillGap", type: "number", default: 10, min: 0, max: 24, step: 2, ...SHELF },
+  { key: "library.pillRadius", type: "number", default: 28, min: 0, max: 32, step: 2, ...SHELF },
+  { key: "library.coverSize", type: "choice", default: "medium", choices: COVER_SIZES, ...SHELF },
+  { key: "library.coverSide", type: "choice", default: "start", choices: COVER_SIDES, ...SHELF },
+  { key: "library.titleSize", type: "number", default: 17, min: 13, max: 26, step: 1, ...SHELF },
+  { key: "library.titleWeight", type: "choice", default: "bold", choices: TITLE_WEIGHTS, ...SHELF },
+  { key: "library.titleLines", type: "number", default: 2, min: 1, max: 4, step: 1, ...SHELF },
+  { key: "library.detailSize", type: "number", default: 13, min: 10, max: 20, step: 1, ...SHELF },
   // Tap zones: thirds of the page. Left and right follow the "reading direction" setting.
   { key: "gesture.tapLeft", default: "prevPage", ...GESTURE },
   { key: "gesture.tapCenter", default: "bars", ...GESTURE },

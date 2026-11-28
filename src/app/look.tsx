@@ -7,6 +7,7 @@ import { findBook } from "@/domain/library";
 import { t } from "@/i18n";
 import { getLibrary, loadLibrary, revertCustomization, saveSetting, saveSettingsIn, saveUserTheme, useLibrary } from "@/library/store";
 import { BarsEditor } from "@/look/BarsEditor";
+import { LibraryPreview } from "@/look/LibraryPreview";
 import { PreviewPane } from "@/look/PreviewPane";
 import { ProfileBar } from "@/look/ProfileBar";
 import { SettingRows } from "@/look/SettingRows";
@@ -331,7 +332,11 @@ export default function LookScreen() {
         </Pressable>
         {preview && paneHeight > 0 ? (
           <View style={{ height: keyboard > 0 ? 0 : paneHeight }}>
-            <PreviewPane settings={previewSettings} fonts={custom.fonts} themes={previewThemes} showBars={tab === "bars"} />
+            {tab === "library" ? <LibraryPreview settings={previewSettings} library={library} /> : null}
+            {/* Kept loaded under the library preview, so coming back to another tab doesn't reload the page. */}
+            <View style={tab === "library" ? styles.hidden : styles.fill}>
+              <PreviewPane settings={previewSettings} fonts={custom.fonts} themes={previewThemes} showBars={tab === "bars"} />
+            </View>
           </View>
         ) : null}
         <View style={[styles.tabs, { borderBottomColor: chrome.line }]} accessibilityRole="tablist" onLayout={measure("tabs")}>
@@ -343,7 +348,13 @@ export default function LookScreen() {
               accessibilityState={{ selected: tab === option }}
               style={[styles.tab, tab === option && { borderBottomColor: chrome.accent }]}
             >
-              <Text style={[styles.tabText, { color: tab === option ? chrome.ink : chrome.muted }, tab === option && styles.bold]} numberOfLines={1}>
+              <Text
+                style={[styles.tabText, { color: tab === option ? chrome.ink : chrome.muted }, tab === option && styles.bold]}
+                numberOfLines={1}
+                // Seven tabs on a 360 dp screen with large text: the label shrinks rather than being cut (emulator run 40).
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+              >
                 {strings.tabs[option]}
               </Text>
             </Pressable>
@@ -424,6 +435,8 @@ export default function LookScreen() {
 }
 
 const styles = StyleSheet.create({
+  fill: { flex: 1 },
+  hidden: { display: "none" },
   screen: { flex: 1 },
   top: { paddingHorizontal: 16, paddingTop: 8, paddingBottom: 6, gap: 4, borderBottomWidth: StyleSheet.hairlineWidth },
   headerRight: { flexDirection: "row", alignItems: "center", gap: 18 },

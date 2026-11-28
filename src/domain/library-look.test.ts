@@ -12,8 +12,8 @@ import {
   setBookColor,
   setCoverColor,
   setFileName,
+  legacyShelfValues,
   textOn,
-  updateLook,
 } from "./library-look.ts";
 
 function book(id: string, title: string, extra: Partial<LibraryBook> = {}): LibraryBook {
@@ -36,16 +36,13 @@ function book(id: string, title: string, extra: Partial<LibraryBook> = {}): Libr
   } as LibraryBook;
 }
 
-test("the default look is minimal, with no covers", () => {
+test("the default look has no colours or names", () => {
   assert.deepEqual(parseLook(undefined), DEFAULT_LOOK);
-  assert.equal(DEFAULT_LOOK.style, "minimal");
-  assert.equal(DEFAULT_LOOK.showCovers, false);
+  assert.deepEqual(DEFAULT_LOOK, { bookColors: {}, coverColors: {}, fileNames: {} });
 });
 
 test("damaged values fall back and bad colours are dropped", () => {
-  const look = parseLook({ style: "neon", showAuthor: "no", bookColors: { a: "#123456", b: "red", c: 5 } });
-  assert.equal(look.style, "minimal");
-  assert.equal(look.showAuthor, true);
+  const look = parseLook({ bookColors: { a: "#123456", b: "red", c: 5 } });
   assert.deepEqual(look.bookColors, { a: "#123456" });
 });
 
@@ -67,10 +64,15 @@ test("text is dark on light pills and light on dark ones", () => {
   assert.equal(textOn("#000000"), "#FFFFFF");
 });
 
-test("updateLook only takes known options", () => {
-  const look = updateLook(DEFAULT_LOOK, { style: "pills", showCovers: true });
-  assert.equal(look.style, "pills");
-  assert.equal(look.showCovers, true);
+test("the shelf options a pre-C6 look kept become library settings, defaults left out", () => {
+  assert.deepEqual(legacyShelfValues({ style: "pills", showCovers: true, showAuthor: false, showProgress: true }), {
+    "library.style": "pills",
+    "library.showCovers": true,
+    "library.showAuthor": false,
+  });
+  assert.deepEqual(legacyShelfValues({ style: "minimal", showCovers: false, showAuthor: true, showProgress: true }), {});
+  assert.deepEqual(legacyShelfValues(null), {});
+  assert.equal("style" in parseLook({ style: "pills" }), false);
 });
 
 test("forgetting a book drops its colours and file name", () => {

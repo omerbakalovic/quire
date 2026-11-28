@@ -7,7 +7,7 @@ import { settingFor, type Group, type Layer, type SettingKey } from "./registry.
  * "Saving to" target and the "from …" labels. Kept free of React so it can
  * be tested; src/app/look.tsx only draws it.
  */
-export const TABS = ["text", "page", "colours", "bars", "turns", "gestures"] as const;
+export const TABS = ["text", "page", "colours", "bars", "turns", "gestures", "library"] as const;
 export type Tab = (typeof TABS)[number];
 
 export const TAB_GROUPS: Record<Tab, readonly Group[]> = {
@@ -18,6 +18,8 @@ export const TAB_GROUPS: Record<Tab, readonly Group[]> = {
   bars: ["layout", "barStyle"],
   turns: ["turns"],
   gestures: ["gestures", "behaviour"],
+  // The shelf (C6): its preview is sample pills, not the page.
+  library: ["library"],
 };
 
 /** Shown in the editor's fixed top, so the tabs leave them out. */

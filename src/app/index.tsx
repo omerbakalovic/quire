@@ -1,10 +1,13 @@
 import { getDocumentAsync } from "expo-document-picker";
 import { Redirect, Stack, useRouter } from "expo-router";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ActivityIndicator, AppState, FlatList, Image, Modal, Pressable, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, AppState, FlatList, Modal, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { sortedBooks, type LibraryBook } from "@/domain/library";
-import { editionLabels, PALETTE, pillColor, textOn, type LibraryLook } from "@/domain/library-look";
+import { editionLabels, PALETTE, textOn, type LibraryLook } from "@/domain/library-look";
+import { BookRow } from "@/library/BookRow";
+import { resolvedFor } from "@/settings/customization";
+import { shelfOf } from "@/settings/shelf";
 import { t } from "@/i18n";
 import { useChrome } from "@/reader/chrome";
 import { confirm } from "@/ui/confirm";
@@ -44,70 +47,17 @@ function summarize(results: ImportSummary[]): string {
   return [...lines.filter(Boolean), ...failures].join("\n");
 }
 
-function BookRow({
-  book,
-  look,
-  edition,
-  onOpen,
-  onLongPress,
-}: {
-  book: LibraryBook;
-  look: LibraryLook;
-  edition: string | null;
-  onOpen: () => void;
-  onLongPress: () => void;
-}) {
-  const strings = t().library;
-  const percent = book.fraction === null ? null : Math.round(book.fraction * 100);
-  const author = book.authors.join(", ") || strings.unknownAuthor;
-  const c = useChrome();
-  const pills = look.style === "pills";
-  const background = pills ? pillColor(look, book.id, c.pillDefault) : null;
-  const inkStyle = { color: background ? textOn(background) : c.appInk };
-  const details = [
-    look.showAuthor ? author : null,
-    edition,
-    look.showProgress ? (percent === null ? strings.notStarted : strings.percentRead(percent)) : null,
-  ].filter(Boolean);
-  return (
-    <Pressable
-      style={({ pressed }) => [
-        pills ? styles.pill : [styles.line, { borderBottomColor: c.divider }],
-        background ? { backgroundColor: background } : null,
-        pressed && styles.pressed,
-      ]}
-      onPress={onOpen}
-      onLongPress={onLongPress}
-      accessibilityRole="button"
-      accessibilityLabel={`${book.title}, ${author}`}
-      accessibilityHint={strings.longPressHint}
-    >
-      {pills && look.showCovers && book.coverUri ? (
-        <Image source={{ uri: book.coverUri }} style={[styles.cover, { backgroundColor: c.divider }]} resizeMode="cover" />
-      ) : null}
-      <View style={styles.meta}>
-        <Text style={[styles.title, inkStyle]} numberOfLines={2}>
-          {book.title}
-        </Text>
-        {details.length > 0 ? (
-          <Text style={[styles.detail, inkStyle]} numberOfLines={1}>
-            {details.join("  ·  ")}
-          </Text>
-        ) : null}
-      </View>
-    </Pressable>
-  );
-}
-
 /** Long-press on a book: its pill colour and removal. */
 function BookSheet({
   book,
   look,
+  pills,
   onClose,
   onRemove,
 }: {
   book: LibraryBook | null;
   look: LibraryLook;
+  pills: boolean;
   onClose: () => void;
   onRemove: (book: LibraryBook) => void;
 }) {
@@ -123,7 +73,7 @@ function BookSheet({
           <Text style={[styles.sheetTitle, { color: c.sheetInk }]} numberOfLines={2}>
             {book.title}
           </Text>
-          {look.style === "pills" ? (
+          {pills ? (
             <>
               <Text style={[styles.sheetLabel, { color: c.sheetMuted }]}>{strings.colour}</Text>
               <View style={styles.swatches}>
@@ -286,6 +236,7 @@ export default function LibraryScreen() {
 
   const books = sortedBooks(library);
   const look = library.look;
+  const shelf = shelfOf(resolvedFor(library.custom, null));
   const editions = editionLabels(books, look);
   const sheetBook = sheetFor ? (books.find((book) => book.id === sheetFor) ?? null) : null;
   return (
@@ -328,11 +279,12 @@ export default function LibraryScreen() {
         <FlatList
           data={books}
           keyExtractor={(book) => book.id}
-          contentContainerStyle={look.style === "pills" ? styles.pillList : null}
+          contentContainerStyle={shelf.pills ? [styles.pillList, { gap: shelf.gap }] : null}
           renderItem={({ item }) => (
             <BookRow
               book={item}
               look={look}
+              shelf={shelf}
               edition={editions.get(item.id) ?? null}
               onOpen={() => router.push({ pathname: "/reader/[id]", params: { id: item.id } })}
               onLongPress={() => setSheetFor(item.id)}
@@ -341,7 +293,7 @@ export default function LibraryScreen() {
           ListFooterComponent={<Text style={[styles.footer, { color: c.appInk }]}>{strings.removeHint}</Text>}
         />
       )}
-      <BookSheet book={sheetBook} look={look} onClose={() => setSheetFor(null)} onRemove={confirmRemove} />
+      <BookSheet book={sheetBook} look={look} pills={shelf.pills} onClose={() => setSheetFor(null)} onRemove={confirmRemove} />
       {busy ? (
         <View style={[styles.busy, { backgroundColor: c.shade }]} pointerEvents="none">
           <ActivityIndicator size="large" color={c.ink} />
@@ -365,7 +317,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
-  pillList: { padding: 12, gap: 10 },
+  pillList: { padding: 12 },
   pill: {
     flexDirection: "row",
     alignItems: "center",

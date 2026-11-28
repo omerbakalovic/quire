@@ -1,6 +1,7 @@
 /**
- * How the library shelf looks. Kept apart from the book rows so the wider
- * customization work can grow it (or replace it) without touching reading data.
+ * What the library shelf knows about each book's look: colours and file names.
+ * They are data about books, so they stay here; how the shelf is drawn (pills,
+ * covers, sizes) is in the settings registry as `library.*` since C6.
  * Parsing never throws: unknown or damaged values fall back to the defaults.
  */
 import type { LibraryBook } from "./library.ts";
@@ -9,10 +10,6 @@ import type { LibraryBook } from "./library.ts";
 export type LibraryStyle = "minimal" | "pills";
 
 export type LibraryLook = {
-  style: LibraryStyle;
-  showCovers: boolean;
-  showAuthor: boolean;
-  showProgress: boolean;
   /** Colours the reader picked, by book id. Win over the cover colour. */
   bookColors: Record<string, string>;
   /** The average colour of each book's cover, measured once at import. */
@@ -22,10 +19,6 @@ export type LibraryLook = {
 };
 
 export const DEFAULT_LOOK: LibraryLook = {
-  style: "minimal",
-  showCovers: false,
-  showAuthor: true,
-  showProgress: true,
   bookColors: {},
   coverColors: {},
   fileNames: {},
@@ -74,20 +67,25 @@ const isName = (entry: unknown): entry is string => typeof entry === "string" &&
 export function parseLook(value: unknown): LibraryLook {
   const raw = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
   return {
-    style: raw.style === "pills" ? "pills" : DEFAULT_LOOK.style,
-    showCovers: bool(raw.showCovers, DEFAULT_LOOK.showCovers),
-    showAuthor: bool(raw.showAuthor, DEFAULT_LOOK.showAuthor),
-    showProgress: bool(raw.showProgress, DEFAULT_LOOK.showProgress),
     bookColors: map(raw.bookColors, isColor),
     coverColors: map(raw.coverColors, isColor),
     fileNames: map(raw.fileNames, isName),
   };
 }
 
-export type LookOptions = Pick<LibraryLook, "style" | "showCovers" | "showAuthor" | "showProgress">;
-
-export function updateLook(look: LibraryLook, patch: Partial<LookOptions>): LibraryLook {
-  return parseLook({ ...look, ...patch });
+/**
+ * The shelf options a library file from before C6 kept in its look, as
+ * `library.*` values for the global layer. Only those that differ from the
+ * defaults (which are the same as before), so a default shelf adds nothing.
+ */
+export function legacyShelfValues(value: unknown): Record<string, string | boolean> {
+  const raw = (value && typeof value === "object" ? value : {}) as Record<string, unknown>;
+  const out: Record<string, string | boolean> = {};
+  if (raw.style === "pills") out["library.style"] = "pills";
+  if (bool(raw.showCovers, false)) out["library.showCovers"] = true;
+  if (!bool(raw.showAuthor, true)) out["library.showAuthor"] = false;
+  if (!bool(raw.showProgress, true)) out["library.showProgress"] = false;
+  return out;
 }
 
 function setEntry(entries: Record<string, string>, id: string, value: string | null): Record<string, string> {

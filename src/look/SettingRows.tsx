@@ -3,9 +3,9 @@ import { Pressable, StyleSheet, Text, View } from "react-native";
 import { t } from "@/i18n";
 import { ThemedSwitch } from "@/ui/ThemedSwitch";
 import { saveSettingsIn } from "@/library/store";
-import { useChrome } from "@/reader/chrome";
+import { chromeFor, useChrome } from "@/reader/chrome";
 import { confirmRemoveFont, pickFont } from "@/reader/font-import";
-import type { Customization } from "@/settings/customization";
+import { appThemeId, type Customization } from "@/settings/customization";
 import { formatNumber, sectionsFor, type Row } from "@/settings/customize";
 import { fontLabel } from "@/settings/fonts";
 import { barsUnreachable } from "@/settings/gestures";
@@ -13,6 +13,8 @@ import { resolve, type LayerValues } from "@/settings/layers";
 import { LAYOUT_PRESETS, presetOf, presetValues } from "@/settings/layout";
 import { layerOf, originOf, PINNED, TAB_GROUPS, type Origin, type Tab, type Target } from "@/settings/look-editor";
 import { CONTROL_SLOTS, type SettingKey } from "@/settings/registry";
+import { shelfInk, shelfOf } from "@/settings/shelf";
+import { contrast, themeFor } from "@/settings/themes";
 
 import { SettingSlider } from "./SettingSlider";
 
@@ -160,6 +162,10 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
     <View style={styles.wrap}>
       {tab === "colours" ? <Text style={[styles.help, { color: c.muted }]}>{look.coloursHelp}</Text> : null}
       {tab === "library" ? <Text style={[styles.help, { color: c.muted }]}>{strings.libraryHelp}</Text> : null}
+      {tab === "library" && faintPills(resolved, custom) ? (
+        // Emulator run 40: the theme's pill colour with fixed light text was unreadable on Light.
+        <Text style={[styles.help, styles.bold, { color: c.accent }]}>{strings.libraryFaint}</Text>
+      ) : null}
       {sections.map((section) => {
         // The theme itself is chosen in the theme list above (ThemeEditor) and the pinned row.
         const rows = section.rows.filter((row) => !PINNED.includes(row.key));
@@ -200,6 +206,15 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
       })}
     </View>
   );
+}
+
+/** Fixed pill text on the theme's pill colour that reads under 3:1. Cover colours vary per book, so only this case is known ahead. */
+function faintPills(resolved: ReturnType<typeof resolve>, custom: Customization): boolean {
+  const shelf = shelfOf(resolved);
+  if (!shelf.pills || shelf.ink === "auto" || shelf.colour !== "theme") return false;
+  const pill = chromeFor(themeFor(appThemeId(custom), custom.themes)).pillDefault;
+  const ratio = contrast(shelfInk(shelf, pill), pill.slice(0, 7));
+  return ratio !== null && ratio < 3;
 }
 
 const styles = StyleSheet.create({

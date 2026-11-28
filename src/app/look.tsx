@@ -348,7 +348,13 @@ export default function LookScreen() {
               accessibilityState={{ selected: tab === option }}
               style={[styles.tab, tab === option && { borderBottomColor: chrome.accent }]}
             >
-              <Text style={[styles.tabText, { color: tab === option ? chrome.ink : chrome.muted }, tab === option && styles.bold]} numberOfLines={1}>
+              <Text
+                style={[styles.tabText, { color: tab === option ? chrome.ink : chrome.muted }, tab === option && styles.bold]}
+                numberOfLines={1}
+                // Seven tabs on a 360 dp screen with large text: the label shrinks rather than being cut (emulator run 40).
+                adjustsFontSizeToFit
+                minimumFontScale={0.6}
+              >
                 {strings.tabs[option]}
               </Text>
             </Pressable>

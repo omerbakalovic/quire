@@ -27,11 +27,9 @@ export function BookRow({ book, look, shelf, edition, onOpen, onLongPress }: Pro
   const c = useChrome();
   const background = shelf.pills ? shelfPillColour(shelf, look.bookColors[book.id], look.coverColors[book.id], c.pillDefault) : null;
   const inkStyle = { color: background ? shelfInk(shelf, textOn(background)) : c.appInk };
-  const details = [
-    shelf.showAuthor ? author : null,
-    edition,
-    shelf.showProgress ? (percent === null ? strings.notStarted : strings.percentRead(percent)) : null,
-  ].filter(Boolean);
+  // A long author list is what gets cut, never the edition or the progress (emulator run 40).
+  const rest = [edition, shelf.showProgress ? (percent === null ? strings.notStarted : strings.percentRead(percent)) : null].filter(Boolean);
+  const detailStyle = [styles.detail, inkStyle, { fontSize: shelf.detailSize }];
   return (
     <Pressable
       style={({ pressed }) => [
@@ -66,10 +64,19 @@ export function BookRow({ book, look, shelf, edition, onOpen, onLongPress }: Pro
         <Text style={[styles.title, inkStyle, { fontSize: shelf.title.size, fontWeight: shelf.title.weight }]} numberOfLines={shelf.title.lines}>
           {book.title}
         </Text>
-        {details.length > 0 ? (
-          <Text style={[styles.detail, inkStyle, { fontSize: shelf.detailSize }]} numberOfLines={1}>
-            {details.join("  ·  ")}
-          </Text>
+        {shelf.showAuthor || rest.length > 0 ? (
+          <View style={styles.details}>
+            {shelf.showAuthor ? (
+              <Text style={[detailStyle, styles.shrink]} numberOfLines={1}>
+                {author}
+              </Text>
+            ) : null}
+            {rest.length > 0 ? (
+              <Text style={detailStyle} numberOfLines={1}>
+                {`${shelf.showAuthor ? "  ·  " : ""}${rest.join("  ·  ")}`}
+              </Text>
+            ) : null}
+          </View>
         ) : null}
       </View>
     </Pressable>
@@ -91,5 +98,7 @@ const styles = StyleSheet.create({
   cover: { borderRadius: 6 },
   meta: { flex: 1, justifyContent: "center", gap: 3 },
   title: {},
+  details: { flexDirection: "row" },
   detail: { opacity: 0.7 },
+  shrink: { flexShrink: 1 },
 });

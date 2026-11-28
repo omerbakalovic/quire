@@ -110,6 +110,7 @@ export const en = {
       bold: "Bold",
     } as Record<string, string>,
     libraryHelp: "How the library shows your books. Pills take each book's colour from its cover until you pick one (long-press a book). Theme and fonts are shared with reading; these are the library's own.",
+    libraryFaint: "This text colour is hard to read on the theme's pill colour. Auto picks black or white for each pill.",
     librarySample: { cover: "Cover colour", chosen: "A colour you picked", plain: "Plain pill", author: "Sample author" },
     names: {
       "type.fontSize": "Text size",

@@ -40,7 +40,7 @@ export type Row =
 
 export type Section = { group: Group; rows: Row[] };
 
-const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "barStyle", "gestures", "turns", "behaviour"];
+const GROUP_ORDER: Group[] = ["typography", "page", "theme", "light", "layout", "barStyle", "gestures", "turns", "behaviour", "library"];
 
 /**
  * The rows for editing one layer. `set` is true when that layer holds the
@@ -100,6 +100,9 @@ export function formatNumber(key: SettingKey, value: number, words: NumberWords)
     case "bar.top.radius":
     case "bar.bottom.radius":
     case "bar.gap":
+    case "library.pillPadding":
+    case "library.pillGap":
+    case "library.pillRadius":
       return `${value} dp`;
     case "turn.duration":
       return `${value} ms`;

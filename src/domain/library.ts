@@ -4,7 +4,7 @@
  * Parsing never throws: a damaged index keeps the rows it can read.
  */
 import { emptyCustomization, parseCustomization, type Customization } from "../settings/customization.ts";
-import { DEFAULT_LOOK, parseLook, type LibraryLook } from "./library-look.ts";
+import { DEFAULT_LOOK, legacyShelfValues, parseLook, type LibraryLook } from "./library-look.ts";
 import { cleanPosition } from "./position.ts";
 
 export type Flow = "paginated" | "scrolled";
@@ -118,9 +118,21 @@ export function parseLibrary(json: string | null | undefined): Library {
     flow: raw.flow === "scrolled" ? "scrolled" : "paginated",
     settings: parseSettings(raw.settings),
     look: parseLook(raw.look),
-    custom: parseCustomization(raw.custom),
+    custom: withLegacyShelf(parseCustomization(raw.custom), raw.look),
     books,
   };
+}
+
+/**
+ * C6 moved the shelf options from the look into the registry. A file from
+ * before keeps them in its look: they go to the global layer, unless it
+ * already has its own (a file saved since, which no longer writes them).
+ */
+function withLegacyShelf(custom: Customization, look: unknown): Customization {
+  const legacy = legacyShelfValues(look);
+  const missing = Object.entries(legacy).filter(([key]) => !(key in custom.global));
+  if (missing.length === 0) return custom;
+  return { ...custom, global: { ...custom.global, ...Object.fromEntries(missing) } };
 }
 
 function parseSettings(value: unknown): Settings {

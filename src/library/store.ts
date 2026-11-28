@@ -6,9 +6,7 @@ import {
   setBookColor,
   setCoverColor,
   setFileName,
-  updateLook,
   type LibraryLook,
-  type LookOptions,
 } from "@/domain/library-look";
 import {
   emptyLibrary,
@@ -278,10 +276,6 @@ async function measureCover(id: string, coverUri: string | null): Promise<void> 
 export async function measureMissingCovers(): Promise<void> {
   await loadLibrary();
   for (const book of library.books) await measureCover(book.id, book.coverUri);
-}
-
-export function saveLook(patch: Partial<LookOptions>): Promise<void> {
-  return changeLook((look) => updateLook(look, patch));
 }
 
 /** null goes back to the cover's colour. */

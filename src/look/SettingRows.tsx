@@ -91,6 +91,7 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
     if (key === "turn.style") return strings.turns[option] ?? option;
     if (key.startsWith("gesture.")) return strings.actions[option] ?? option;
     if (key.startsWith("bar.")) return strings.barChoices[option] ?? option;
+    if (key.startsWith("library.")) return strings.shelfChoices[option] ?? option;
     return option;
   };
 
@@ -158,6 +159,7 @@ export function SettingRows({ tab, layers, target, custom, bookId, onChange }: P
   return (
     <View style={styles.wrap}>
       {tab === "colours" ? <Text style={[styles.help, { color: c.muted }]}>{look.coloursHelp}</Text> : null}
+      {tab === "library" ? <Text style={[styles.help, { color: c.muted }]}>{strings.libraryHelp}</Text> : null}
       {sections.map((section) => {
         // The theme itself is chosen in the theme list above (ThemeEditor) and the pinned row.
         const rows = section.rows.filter((row) => !PINNED.includes(row.key));

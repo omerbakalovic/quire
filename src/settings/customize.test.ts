@@ -24,7 +24,7 @@ test("the global screen lists every honoured setting once, grouped in order", ()
   const sections = sectionsFor({}, "global");
   const keys = sections.flatMap((s) => s.rows.map((r) => r.key));
   assert.deepEqual([...keys].sort(), SETTINGS.map((s) => s.key).sort());
-  assert.deepEqual(sections.map((s) => s.group), ["typography", "page", "theme", "light", "layout", "barStyle", "gestures", "turns"]);
+  assert.deepEqual(sections.map((s) => s.group), ["typography", "page", "theme", "light", "layout", "barStyle", "gestures", "turns", "library"]);
 });
 
 test("a profile screen leaves out global-only settings, and marks what the layer sets", () => {
